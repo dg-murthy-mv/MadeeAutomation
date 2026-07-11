@@ -1,0 +1,53 @@
+@model List<ClientConfig>
+@{
+    ViewData["Title"] = "Clients";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Clients</h2>
+    <a class="btn btn-primary" asp-action="Create">+ New Client</a>
+</div>
+
+<table class="table table-hover align-middle">
+    <thead>
+        <tr>
+            <th>Client</th>
+            <th>Code</th>
+            <th>Country</th>
+            <th>Vertical</th>
+            <th>Status</th>
+            <th># Workflows</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var client in Model)
+    {
+        <tr>
+            <td>@client.ClientName</td>
+            <td><code>@client.ClientCode</code></td>
+            <td>@client.Country</td>
+            <td><span class="badge bg-secondary">@client.Vertical</span></td>
+            <td>
+                @{
+                    var badgeClass = client.Status switch
+                    {
+                        ClientStatus.Active => "bg-success",
+                        ClientStatus.Trial => "bg-info",
+                        ClientStatus.Paused => "bg-warning text-dark",
+                        _ => "bg-danger"
+                    };
+                }
+                <span class="badge @badgeClass">@client.Status</span>
+            </td>
+            <td>@client.Workflows.Count</td>
+            <td><a class="btn btn-sm btn-outline-primary" asp-action="Details" asp-route-id="@client.Id">Manage</a></td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@if (!Model.Any())
+{
+    <p class="text-muted">No clients yet. Add your first client to start configuring automations.</p>
+}

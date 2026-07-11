@@ -1,0 +1,38 @@
+@model List<ExecutionLog>
+@{
+    ViewData["Title"] = "Execution Logs";
+}
+
+<h2>Execution Logs</h2>
+<p class="text-muted">Recent automation runs - this is what proves ROI to a client and lets you debug fast instead of being a "launch and leave" agency.</p>
+
+<table class="table table-sm">
+    <thead>
+        <tr>
+            <th>Started (UTC)</th>
+            <th>Status</th>
+            <th>Summary</th>
+            <th>Error</th>
+            <th>Duration (ms)</th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var log in Model)
+    {
+        var rowClass = log.Status == ExecutionStatus.Failed ? "table-danger"
+            : log.Status == ExecutionStatus.Succeeded ? "table-success" : "";
+        <tr class="@rowClass">
+            <td>@log.StartedAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+            <td>@log.Status</td>
+            <td>@log.ResultSummary</td>
+            <td class="text-danger">@log.ErrorMessage</td>
+            <td>@log.DurationMs</td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@if (!Model.Any())
+{
+    <p class="text-muted">No executions recorded yet for this client.</p>
+}

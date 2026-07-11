@@ -1,0 +1,13 @@
+body {
+    background-color: #f7f8fa;
+}
+
+.navbar-brand {
+    letter-spacing: 0.5px;
+}
+
+table code {
+    background-color: #eef1f5;
+    padding: 2px 6px;
+    border-radius: 4px;
+}

@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "MadeeAutomation.Admin.Web": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:58714;http://localhost:58717"
+    }
+  }
+}

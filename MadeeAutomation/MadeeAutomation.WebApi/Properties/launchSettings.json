@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "MadeeAutomation.WebApi": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:58715;http://localhost:58716"
+    }
+  }
+}

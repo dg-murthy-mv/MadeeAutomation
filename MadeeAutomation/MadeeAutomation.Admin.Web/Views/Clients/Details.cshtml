@@ -1,0 +1,44 @@
+@model ClientConfig
+@{
+    ViewData["Title"] = Model.ClientName;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2>@Model.ClientName</h2>
+        <span class="text-muted">@Model.Country &middot; @Model.Vertical &middot; @Model.Status</span>
+    </div>
+    <div>
+        <a class="btn btn-outline-secondary" asp-controller="ExecutionLogs" asp-action="Index" asp-route-clientConfigId="@Model.Id">View Execution Logs</a>
+        <a class="btn btn-primary" asp-action="CreateWorkflow" asp-route-clientConfigId="@Model.Id">+ New Workflow</a>
+    </div>
+</div>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Workflow</th>
+            <th>Handler Key</th>
+            <th>Trigger</th>
+            <th>Vertical</th>
+            <th>Enabled</th>
+        </tr>
+    </thead>
+    <tbody>
+    @foreach (var workflow in Model.Workflows)
+    {
+        <tr>
+            <td>@workflow.Name</td>
+            <td><code>@workflow.HandlerKey</code></td>
+            <td>@workflow.TriggerType</td>
+            <td>@workflow.Vertical</td>
+            <td>@(workflow.IsEnabled ? "Yes" : "No")</td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@if (!Model.Workflows.Any())
+{
+    <p class="text-muted">No workflows configured yet for this client.</p>
+}
