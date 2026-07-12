@@ -1,53 +1,109 @@
 @model List<ClientConfig>
 @{
     ViewData["Title"] = "Clients";
+    string? search = ViewBag.Search;
+    int currentPage = ViewBag.Page;
+    int totalPages = ViewBag.TotalPages;
+    int totalCount = ViewBag.TotalCount;
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Clients</h2>
+<div class="mv-page-header">
+    <div>
+        <h2>Clients</h2>
+        <div class="mv-subtle">@totalCount client@(totalCount == 1 ? "" : "s")</div>
+    </div>
     <a class="btn btn-primary" asp-action="Create">+ New Client</a>
 </div>
 
-<table class="table table-hover align-middle">
-    <thead>
-        <tr>
-            <th>Client</th>
-            <th>Code</th>
-            <th>Country</th>
-            <th>Vertical</th>
-            <th>Status</th>
-            <th># Workflows</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var client in Model)
-    {
-        <tr>
-            <td>@client.ClientName</td>
-            <td><code>@client.ClientCode</code></td>
-            <td>@client.Country</td>
-            <td><span class="badge bg-secondary">@client.Vertical</span></td>
-            <td>
-                @{
-                    var badgeClass = client.Status switch
-                    {
-                        ClientStatus.Active => "bg-success",
-                        ClientStatus.Trial => "bg-info",
-                        ClientStatus.Paused => "bg-warning text-dark",
-                        _ => "bg-danger"
-                    };
-                }
-                <span class="badge @badgeClass">@client.Status</span>
-            </td>
-            <td>@client.Workflows.Count</td>
-            <td><a class="btn btn-sm btn-outline-primary" asp-action="Details" asp-route-id="@client.Id">Manage</a></td>
-        </tr>
-    }
-    </tbody>
-</table>
+<div class="mv-card">
+    <div class="mv-toolbar">
+        <form method="get" asp-action="Index">
+            <input type="text" name="search" class="form-control" placeholder="Search by name or code..." value="@search" />
+            <button type="submit" class="btn btn-outline-secondary">Search</button>
+            @if (!string.IsNullOrWhiteSpace(search))
+            {
+                <a asp-action="Index" class="btn btn-link">Clear</a>
+            }
+        </form>
+    </div>
 
-@if (!Model.Any())
-{
-    <p class="text-muted">No clients yet. Add your first client to start configuring automations.</p>
-}
+    @if (Model.Any())
+    {
+        <div class="table-responsive">
+            <table class="table mv-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Client</th>
+                        <th>Code</th>
+                        <th>Country</th>
+                        <th>Vertical</th>
+                        <th>Status</th>
+                        <th># Workflows</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var client in Model)
+                {
+                    <tr>
+                        <td data-label="Client">@client.ClientName</td>
+                        <td data-label="Code"><code>@client.ClientCode</code></td>
+                        <td data-label="Country">@client.Country</td>
+                        <td data-label="Vertical"><span class="badge badge-vertical">@client.Vertical</span></td>
+                        <td data-label="Status">
+                            @{
+                                var badgeClass = client.Status switch
+                                {
+                                    ClientStatus.Active => "bg-success",
+                                    ClientStatus.Trial => "bg-info",
+                                    ClientStatus.Paused => "bg-warning text-dark",
+                                    _ => "bg-danger"
+                                };
+                            }
+                            <span class="badge @badgeClass">@client.Status</span>
+                        </td>
+                        <td data-label="Workflows">@client.Workflows.Count</td>
+                        <td data-label=""><a class="btn btn-sm btn-outline-primary" asp-action="Details" asp-route-id="@client.Id">Manage</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mv-pagination">
+            <span class="mv-subtle">Page @currentPage of @totalPages</span>
+            @if (totalPages > 1)
+            {
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                            <a class="page-link" asp-action="Index" asp-route-page="@(currentPage - 1)" asp-route-search="@search">Previous</a>
+                        </li>
+                        @for (int p = 1; p <= totalPages; p++)
+                        {
+                            <li class="page-item @(p == currentPage ? "active" : "")">
+                                <a class="page-link" asp-action="Index" asp-route-page="@p" asp-route-search="@search">@p</a>
+                            </li>
+                        }
+                        <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                            <a class="page-link" asp-action="Index" asp-route-page="@(currentPage + 1)" asp-route-search="@search">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="mv-empty">
+            @if (!string.IsNullOrWhiteSpace(search))
+            {
+                <p>No clients match "<strong>@search</strong>".</p>
+            }
+            else
+            {
+                <p>No clients yet. Add your first client to start configuring automations.</p>
+            }
+        </div>
+    }
+</div>

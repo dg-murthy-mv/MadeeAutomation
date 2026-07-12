@@ -12,10 +12,14 @@ public class ExecutionLogsController : Controller
         _executionLogRepository = executionLogRepository;
     }
 
-    public async Task<IActionResult> Index(Guid clientConfigId)
+    public async Task<IActionResult> Index(Guid clientConfigId, string? search, string? status, int page = 1)
     {
-        var logs = await _executionLogRepository.GetRecentAsync(clientConfigId);
+        const int pageSize = 15;
+        var result = await _executionLogRepository.GetPagedAsync(clientConfigId, page, pageSize, status, search);
+
         ViewBag.ClientConfigId = clientConfigId;
-        return View(logs);
+        ViewBag.Search = search;
+        ViewBag.Status = status;
+        return View(result);
     }
 }

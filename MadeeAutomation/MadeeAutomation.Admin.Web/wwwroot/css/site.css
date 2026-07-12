@@ -1,13 +1,278 @@
+:root {
+    --mv-navy: #080c16;
+    --mv-navy-light: #101828;
+    --mv-cyan: #22d3ee;
+    --mv-purple: #8b5cf6;
+    --mv-orange: #fb923c;
+    --mv-border: #e5e7eb;
+    --mv-text-muted: #6b7280;
+    --mv-radius: 12px;
+}
+
 body {
-    background-color: #f7f8fa;
+    background-color: #f4f5fa;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #111827;
 }
 
-.navbar-brand {
-    letter-spacing: 0.5px;
+/* ---------- Navbar ---------- */
+.mv-navbar {
+    background: var(--mv-navy);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
-table code {
-    background-color: #eef1f5;
-    padding: 2px 6px;
-    border-radius: 4px;
+.mv-brand-text {
+    font-family: 'Sora', 'DM Sans', sans-serif;
+    font-weight: 700;
+    font-size: 1.2rem;
+    letter-spacing: 0.3px;
+    background: linear-gradient(90deg, var(--mv-cyan), var(--mv-purple));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.mv-brand-tagline {
+    font-size: 0.68rem;
+    color: rgba(255, 255, 255, 0.45);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+.mv-navbar .nav-link {
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-weight: 500;
+}
+
+.mv-navbar .nav-link:hover {
+    color: var(--mv-cyan) !important;
+}
+
+/* ---------- Page wrapper ---------- */
+.mv-page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1rem 3rem;
+}
+
+.mv-page-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+}
+
+.mv-page-header h2 {
+    font-family: 'Sora', sans-serif;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+    color: var(--mv-navy);
+}
+
+.mv-subtle {
+    color: var(--mv-text-muted);
+    font-size: 0.925rem;
+}
+
+/* ---------- Cards ---------- */
+.mv-card {
+    background: #fff;
+    border: 1px solid var(--mv-border);
+    border-radius: var(--mv-radius);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 16px rgba(16, 24, 40, 0.04);
+    overflow: hidden;
+    position: relative;
+}
+
+.mv-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--mv-cyan), var(--mv-purple), var(--mv-orange));
+}
+
+.mv-card-body {
+    padding: 1.5rem 1.75rem;
+}
+
+/* ---------- Toolbar (search + filters) ---------- */
+.mv-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 1.1rem 1.5rem;
+    border-bottom: 1px solid var(--mv-border);
+    background: #fafbfd;
+}
+
+.mv-toolbar .form-control,
+.mv-toolbar .form-select {
+    min-width: 160px;
+    border-radius: 8px;
+}
+
+.mv-toolbar form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    flex: 1;
+}
+
+/* ---------- Tables ---------- */
+.mv-table {
+    margin-bottom: 0;
+}
+
+.mv-table thead th {
+    background: linear-gradient(180deg, #f8f9fd, #eef0f8);
+    color: var(--mv-navy);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.9rem 1rem;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    border-image: linear-gradient(90deg, var(--mv-cyan), var(--mv-purple)) 1;
+}
+
+.mv-table tbody td {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid #f1f2f6;
+}
+
+.mv-table tbody tr {
+    transition: background-color 0.12s ease;
+}
+
+.mv-table tbody tr:hover {
+    background-color: #f7f8fd;
+}
+
+.mv-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.mv-table code {
+    background-color: #eef1f6;
+    color: #4c1d95;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.83rem;
+}
+
+/* ---------- Badges ---------- */
+.badge {
+    font-weight: 600;
+    padding: 0.4em 0.75em;
+    border-radius: 999px;
+}
+
+.badge-vertical {
+    background: linear-gradient(90deg, var(--mv-purple), var(--mv-cyan));
+    color: #fff;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.btn-primary {
+    background: linear-gradient(90deg, var(--mv-purple), var(--mv-cyan));
+    border: none;
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.25);
+}
+
+.btn-primary:hover {
+    filter: brightness(1.08);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.35);
+}
+
+.btn-outline-primary, .btn-outline-secondary {
+    border-color: var(--mv-border);
+}
+
+/* ---------- Empty state ---------- */
+.mv-empty {
+    text-align: center;
+    padding: 3.5rem 1rem;
+    color: var(--mv-text-muted);
+}
+
+/* ---------- Pagination ---------- */
+.mv-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--mv-border);
+    background: #fafbfd;
+}
+
+.pagination .page-link {
+    color: var(--mv-navy);
+    border-radius: 6px;
+    margin: 0 2px;
+    border: 1px solid var(--mv-border);
+}
+
+.pagination .page-item.active .page-link {
+    background: linear-gradient(90deg, var(--mv-purple), var(--mv-cyan));
+    border-color: transparent;
+}
+
+/* ---------- Responsive: mobile card-style table fallback ---------- */
+@media (max-width: 767.98px) {
+    .mv-table thead {
+        display: none;
+    }
+
+    .mv-table, .mv-table tbody, .mv-table tr, .mv-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .mv-table tr {
+        border: 1px solid var(--mv-border);
+        border-radius: var(--mv-radius);
+        margin: 0.75rem;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .mv-table td {
+        border: none;
+        padding: 0.4rem 0;
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        text-align: right;
+    }
+
+    .mv-table td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: var(--mv-text-muted);
+        text-align: left;
+    }
+
+    .mv-page-header {
+        flex-direction: column;
+    }
+
+    .mv-toolbar form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .mv-brand-tagline {
+        display: none !important;
+    }
 }

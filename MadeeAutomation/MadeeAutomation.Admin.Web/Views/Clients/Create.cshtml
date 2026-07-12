@@ -3,9 +3,12 @@
     ViewData["Title"] = "New Client";
 }
 
-<h2>New Client</h2>
+<div class="mv-page-header">
+    <div><h2>New Client</h2></div>
+</div>
 
-<form asp-action="Create" method="post" class="mt-3" style="max-width: 560px;">
+<div class="mv-card mv-card-body" style="max-width: 640px;">
+<form asp-action="Create" method="post">
     @Html.AntiForgeryToken()
 
     <div class="mb-3">
@@ -57,3 +60,4 @@
     <button type="submit" class="btn btn-primary">Create Client</button>
     <a asp-action="Index" class="btn btn-link">Cancel</a>
 </form>
+</div>

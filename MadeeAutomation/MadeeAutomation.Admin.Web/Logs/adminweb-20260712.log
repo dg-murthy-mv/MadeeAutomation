@@ -1,0 +1,147 @@
+2026-07-12 11:37:01.579 +05:30 [INF] Starting MadeeAutomation.Admin.Web
+2026-07-12 11:37:03.949 +05:30 [INF] User profile is available. Using 'C:\Users\dgmur\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+2026-07-12 11:37:04.560 +05:30 [INF] Now listening on: https://localhost:58714
+2026-07-12 11:37:04.563 +05:30 [INF] Now listening on: http://localhost:58717
+2026-07-12 11:37:04.643 +05:30 [INF] Application started. Press Ctrl+C to shut down.
+2026-07-12 11:37:04.646 +05:30 [INF] Hosting environment: Development
+2026-07-12 11:37:04.649 +05:30 [INF] Content root path: C:\Users\dgmur\source\repos\MadeeAutomation\MadeeAutomation\MadeeAutomation.Admin.Web
+2026-07-12 11:37:07.747 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/ - null null
+2026-07-12 11:37:08.069 +05:30 [INF] Executing endpoint 'MadeeAutomation.Admin.Web.Controllers.HomeController.Index (MadeeAutomation.Admin.Web)'
+2026-07-12 11:37:08.165 +05:30 [INF] Route matched with {action = "Index", controller = "Home"}. Executing controller action with signature Microsoft.AspNetCore.Mvc.IActionResult Index() on controller MadeeAutomation.Admin.Web.Controllers.HomeController (MadeeAutomation.Admin.Web).
+2026-07-12 11:37:08.196 +05:30 [INF] Executing RedirectResult, redirecting to /Clients.
+2026-07-12 11:37:08.207 +05:30 [INF] Executed action MadeeAutomation.Admin.Web.Controllers.HomeController.Index (MadeeAutomation.Admin.Web) in 30.7771ms
+2026-07-12 11:37:08.211 +05:30 [INF] Executed endpoint 'MadeeAutomation.Admin.Web.Controllers.HomeController.Index (MadeeAutomation.Admin.Web)'
+2026-07-12 11:37:08.219 +05:30 [INF] HTTP GET / responded 302 in 187.0513 ms
+2026-07-12 11:37:08.240 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/ - 302 0 null 518.6333ms
+2026-07-12 11:37:08.257 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/Clients - null null
+2026-07-12 11:37:08.303 +05:30 [INF] Executing endpoint 'MadeeAutomation.Admin.Web.Controllers.ClientsController.Index (MadeeAutomation.Admin.Web)'
+2026-07-12 11:37:08.365 +05:30 [INF] Route matched with {action = "Index", controller = "Clients"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] Index(System.String, Int32) on controller MadeeAutomation.Admin.Web.Controllers.ClientsController (MadeeAutomation.Admin.Web).
+2026-07-12 11:37:12.522 +05:30 [INF] Executing ViewResult, running view Index.
+2026-07-12 11:37:12.706 +05:30 [INF] Executed ViewResult - view Index executed in 194.1346ms.
+2026-07-12 11:37:12.711 +05:30 [INF] Executed action MadeeAutomation.Admin.Web.Controllers.ClientsController.Index (MadeeAutomation.Admin.Web) in 4330.5788ms
+2026-07-12 11:37:12.717 +05:30 [INF] Executed endpoint 'MadeeAutomation.Admin.Web.Controllers.ClientsController.Index (MadeeAutomation.Admin.Web)'
+2026-07-12 11:37:12.720 +05:30 [INF] HTTP GET /Clients responded 200 in 4422.3303 ms
+2026-07-12 11:37:12.740 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/css/site.css - null null
+2026-07-12 11:37:12.740 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - null null
+2026-07-12 11:37:12.755 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/Clients - 200 null text/html; charset=utf-8 4498.9318ms
+2026-07-12 11:37:12.781 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - 200 16535 application/javascript; charset=utf-8 40.7515ms
+2026-07-12 11:37:12.839 +05:30 [INF] Sending file. Request path: '/css/site.css'. Physical path: 'C:\Users\dgmur\source\repos\MadeeAutomation\MadeeAutomation\MadeeAutomation.Admin.Web\wwwroot\css\site.css'
+2026-07-12 11:37:12.854 +05:30 [INF] HTTP GET /css/site.css responded 200 in 92.2100 ms
+2026-07-12 11:37:12.858 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/css/site.css - 200 5848 text/css 118.8632ms
+2026-07-12 11:37:12.860 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_vs/browserLink - null null
+2026-07-12 11:37:12.972 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_vs/browserLink - 200 null text/javascript; charset=UTF-8 113.0235ms
+2026-07-12 11:37:13.134 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/favicon.ico - null null
+2026-07-12 11:37:13.247 +05:30 [INF] HTTP GET /favicon.ico responded 404 in 24.7189 ms
+2026-07-12 11:37:13.287 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/favicon.ico - 404 0 null 154.1286ms
+2026-07-12 11:37:13.358 +05:30 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET https://localhost:58714/favicon.ico, Response status code: 404
+2026-07-12 11:37:32.755 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/Clients/Details/a301d74f-7e39-4f00-92e9-15e18209c4d9 - null null
+2026-07-12 11:37:32.783 +05:30 [INF] Executing endpoint 'MadeeAutomation.Admin.Web.Controllers.ClientsController.Details (MadeeAutomation.Admin.Web)'
+2026-07-12 11:37:32.797 +05:30 [INF] Route matched with {action = "Details", controller = "Clients"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] Details(System.Guid) on controller MadeeAutomation.Admin.Web.Controllers.ClientsController (MadeeAutomation.Admin.Web).
+2026-07-12 11:37:32.966 +05:30 [INF] Executing ViewResult, running view Details.
+2026-07-12 11:37:32.986 +05:30 [INF] Executed ViewResult - view Details executed in 23.1122ms.
+2026-07-12 11:37:32.989 +05:30 [INF] Executed action MadeeAutomation.Admin.Web.Controllers.ClientsController.Details (MadeeAutomation.Admin.Web) in 183.473ms
+2026-07-12 11:37:32.991 +05:30 [INF] Executed endpoint 'MadeeAutomation.Admin.Web.Controllers.ClientsController.Details (MadeeAutomation.Admin.Web)'
+2026-07-12 11:37:32.992 +05:30 [INF] HTTP GET /Clients/Details/a301d74f-7e39-4f00-92e9-15e18209c4d9 responded 200 in 211.0393 ms
+2026-07-12 11:37:33.011 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - null null
+2026-07-12 11:37:33.011 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/css/site.css - null null
+2026-07-12 11:37:33.011 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_vs/browserLink - null null
+2026-07-12 11:37:33.016 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/Clients/Details/a301d74f-7e39-4f00-92e9-15e18209c4d9 - 200 null text/html; charset=utf-8 262.1195ms
+2026-07-12 11:37:33.027 +05:30 [INF] The file /css/site.css was not modified
+2026-07-12 11:37:33.020 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - 200 16535 application/javascript; charset=utf-8 8.9224ms
+2026-07-12 11:37:33.058 +05:30 [INF] HTTP GET /css/site.css responded 304 in 32.3754 ms
+2026-07-12 11:37:33.089 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/css/site.css - 304 null text/css 77.3375ms
+2026-07-12 11:37:33.093 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_vs/browserLink - 200 null text/javascript; charset=UTF-8 81.7941ms
+2026-07-12 11:37:47.108 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/ExecutionLogs?clientConfigId=a301d74f-7e39-4f00-92e9-15e18209c4d9 - null null
+2026-07-12 11:37:47.115 +05:30 [INF] Executing endpoint 'MadeeAutomation.Admin.Web.Controllers.ExecutionLogsController.Index (MadeeAutomation.Admin.Web)'
+2026-07-12 11:37:47.130 +05:30 [INF] Route matched with {action = "Index", controller = "ExecutionLogs"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] Index(System.Guid, System.String, System.String, Int32) on controller MadeeAutomation.Admin.Web.Controllers.ExecutionLogsController (MadeeAutomation.Admin.Web).
+2026-07-12 11:37:47.250 +05:30 [INF] Executing ViewResult, running view Index.
+2026-07-12 11:37:47.318 +05:30 [INF] Executed ViewResult - view Index executed in 70.3807ms.
+2026-07-12 11:37:47.347 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/css/site.css - null null
+2026-07-12 11:37:47.347 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - null null
+2026-07-12 11:37:47.347 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_vs/browserLink - null null
+2026-07-12 11:37:47.356 +05:30 [INF] Executed action MadeeAutomation.Admin.Web.Controllers.ExecutionLogsController.Index (MadeeAutomation.Admin.Web) in 221.8907ms
+2026-07-12 11:37:47.395 +05:30 [INF] Executed endpoint 'MadeeAutomation.Admin.Web.Controllers.ExecutionLogsController.Index (MadeeAutomation.Admin.Web)'
+2026-07-12 11:37:47.378 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - 200 16535 application/javascript; charset=utf-8 31.0602ms
+2026-07-12 11:37:47.401 +05:30 [INF] HTTP GET /ExecutionLogs responded 200 in 285.9807 ms
+2026-07-12 11:37:47.371 +05:30 [INF] The file /css/site.css was not modified
+2026-07-12 11:37:47.425 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_vs/browserLink - 200 null text/javascript; charset=UTF-8 77.2728ms
+2026-07-12 11:37:47.426 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/ExecutionLogs?clientConfigId=a301d74f-7e39-4f00-92e9-15e18209c4d9 - 200 null text/html; charset=utf-8 319.3307ms
+2026-07-12 11:37:47.427 +05:30 [INF] HTTP GET /css/site.css responded 304 in 56.7697 ms
+2026-07-12 11:37:47.437 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/css/site.css - 304 null text/css 89.9886ms
+2026-07-12 11:38:50.860 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/ExecutionLogs?clientConfigId=a301d74f-7e39-4f00-92e9-15e18209c4d9&search=&status=Failed - null null
+2026-07-12 11:38:50.879 +05:30 [INF] Executing endpoint 'MadeeAutomation.Admin.Web.Controllers.ExecutionLogsController.Index (MadeeAutomation.Admin.Web)'
+2026-07-12 11:38:50.881 +05:30 [INF] Route matched with {action = "Index", controller = "ExecutionLogs"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] Index(System.Guid, System.String, System.String, Int32) on controller MadeeAutomation.Admin.Web.Controllers.ExecutionLogsController (MadeeAutomation.Admin.Web).
+2026-07-12 11:38:50.942 +05:30 [INF] Executing ViewResult, running view Index.
+2026-07-12 11:38:50.954 +05:30 [INF] Executed ViewResult - view Index executed in 11.9587ms.
+2026-07-12 11:38:50.956 +05:30 [INF] Executed action MadeeAutomation.Admin.Web.Controllers.ExecutionLogsController.Index (MadeeAutomation.Admin.Web) in 70.4193ms
+2026-07-12 11:38:50.959 +05:30 [INF] Executed endpoint 'MadeeAutomation.Admin.Web.Controllers.ExecutionLogsController.Index (MadeeAutomation.Admin.Web)'
+2026-07-12 11:38:50.961 +05:30 [INF] HTTP GET /ExecutionLogs responded 200 in 81.6193 ms
+2026-07-12 11:38:50.994 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - null null
+2026-07-12 11:38:50.987 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/css/site.css - null null
+2026-07-12 11:38:51.045 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/ExecutionLogs?clientConfigId=a301d74f-7e39-4f00-92e9-15e18209c4d9&search=&status=Failed - 200 null text/html; charset=utf-8 185.8952ms
+2026-07-12 11:38:51.009 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_vs/browserLink - null null
+2026-07-12 11:38:51.064 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - 200 16535 application/javascript; charset=utf-8 70.8332ms
+2026-07-12 11:38:51.076 +05:30 [INF] The file /css/site.css was not modified
+2026-07-12 11:38:51.120 +05:30 [INF] HTTP GET /css/site.css responded 304 in 44.4128 ms
+2026-07-12 11:38:51.124 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_vs/browserLink - 200 null text/javascript; charset=UTF-8 120.4006ms
+2026-07-12 11:38:51.127 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/css/site.css - 304 null text/css 139.9572ms
+2026-07-12 11:38:54.938 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/ExecutionLogs?clientConfigId=a301d74f-7e39-4f00-92e9-15e18209c4d9 - null null
+2026-07-12 11:38:54.950 +05:30 [INF] Executing endpoint 'MadeeAutomation.Admin.Web.Controllers.ExecutionLogsController.Index (MadeeAutomation.Admin.Web)'
+2026-07-12 11:38:54.952 +05:30 [INF] Route matched with {action = "Index", controller = "ExecutionLogs"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] Index(System.Guid, System.String, System.String, Int32) on controller MadeeAutomation.Admin.Web.Controllers.ExecutionLogsController (MadeeAutomation.Admin.Web).
+2026-07-12 11:38:54.974 +05:30 [INF] Executing ViewResult, running view Index.
+2026-07-12 11:38:54.980 +05:30 [INF] Executed ViewResult - view Index executed in 5.7312ms.
+2026-07-12 11:38:54.984 +05:30 [INF] Executed action MadeeAutomation.Admin.Web.Controllers.ExecutionLogsController.Index (MadeeAutomation.Admin.Web) in 29.6028ms
+2026-07-12 11:38:54.988 +05:30 [INF] Executed endpoint 'MadeeAutomation.Admin.Web.Controllers.ExecutionLogsController.Index (MadeeAutomation.Admin.Web)'
+2026-07-12 11:38:54.990 +05:30 [INF] HTTP GET /ExecutionLogs responded 200 in 40.1940 ms
+2026-07-12 11:38:55.007 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - null null
+2026-07-12 11:38:55.008 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_vs/browserLink - null null
+2026-07-12 11:38:55.037 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/ExecutionLogs?clientConfigId=a301d74f-7e39-4f00-92e9-15e18209c4d9 - 200 null text/html; charset=utf-8 98.5983ms
+2026-07-12 11:38:55.045 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - 200 16535 application/javascript; charset=utf-8 37.8783ms
+2026-07-12 11:38:55.105 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_vs/browserLink - 200 null text/javascript; charset=UTF-8 96.7546ms
+2026-07-12 11:39:58.685 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/Clients/Details/a301d74f-7e39-4f00-92e9-15e18209c4d9 - null null
+2026-07-12 11:39:58.742 +05:30 [INF] Executing endpoint 'MadeeAutomation.Admin.Web.Controllers.ClientsController.Details (MadeeAutomation.Admin.Web)'
+2026-07-12 11:39:58.749 +05:30 [INF] Route matched with {action = "Details", controller = "Clients"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] Details(System.Guid) on controller MadeeAutomation.Admin.Web.Controllers.ClientsController (MadeeAutomation.Admin.Web).
+2026-07-12 11:39:58.792 +05:30 [INF] Executing ViewResult, running view Details.
+2026-07-12 11:39:58.799 +05:30 [INF] Executed ViewResult - view Details executed in 6.6991ms.
+2026-07-12 11:39:58.836 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/css/site.css - null null
+2026-07-12 11:39:58.842 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - null null
+2026-07-12 11:39:58.837 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_vs/browserLink - null null
+2026-07-12 11:39:58.841 +05:30 [INF] Executed action MadeeAutomation.Admin.Web.Controllers.ClientsController.Details (MadeeAutomation.Admin.Web) in 90.1144ms
+2026-07-12 11:39:58.858 +05:30 [INF] The file /css/site.css was not modified
+2026-07-12 11:39:58.896 +05:30 [INF] Executed endpoint 'MadeeAutomation.Admin.Web.Controllers.ClientsController.Details (MadeeAutomation.Admin.Web)'
+2026-07-12 11:39:58.901 +05:30 [INF] HTTP GET /css/site.css responded 304 in 43.4098 ms
+2026-07-12 11:39:58.905 +05:30 [INF] HTTP GET /Clients/Details/a301d74f-7e39-4f00-92e9-15e18209c4d9 responded 200 in 164.2759 ms
+2026-07-12 11:39:58.863 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - 200 16535 application/javascript; charset=utf-8 21.5305ms
+2026-07-12 11:39:58.908 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_vs/browserLink - 200 null text/javascript; charset=UTF-8 71.1372ms
+2026-07-12 11:39:58.941 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/css/site.css - 304 null text/css 104.9921ms
+2026-07-12 11:39:58.970 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/Clients/Details/a301d74f-7e39-4f00-92e9-15e18209c4d9 - 200 null text/html; charset=utf-8 285.8438ms
+2026-07-12 11:40:07.565 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/Clients/CreateWorkflow?clientConfigId=a301d74f-7e39-4f00-92e9-15e18209c4d9 - null null
+2026-07-12 11:40:07.580 +05:30 [INF] Executing endpoint 'MadeeAutomation.Admin.Web.Controllers.ClientsController.CreateWorkflow (MadeeAutomation.Admin.Web)'
+2026-07-12 11:40:07.586 +05:30 [INF] Route matched with {action = "CreateWorkflow", controller = "Clients"}. Executing controller action with signature Microsoft.AspNetCore.Mvc.IActionResult CreateWorkflow(System.Guid) on controller MadeeAutomation.Admin.Web.Controllers.ClientsController (MadeeAutomation.Admin.Web).
+2026-07-12 11:40:07.594 +05:30 [INF] Executing ViewResult, running view CreateWorkflow.
+2026-07-12 11:40:07.710 +05:30 [INF] Executed ViewResult - view CreateWorkflow executed in 117.4144ms.
+2026-07-12 11:40:07.713 +05:30 [INF] Executed action MadeeAutomation.Admin.Web.Controllers.ClientsController.CreateWorkflow (MadeeAutomation.Admin.Web) in 122.5357ms
+2026-07-12 11:40:07.736 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - null null
+2026-07-12 11:40:07.736 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_vs/browserLink - null null
+2026-07-12 11:40:07.744 +05:30 [INF] Executed endpoint 'MadeeAutomation.Admin.Web.Controllers.ClientsController.CreateWorkflow (MadeeAutomation.Admin.Web)'
+2026-07-12 11:40:07.772 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - 200 16535 application/javascript; charset=utf-8 36.156ms
+2026-07-12 11:40:07.796 +05:30 [INF] HTTP GET /Clients/CreateWorkflow responded 200 in 215.9773 ms
+2026-07-12 11:40:07.842 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_vs/browserLink - 200 null text/javascript; charset=UTF-8 106.6117ms
+2026-07-12 11:40:07.852 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/Clients/CreateWorkflow?clientConfigId=a301d74f-7e39-4f00-92e9-15e18209c4d9 - 200 null text/html; charset=utf-8 287.3992ms
+2026-07-12 11:40:23.059 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/Clients - null null
+2026-07-12 11:40:23.170 +05:30 [INF] Executing endpoint 'MadeeAutomation.Admin.Web.Controllers.ClientsController.Index (MadeeAutomation.Admin.Web)'
+2026-07-12 11:40:23.183 +05:30 [INF] Route matched with {action = "Index", controller = "Clients"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] Index(System.String, Int32) on controller MadeeAutomation.Admin.Web.Controllers.ClientsController (MadeeAutomation.Admin.Web).
+2026-07-12 11:40:23.225 +05:30 [INF] Executing ViewResult, running view Index.
+2026-07-12 11:40:23.231 +05:30 [INF] Executed ViewResult - view Index executed in 5.764ms.
+2026-07-12 11:40:23.233 +05:30 [INF] Executed action MadeeAutomation.Admin.Web.Controllers.ClientsController.Index (MadeeAutomation.Admin.Web) in 35.4281ms
+2026-07-12 11:40:23.271 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/css/site.css - null null
+2026-07-12 11:40:23.277 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - null null
+2026-07-12 11:40:23.280 +05:30 [INF] Request starting HTTP/2 GET https://localhost:58714/_vs/browserLink - null null
+2026-07-12 11:40:23.283 +05:30 [INF] Executed endpoint 'MadeeAutomation.Admin.Web.Controllers.ClientsController.Index (MadeeAutomation.Admin.Web)'
+2026-07-12 11:40:23.470 +05:30 [INF] HTTP GET /Clients responded 200 in 299.6645 ms
+2026-07-12 11:40:23.450 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_framework/aspnetcore-browser-refresh.js - 200 16535 application/javascript; charset=utf-8 173.6978ms
+2026-07-12 11:40:23.495 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/Clients - 200 null text/html; charset=utf-8 436.6552ms
+2026-07-12 11:40:23.445 +05:30 [INF] The file /css/site.css was not modified
+2026-07-12 11:40:23.505 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/_vs/browserLink - 200 null text/javascript; charset=UTF-8 225.1105ms
+2026-07-12 11:40:23.516 +05:30 [INF] HTTP GET /css/site.css responded 304 in 71.8302 ms
+2026-07-12 11:40:23.522 +05:30 [INF] Request finished HTTP/2 GET https://localhost:58714/css/site.css - 304 null text/css 252.0985ms

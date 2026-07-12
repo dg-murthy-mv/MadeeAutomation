@@ -3,42 +3,52 @@
     ViewData["Title"] = Model.ClientName;
 }
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="mv-page-header">
     <div>
         <h2>@Model.ClientName</h2>
-        <span class="text-muted">@Model.Country &middot; @Model.Vertical &middot; @Model.Status</span>
+        <div class="mv-subtle">@Model.Country &middot; @Model.Vertical &middot; @Model.Status</div>
     </div>
-    <div>
+    <div class="d-flex gap-2 flex-wrap">
         <a class="btn btn-outline-secondary" asp-controller="ExecutionLogs" asp-action="Index" asp-route-clientConfigId="@Model.Id">View Execution Logs</a>
         <a class="btn btn-primary" asp-action="CreateWorkflow" asp-route-clientConfigId="@Model.Id">+ New Workflow</a>
     </div>
 </div>
 
-<table class="table">
-    <thead>
-        <tr>
-            <th>Workflow</th>
-            <th>Handler Key</th>
-            <th>Trigger</th>
-            <th>Vertical</th>
-            <th>Enabled</th>
-        </tr>
-    </thead>
-    <tbody>
-    @foreach (var workflow in Model.Workflows)
+<div class="mv-card">
+    @if (Model.Workflows.Any())
     {
-        <tr>
-            <td>@workflow.Name</td>
-            <td><code>@workflow.HandlerKey</code></td>
-            <td>@workflow.TriggerType</td>
-            <td>@workflow.Vertical</td>
-            <td>@(workflow.IsEnabled ? "Yes" : "No")</td>
-        </tr>
+        <div class="table-responsive">
+            <table class="table mv-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Workflow</th>
+                        <th>Handler Key</th>
+                        <th>Trigger</th>
+                        <th>Vertical</th>
+                        <th>Enabled</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var workflow in Model.Workflows)
+                {
+                    <tr>
+                        <td data-label="Workflow">@workflow.Name</td>
+                        <td data-label="Handler"><code>@workflow.HandlerKey</code></td>
+                        <td data-label="Trigger">@workflow.TriggerType</td>
+                        <td data-label="Vertical">@workflow.Vertical</td>
+                        <td data-label="Enabled">
+                            <span class="badge @(workflow.IsEnabled ? "bg-success" : "bg-secondary")">@(workflow.IsEnabled ? "Yes" : "No")</span>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
     }
-    </tbody>
-</table>
-
-@if (!Model.Workflows.Any())
-{
-    <p class="text-muted">No workflows configured yet for this client.</p>
-}
+    else
+    {
+        <div class="mv-empty">
+            <p>No workflows configured yet for this client.</p>
+        </div>
+    }
+</div>

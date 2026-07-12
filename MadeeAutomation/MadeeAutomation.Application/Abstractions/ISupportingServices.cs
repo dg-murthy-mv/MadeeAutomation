@@ -17,6 +17,11 @@ public interface IExecutionLogRepository
     Task<ExecutionLog> StartAsync(WorkflowDefinition workflow, string triggerPayloadJson, CancellationToken cancellationToken = default);
     Task CompleteAsync(Guid executionLogId, bool success, string? summary, string? error, CancellationToken cancellationToken = default);
     Task<List<ExecutionLog>> GetRecentAsync(Guid clientConfigId, int take = 50, CancellationToken cancellationToken = default);
+
+    /// <summary>Paged, filterable execution log query for the Admin dashboard.</summary>
+    Task<MadeeAutomation.Application.Common.PagedResult<ExecutionLog>> GetPagedAsync(
+        Guid clientConfigId, int page, int pageSize, string? statusFilter = null, string? search = null,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IWorkflowRepository

@@ -3,9 +3,12 @@
     ViewData["Title"] = "New Workflow";
 }
 
-<h2>New Workflow</h2>
+<div class="mv-page-header">
+    <div><h2>New Workflow</h2></div>
+</div>
 
-<form asp-action="CreateWorkflow" method="post" class="mt-3" style="max-width: 560px;">
+<div class="mv-card mv-card-body" style="max-width: 640px;">
+<form asp-action="CreateWorkflow" method="post">
     @Html.AntiForgeryToken()
     <input type="hidden" asp-for="ClientConfigId" />
 
@@ -23,6 +26,7 @@
         <label class="form-label">Handler Key</label>
         <select asp-for="HandlerKey" class="form-select">
             <option value="whatsapp-order-parser">whatsapp-order-parser (F&amp;B/Retail)</option>
+            <option value="line-order-parser">line-order-parser (F&amp;B/Retail)</option>
             <option value="low-stock-alert">low-stock-alert (F&amp;B/Retail)</option>
             <option value="lead-scoring">lead-scoring (CRM/Sales)</option>
             <option value="invoice-extraction">invoice-extraction (Finance/Chit)</option>
@@ -49,3 +53,4 @@
     <button type="submit" class="btn btn-primary">Create Workflow</button>
     <a asp-action="Details" asp-route-id="@Model.ClientConfigId" class="btn btn-link">Cancel</a>
 </form>
+</div>

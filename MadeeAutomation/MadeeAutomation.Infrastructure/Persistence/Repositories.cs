@@ -1,8 +1,8 @@
+using System.Text.Json;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Domain.Entities;
 using MadeeAutomation.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
 
 namespace MadeeAutomation.Infrastructure.Persistence;
 
@@ -65,6 +65,41 @@ public class ExecutionLogRepository : IExecutionLogRepository
             .OrderByDescending(e => e.StartedAtUtc)
             .Take(take)
             .ToListAsync(cancellationToken);
+
+    public async Task<MadeeAutomation.Application.Common.PagedResult<ExecutionLog>> GetPagedAsync(
+        Guid clientConfigId, int page, int pageSize, string? statusFilter = null, string? search = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _db.ExecutionLogs.Where(e => e.ClientConfigId == clientConfigId);
+
+        if (!string.IsNullOrWhiteSpace(statusFilter) && Enum.TryParse<ExecutionStatus>(statusFilter, true, out var statusEnum))
+        {
+            query = query.Where(e => e.Status == statusEnum);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            query = query.Where(e =>
+                (e.ResultSummary != null && e.ResultSummary.Contains(search)) ||
+                (e.ErrorMessage != null && e.ErrorMessage.Contains(search)));
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var items = await query
+            .OrderByDescending(e => e.StartedAtUtc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return new MadeeAutomation.Application.Common.PagedResult<ExecutionLog>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
 }
 
 public class CurrentClientService : ICurrentClientService
@@ -81,7 +116,7 @@ public class CurrentClientService : ICurrentClientService
         var client = await GetClientAsync(clientConfigId, cancellationToken);
         if (client is null) return default;
 
-        using var doc = System.Text.Json.JsonDocument.Parse(client.IntegrationSettingsJson);
+        using var doc = JsonDocument.Parse(client.IntegrationSettingsJson);
         if (doc.RootElement.TryGetProperty(key, out var value))
         {
             return value.Deserialize<T>();
