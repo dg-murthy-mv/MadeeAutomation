@@ -57,5 +57,9 @@ public interface IPosFirstConnector
 /// <summary>Outbound messaging connector - WhatsApp Business API / LINE Messaging API.</summary>
 public interface IMessagingConnector
 {
-    Task SendTextMessageAsync(string channel, string toAddress, string message, CancellationToken cancellationToken = default);
+    /// <summary>Sends a message to a client's own customer, using that client's own WhatsApp/LINE credentials.</summary>
+    Task SendTextMessageAsync(string channel, string toAddress, string message, Guid clientConfigId, CancellationToken cancellationToken = default);
+
+    /// <summary>Sends an internal notification (e.g. low-stock alert, escalation) to MadeeAutomation's own ops channel - not client-specific.</summary>
+    Task SendInternalNotificationAsync(string message, CancellationToken cancellationToken = default);
 }

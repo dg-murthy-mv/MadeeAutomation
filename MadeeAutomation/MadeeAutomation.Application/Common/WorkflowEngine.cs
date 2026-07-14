@@ -77,6 +77,11 @@ public class WorkflowEngine
                     continue;
                 }
 
+                // Every action needs to know which client it's acting on behalf of, so
+                // connectors (e.g. SendMessageAction -> IMessagingConnector) can look up
+                // that client's own credentials rather than a shared global config.
+                actionRequest.Parameters["clientConfigId"] = workflow.ClientConfigId.ToString();
+
                 var actionResult = await action.ExecuteAsync(actionRequest, cancellationToken);
                 if (!actionResult.Success)
                 {

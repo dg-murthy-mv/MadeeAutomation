@@ -19,6 +19,12 @@
     <div class="mv-toolbar">
         <form method="get" asp-action="Index">
             <input type="text" name="search" class="form-control" placeholder="Search by name or code..." value="@search" />
+            <select name="pageSize" class="form-select" style="max-width:140px;" onchange="this.form.submit()">
+                <option value="5" selected="@(ViewBag.PageSize == 5)">5 / page</option>
+                <option value="10" selected="@(ViewBag.PageSize == 10)">10 / page</option>
+                <option value="25" selected="@(ViewBag.PageSize == 25)">25 / page</option>
+                <option value="50" selected="@(ViewBag.PageSize == 50)">50 / page</option>
+            </select>
             <button type="submit" class="btn btn-outline-secondary">Search</button>
             @if (!string.IsNullOrWhiteSpace(search))
             {
@@ -77,16 +83,16 @@
                 <nav>
                     <ul class="pagination pagination-sm mb-0">
                         <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
-                            <a class="page-link" asp-action="Index" asp-route-page="@(currentPage - 1)" asp-route-search="@search">Previous</a>
+                            <a class="page-link" asp-action="Index" asp-route-page="@(currentPage - 1)" asp-route-search="@search" asp-route-pageSize="@ViewBag.PageSize">Previous</a>
                         </li>
                         @for (int p = 1; p <= totalPages; p++)
                         {
                             <li class="page-item @(p == currentPage ? "active" : "")">
-                                <a class="page-link" asp-action="Index" asp-route-page="@p" asp-route-search="@search">@p</a>
+                                <a class="page-link" asp-action="Index" asp-route-page="@p" asp-route-search="@search" asp-route-pageSize="@ViewBag.PageSize">@p</a>
                             </li>
                         }
                         <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
-                            <a class="page-link" asp-action="Index" asp-route-page="@(currentPage + 1)" asp-route-search="@search">Next</a>
+                            <a class="page-link" asp-action="Index" asp-route-page="@(currentPage + 1)" asp-route-search="@search" asp-route-pageSize="@ViewBag.PageSize">Next</a>
                         </li>
                     </ul>
                 </nav>

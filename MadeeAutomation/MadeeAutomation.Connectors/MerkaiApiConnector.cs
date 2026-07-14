@@ -1,41 +1,70 @@
 using System.Text;
 using System.Text.Json;
 using MadeeAutomation.Application.Abstractions;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace MadeeAutomation.Connectors;
 
 /// <summary>
-/// Talks to Merkai CRM's existing API (IApiService pattern on the Merkai side).
-/// This project intentionally has NO project reference to Merkai's codebase -
-/// integration is over HTTP only, keeping MadeeAutomation a fully independent solution.
+/// Talks to a client's own Merkai CRM instance, using per-client BaseUrl/ApiKey from
+/// ClientConfig.IntegrationSettingsJson - same per-client pattern as PosFirstApiConnector.
+/// This project intentionally has NO project reference to Merkai's codebase - integration
+/// is over HTTP only, keeping MadeeAutomation a fully independent solution.
 /// </summary>
 public class MerkaiApiConnector : IMerkaiConnector
 {
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ICurrentClientService _currentClientService;
     private readonly ILogger<MerkaiApiConnector> _logger;
 
-    public MerkaiApiConnector(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<MerkaiApiConnector> logger)
+    public MerkaiApiConnector(IHttpClientFactory httpClientFactory, ICurrentClientService currentClientService, ILogger<MerkaiApiConnector> logger)
     {
-        _httpClient = httpClientFactory.CreateClient("MerkaiApi");
-        var baseUrl = configuration["Connectors:Merkai:BaseUrl"];
-        if (!string.IsNullOrWhiteSpace(baseUrl))
-        {
-            _httpClient.BaseAddress = new Uri(baseUrl);
-        }
-        var apiKey = configuration["Connectors:Merkai:ApiKey"];
-        if (!string.IsNullOrWhiteSpace(apiKey))
-        {
-            _httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
-        }
+        _httpClientFactory = httpClientFactory;
+        _currentClientService = currentClientService;
         _logger = logger;
+    }
+
+    private async Task<(string? baseUrl, string? apiKey)> GetSettingsAsync(Guid clientConfigId, CancellationToken cancellationToken)
+    {
+        var client = await _currentClientService.GetClientAsync(clientConfigId, cancellationToken);
+        if (client is null) return (null, null);
+
+        try
+        {
+            using var doc = JsonDocument.Parse(client.IntegrationSettingsJson);
+            var baseUrl = doc.RootElement.TryGetProperty("merkaiBaseUrl", out var b) ? b.GetString() : null;
+            var apiKey = doc.RootElement.TryGetProperty("merkaiApiKey", out var k) ? k.GetString() : null;
+            return (baseUrl, apiKey);
+        }
+        catch (JsonException)
+        {
+            return (null, null);
+        }
     }
 
     public async Task<string> CreateOrUpdateLeadAsync(Guid clientConfigId, object leadPayload, CancellationToken cancellationToken = default)
     {
+        var (baseUrl, apiKey) = await GetSettingsAsync(clientConfigId, cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            var mockLeadId = $"MOCK-LEAD-{DateTime.UtcNow:yyyyMMddHHmmss}";
+            _logger.LogWarning(
+                "MerkaiApiConnector MOCK MODE - client {ClientConfigId} has no merkaiBaseUrl configured. " +
+                "Would have created/updated lead: {LeadPayload}. Returning fake lead ID {MockLeadId}",
+                clientConfigId, JsonSerializer.Serialize(leadPayload), mockLeadId);
+            return mockLeadId;
+        }
+
+        var httpClient = _httpClientFactory.CreateClient("MerkaiApi");
+        httpClient.BaseAddress = new Uri(baseUrl);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+        }
+
         var json = JsonSerializer.Serialize(leadPayload);
-        var response = await _httpClient.PostAsync("/api/leads/upsert",
+        var response = await httpClient.PostAsync("/api/leads/upsert",
             new StringContent(json, Encoding.UTF8, "application/json"), cancellationToken);
 
         response.EnsureSuccessStatusCode();
@@ -46,8 +75,25 @@ public class MerkaiApiConnector : IMerkaiConnector
 
     public async Task<string> AddDealNoteAsync(Guid clientConfigId, string dealId, string note, CancellationToken cancellationToken = default)
     {
+        var (baseUrl, apiKey) = await GetSettingsAsync(clientConfigId, cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            _logger.LogWarning(
+                "MerkaiApiConnector MOCK MODE - client {ClientConfigId} has no merkaiBaseUrl configured. " +
+                "Would have added note to deal {DealId}: \"{Note}\"", clientConfigId, dealId, note);
+            return "MOCK-NOTE-OK";
+        }
+
+        var httpClient = _httpClientFactory.CreateClient("MerkaiApi");
+        httpClient.BaseAddress = new Uri(baseUrl);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+        }
+
         var json = JsonSerializer.Serialize(new { dealId, note });
-        var response = await _httpClient.PostAsync("/api/deals/notes",
+        var response = await httpClient.PostAsync("/api/deals/notes",
             new StringContent(json, Encoding.UTF8, "application/json"), cancellationToken);
 
         response.EnsureSuccessStatusCode();

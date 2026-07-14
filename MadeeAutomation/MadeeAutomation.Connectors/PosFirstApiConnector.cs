@@ -1,72 +1,101 @@
 using System.Text;
 using System.Text.Json;
 using MadeeAutomation.Application.Abstractions;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace MadeeAutomation.Connectors;
 
+/// <summary>
+/// Talks to a client's own POSFirst instance. Each client has their own BaseUrl/ApiKey,
+/// looked up per-call from ClientConfig.IntegrationSettingsJson - not a single global config.
+/// Falls back to mock mode (logs what it would have sent, returns fake data) when a client
+/// hasn't configured their POSFirst credentials yet.
+/// </summary>
 public class PosFirstApiConnector : IPosFirstConnector
 {
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ICurrentClientService _currentClientService;
     private readonly ILogger<PosFirstApiConnector> _logger;
 
-    public PosFirstApiConnector(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<PosFirstApiConnector> logger)
+    public PosFirstApiConnector(IHttpClientFactory httpClientFactory, ICurrentClientService currentClientService, ILogger<PosFirstApiConnector> logger)
     {
-        _httpClient = httpClientFactory.CreateClient("PosFirstApi");
-        var baseUrl = configuration["Connectors:PosFirst:BaseUrl"];
-        if (!string.IsNullOrWhiteSpace(baseUrl))
-        {
-            _httpClient.BaseAddress = new Uri(baseUrl);
-        }
-        var apiKey = configuration["Connectors:PosFirst:ApiKey"];
-        if (!string.IsNullOrWhiteSpace(apiKey))
-        {
-            _httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
-        }
+        _httpClientFactory = httpClientFactory;
+        _currentClientService = currentClientService;
         _logger = logger;
     }
 
+    private async Task<(string? baseUrl, string? apiKey)> GetSettingsAsync(Guid clientConfigId, CancellationToken cancellationToken)
+    {
+        var client = await _currentClientService.GetClientAsync(clientConfigId, cancellationToken);
+        if (client is null) return (null, null);
+
+        try
+        {
+            using var doc = JsonDocument.Parse(client.IntegrationSettingsJson);
+            var baseUrl = doc.RootElement.TryGetProperty("posFirstBaseUrl", out var b) ? b.GetString() : null;
+            var apiKey = doc.RootElement.TryGetProperty("posFirstApiKey", out var k) ? k.GetString() : null;
+            return (baseUrl, apiKey);
+        }
+        catch (JsonException)
+        {
+            return (null, null);
+        }
+    }
+
+    private static bool IsConfigured(string? baseUrl) => !string.IsNullOrWhiteSpace(baseUrl);
+
     public async Task<string> CreateOrderAsync(Guid clientConfigId, object orderPayload, CancellationToken cancellationToken = default)
     {
-        // Mock mode: no real POSFirst instance configured yet - skip the HTTP call,
-        // log what would have been sent, and return a fake order ID so the rest of
-        // the workflow (confirmation message) can still run end-to-end.
-        if (_httpClient.BaseAddress is null || _httpClient.BaseAddress.Host.Contains("example.com"))
+        var (baseUrl, apiKey) = await GetSettingsAsync(clientConfigId, cancellationToken);
+
+        if (!IsConfigured(baseUrl))
         {
             var mockOrderId = $"MOCK-{DateTime.UtcNow:yyyyMMddHHmmss}";
             _logger.LogWarning(
-                "PosFirstApiConnector running in MOCK MODE (no real BaseUrl configured). " +
+                "PosFirstApiConnector MOCK MODE - client {ClientConfigId} has no posFirstBaseUrl configured. " +
                 "Would have created order: {OrderPayload}. Returning fake order ID {MockOrderId}",
-                System.Text.Json.JsonSerializer.Serialize(orderPayload), mockOrderId);
-
+                clientConfigId, JsonSerializer.Serialize(orderPayload), mockOrderId);
             return mockOrderId;
         }
 
+        var httpClient = _httpClientFactory.CreateClient("PosFirstApi");
+        httpClient.BaseAddress = new Uri(baseUrl!);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+        }
+
         var json = JsonSerializer.Serialize(orderPayload);
-        var response = await _httpClient.PostAsync("/api/orders",
+        var response = await httpClient.PostAsync("/api/orders",
             new StringContent(json, Encoding.UTF8, "application/json"), cancellationToken);
 
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        using var doc = JsonDocument.Parse(body);
-        return doc.RootElement.TryGetProperty("orderId", out var idEl) ? idEl.GetString() ?? "" : "";
+        using var responseDoc = JsonDocument.Parse(body);
+        return responseDoc.RootElement.TryGetProperty("orderId", out var idEl) ? idEl.GetString() ?? "" : "";
     }
 
     public async Task<List<string>> GetLowStockItemsAsync(Guid clientConfigId, CancellationToken cancellationToken = default)
     {
-        // Mock mode: same placeholder-BaseUrl check as CreateOrderAsync.
-        if (_httpClient.BaseAddress is null || _httpClient.BaseAddress.Host.Contains("example.com"))
+        var (baseUrl, apiKey) = await GetSettingsAsync(clientConfigId, cancellationToken);
+
+        if (!IsConfigured(baseUrl))
         {
             var mockItems = new List<string> { "Sourdough flour (5kg bags)", "Butter (1kg blocks)", "Paper bakery bags" };
             _logger.LogWarning(
-                "PosFirstApiConnector running in MOCK MODE (no real BaseUrl configured). " +
-                "Returning fake low-stock items: {Items}", string.Join(", ", mockItems));
-
+                "PosFirstApiConnector MOCK MODE - client {ClientConfigId} has no posFirstBaseUrl configured. " +
+                "Returning fake low-stock items: {Items}", clientConfigId, string.Join(", ", mockItems));
             return mockItems;
         }
 
-        var response = await _httpClient.GetAsync("/api/inventory/low-stock", cancellationToken);
+        var httpClient = _httpClientFactory.CreateClient("PosFirstApi");
+        httpClient.BaseAddress = new Uri(baseUrl!);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+        }
+
+        var response = await httpClient.GetAsync("/api/inventory/low-stock", cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken);

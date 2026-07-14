@@ -5,12 +5,35 @@
     string? search = ViewBag.Search;
     string? status = ViewBag.Status;
     Guid clientConfigId = ViewBag.ClientConfigId;
+    string? clientName = ViewBag.ClientName;
+    string clientTimeZoneId = ViewBag.ClientTimeZoneId ?? "UTC";
+
+    // EF Core returns datetime2 columns with DateTimeKind.Unspecified even though we always
+    // write UTC - ConvertTimeFromUtc requires an explicit Kind=Utc or it throws/misbehaves.
+    // Always SpecifyKind before converting; this exact gap is a classic source of "times are
+    // off by a few hours" bugs when a value's Kind silently isn't what you assumed it was.
+    TimeZoneInfo displayTz;
+    try
+    {
+        displayTz = TimeZoneInfo.FindSystemTimeZoneById(clientTimeZoneId);
+    }
+    catch (TimeZoneNotFoundException)
+    {
+        displayTz = TimeZoneInfo.Utc;
+        clientTimeZoneId = "UTC";
+    }
+
+    DateTime ToClientLocal(DateTime utcValue) =>
+        TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utcValue, DateTimeKind.Utc), displayTz);
 }
 
 <div class="mv-page-header">
     <div>
         <h2>Execution Logs</h2>
-        <div class="mv-subtle">Recent automation runs - proves ROI to a client and lets you debug fast instead of being a "launch and leave" agency.</div>
+        <div class="mv-subtle">
+            @(clientName ?? "Client") &middot; times shown in <strong>@clientTimeZoneId</strong> local time -
+            proves ROI to a client and lets you debug fast instead of being a "launch and leave" agency.
+        </div>
     </div>
     <a class="btn btn-outline-secondary" asp-controller="Clients" asp-action="Details" asp-route-id="@clientConfigId">&larr; Back to Client</a>
 </div>
@@ -27,6 +50,12 @@
                 <option value="Running" selected="@(status == "Running")">Running</option>
                 <option value="Pending" selected="@(status == "Pending")">Pending</option>
             </select>
+            <select name="pageSize" class="form-select" style="max-width:140px;" onchange="this.form.submit()">
+                <option value="5" selected="@(ViewBag.PageSize == 5)">5 / page</option>
+                <option value="10" selected="@(ViewBag.PageSize == 10)">10 / page</option>
+                <option value="25" selected="@(ViewBag.PageSize == 25)">25 / page</option>
+                <option value="50" selected="@(ViewBag.PageSize == 50)">50 / page</option>
+            </select>
             <button type="submit" class="btn btn-outline-secondary">Filter</button>
             @if (!string.IsNullOrWhiteSpace(search) || !string.IsNullOrWhiteSpace(status))
             {
@@ -41,7 +70,7 @@
             <table class="table table-sm mv-table">
                 <thead>
                     <tr>
-                        <th>Started (UTC)</th>
+                        <th>Started (@clientTimeZoneId)</th>
                         <th>Status</th>
                         <th>Summary</th>
                         <th>Error</th>
@@ -54,7 +83,7 @@
                     var rowClass = log.Status == ExecutionStatus.Failed ? "table-danger"
                         : log.Status == ExecutionStatus.Succeeded ? "table-success" : "";
                     <tr class="@rowClass">
-                        <td data-label="Started">@log.StartedAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td data-label="Started">@ToClientLocal(log.StartedAtUtc).ToString("yyyy-MM-dd HH:mm:ss")</td>
                         <td data-label="Status">@log.Status</td>
                         <td data-label="Summary">@log.ResultSummary</td>
                         <td data-label="Error" class="text-danger">@log.ErrorMessage</td>
@@ -72,16 +101,16 @@
                 <nav>
                     <ul class="pagination pagination-sm mb-0">
                         <li class="page-item @(!Model.HasPrevious ? "disabled" : "")">
-                            <a class="page-link" asp-action="Index" asp-route-clientConfigId="@clientConfigId" asp-route-page="@(Model.Page - 1)" asp-route-search="@search" asp-route-status="@status">Previous</a>
+                            <a class="page-link" asp-action="Index" asp-route-clientConfigId="@clientConfigId" asp-route-page="@(Model.Page - 1)" asp-route-search="@search" asp-route-status="@status" asp-route-pageSize="@ViewBag.PageSize">Previous</a>
                         </li>
                         @for (int p = 1; p <= Model.TotalPages; p++)
                         {
                             <li class="page-item @(p == Model.Page ? "active" : "")">
-                                <a class="page-link" asp-action="Index" asp-route-clientConfigId="@clientConfigId" asp-route-page="@p" asp-route-search="@search" asp-route-status="@status">@p</a>
+                                <a class="page-link" asp-action="Index" asp-route-clientConfigId="@clientConfigId" asp-route-page="@p" asp-route-search="@search" asp-route-status="@status" asp-route-pageSize="@ViewBag.PageSize">@p</a>
                             </li>
                         }
                         <li class="page-item @(!Model.HasNext ? "disabled" : "")">
-                            <a class="page-link" asp-action="Index" asp-route-clientConfigId="@clientConfigId" asp-route-page="@(Model.Page + 1)" asp-route-search="@search" asp-route-status="@status">Next</a>
+                            <a class="page-link" asp-action="Index" asp-route-clientConfigId="@clientConfigId" asp-route-page="@(Model.Page + 1)" asp-route-search="@search" asp-route-status="@status" asp-route-pageSize="@ViewBag.PageSize">Next</a>
                         </li>
                     </ul>
                 </nav>

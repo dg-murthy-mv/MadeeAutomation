@@ -4,7 +4,8 @@ using Microsoft.Extensions.Logging;
 
 namespace MadeeAutomation.Application.Common;
 
-/// <summary>Sends an outbound message via WhatsApp/LINE - used by every vertical pack.</summary>
+/// <summary>Sends an outbound message via WhatsApp/LINE - used by every vertical pack.
+/// Uses the CLIENT's own credentials (looked up via clientConfigId), never a shared account.</summary>
 public class SendMessageAction : IAction
 {
     public ActionType Type => ActionType.SendMessage;
@@ -21,18 +22,25 @@ public class SendMessageAction : IAction
         var channel = request.Parameters.GetValueOrDefault("channel", "whatsapp");
         var to = request.Parameters.GetValueOrDefault("to", "");
         var message = request.Parameters.GetValueOrDefault("message", "");
+        var clientConfigIdRaw = request.Parameters.GetValueOrDefault("clientConfigId", "");
 
         if (string.IsNullOrWhiteSpace(to))
         {
             return new ActionResult { Success = false, ErrorMessage = "Missing 'to' address for SendMessageAction." };
         }
 
-        await _messaging.SendTextMessageAsync(channel, to, message, cancellationToken);
+        if (!Guid.TryParse(clientConfigIdRaw, out var clientConfigId))
+        {
+            return new ActionResult { Success = false, ErrorMessage = "Missing or invalid clientConfigId for SendMessageAction." };
+        }
+
+        await _messaging.SendTextMessageAsync(channel, to, message, clientConfigId, cancellationToken);
         return new ActionResult { Success = true, ResultData = $"Message sent to {to} via {channel}" };
     }
 }
 
-/// <summary>Notifies MadeeAutomation / client ops staff internally (e.g. via an internal Slack/email/WhatsApp group).</summary>
+/// <summary>Notifies MadeeAutomation / client ops staff internally (e.g. via an internal Slack/email/WhatsApp group).
+/// Always uses MadeeAutomation's own internal channel, not any particular client's credentials.</summary>
 public class NotifyInternalAction : IAction
 {
     public ActionType Type => ActionType.NotifyInternal;
@@ -49,10 +57,9 @@ public class NotifyInternalAction : IAction
     public async Task<ActionResult> ExecuteAsync(ActionRequest request, CancellationToken cancellationToken = default)
     {
         var message = request.Parameters.GetValueOrDefault("message", "");
-        var internalChannel = request.Parameters.GetValueOrDefault("internalAddress", "internal-ops-group");
 
         _logger.LogInformation("Internal notification: {Message}", message);
-        await _messaging.SendTextMessageAsync("whatsapp", internalChannel, message, cancellationToken);
+        await _messaging.SendInternalNotificationAsync(message, cancellationToken);
 
         return new ActionResult { Success = true, ResultData = "Internal notification sent." };
     }

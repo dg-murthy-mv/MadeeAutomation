@@ -2,6 +2,7 @@ using MadeeAutomation.Domain.Entities;
 using MadeeAutomation.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace MadeeAutomation.Admin.Web.Controllers;
 
@@ -16,9 +17,11 @@ public class ClientsController : Controller
 
     public ClientsController(AutomationDbContext db) => _db = db;
 
-    public async Task<IActionResult> Index(string? search, int page = 1)
+    public async Task<IActionResult> Index(string? search, int page = 1, int pageSize = 10)
     {
-        const int pageSize = 10;
+        var allowedSizes = new[] { 5, 10, 25, 50 };
+        if (!allowedSizes.Contains(pageSize)) pageSize = 10;
+
         var query = _db.ClientConfigs.Include(c => c.Workflows).AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))

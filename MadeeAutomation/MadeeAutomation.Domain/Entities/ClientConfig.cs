@@ -21,7 +21,12 @@ public class ClientConfig
     public ClientStatus Status { get; set; } = ClientStatus.Trial;
 
     // Integration secrets/config, stored as JSON (encrypt at rest in Infrastructure layer).
-    // e.g. { "whatsAppNumber": "+66...", "merkaiApiBaseUrl": "...", "merkaiApiKey": "..." }
+    // Recognized keys, all optional - a connector falls back to mock mode if its keys are missing:
+    //   whatsAppPhoneNumberId, whatsAppAccessToken   - this client's own WhatsApp Business API credentials
+    //   lineChannelAccessToken                        - this client's own LINE Official Account token
+    //   posFirstBaseUrl, posFirstApiKey                - this client's own POSFirst instance
+    //   merkaiBaseUrl, merkaiApiKey                    - this client's own Merkai CRM instance
+    // Example: { "whatsAppPhoneNumberId": "123...", "whatsAppAccessToken": "EAAG...", "posFirstBaseUrl": "https://pos.client1.com", "posFirstApiKey": "..." }
     public string IntegrationSettingsJson { get; set; } = "{}";
 
     public bool MerkaiIntegrationEnabled { get; set; }
