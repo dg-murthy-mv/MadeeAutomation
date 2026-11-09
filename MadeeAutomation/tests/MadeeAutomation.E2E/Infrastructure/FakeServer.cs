@@ -137,16 +137,33 @@ public sealed class FakeServer : IAsyncDisposable
         if (text.Contains("[badjson]"))
             return "Sorry, I can't help with that.";
 
-        if (text.Contains("croissant") || text.Contains("ครัวซองต์"))
+        var orderItem = text.Contains("croissant") || text.Contains("ครัวซองต์") ? "Croissant"
+            : text.Contains("catering") ? "Catering package"
+            : null;
+        if (orderItem is not null)
         {
             var m = Regex.Match(text, @"\d+");
             var qty = m.Success ? int.Parse(m.Value) : 1;
+
+            // Like the real prompt asks: resolve "tomorrow 9am" against the business clock in the system prompt.
+            string? delivery = null;
+            var localDate = Regex.Match(system, @"Local date: (\d{4}-\d{2}-\d{2})");
+            if (text.Contains("tomorrow 9am") && localDate.Success)
+                delivery = DateTime.ParseExact(localDate.Groups[1].Value, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                    .AddDays(1).ToString("yyyy-MM-dd") + "T09:00";
+
             return Json(new
             {
                 intent = "order", language = "en",
-                reply = $"Order confirmed: {qty} x Croissant. Your ref is {{ORDER_REF}}.",
+                reply = $"Order confirmed: {qty} x {orderItem}. Your ref is {{ORDER_REF}}.",
                 canAnswer = false, needsHuman = false,
-                order = new { items = new[] { new { name = "Croissant", quantity = qty } }, requestedDeliveryTime = (string?)null, customerNote = (string?)null }
+                order = new
+                {
+                    items = new[] { new { name = orderItem, quantity = qty } },
+                    requestedDeliveryTime = delivery,
+                    requestedDeliveryText = delivery is null ? null : "tomorrow 9am",
+                    customerNote = (string?)null
+                }
             });
         }
 

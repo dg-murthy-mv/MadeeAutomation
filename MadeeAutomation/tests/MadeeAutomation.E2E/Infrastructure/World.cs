@@ -19,6 +19,7 @@ public record SeededClient(Guid Id, string Code, string LineSecret, Guid? Workfl
 ///   toggle    Active, LINE secret+token, workflow the UI test disables/enables
 ///   other     Active, LINE secret+token, workflow                   -> cross-client URL check
 ///   legacy    Active, credentials stored as OLD plain JSON (not encrypted) -> still works
+///   indiacafe India / INR / Asia/Kolkata, menu "Catering package - 125000" -> lakh formatting + IST times
 ///
 /// Admin accounts (password for all: World.AdminPassword)
 ///   admin@e2e.test          used by every Admin UI test
@@ -35,12 +36,14 @@ public static class World
     public static SeededClient Toggle { get; private set; } = null!;
     public static SeededClient Other { get; private set; } = null!;
     public static SeededClient Legacy { get; private set; } = null!;
+    public static SeededClient IndiaCafe { get; private set; } = null!;
 
     public const string AdminEmail = "admin@e2e.test";
     public const string AdminPassword = "E2eAdmin2026x";
 
     public const string BakeryKnowledgeBase = "Opening hours: 7am-6pm every day\nDelivery: Ban Chang only, free over 300 THB";
     public const string BakeryMenu = "Croissant - 45 THB\nSourdough loaf - 180 THB";
+    public const string IndiaMenu = "Catering package - 125000\nMasala chai - 30";
 
     /// <summary>Unique per run, so names never clash with a previous run's leftovers.</summary>
     public static string RunId { get; } = DateTime.UtcNow.ToString("HHmmss");
@@ -93,21 +96,31 @@ public static class World
         Other = await AddClientAsync(db, "other", "E2E Other", ClientStatus.Active,
             Encrypted(Line("other-secret", "other-token")), "other-secret", withWorkflow: true);
 
+        IndiaCafe = await AddClientAsync(db, "indiacafe", "E2E India Cafe", ClientStatus.Active,
+            Encrypted(new ClientIntegrationSettings
+            {
+                LineChannelSecret = "india-secret",
+                LineChannelAccessToken = "india-token",
+                PosFirstBaseUrl = settings.FakeServerUrl,
+                PosFirstApiKey = "pos-key-india"
+            }), "india-secret", withWorkflow: true, menu: IndiaMenu, country: "IN", currency: "INR", timeZone: "Asia/Kolkata");
+
         // Old rows hold plain JSON - the app must still read them (and encrypt on the next save).
         Legacy = await AddClientAsync(db, "legacy", "E2E Legacy", ClientStatus.Active,
             Line("legacy-secret", "legacy-token").ToJson(), "legacy-secret", withWorkflow: true);
     }
 
     private static async Task<SeededClient> AddClientAsync(TestDatabase db, string code, string name, ClientStatus status,
-        string settingsValue, string secret, bool withWorkflow, string? kb = null, string? menu = null, string? staffEmail = null)
+        string settingsValue, string secret, bool withWorkflow, string? kb = null, string? menu = null, string? staffEmail = null,
+        string country = "TH", string currency = "THB", string timeZone = "Asia/Bangkok")
     {
         var id = Guid.NewGuid();
         await db.ExecAsync(@"
             INSERT INTO dbo.ClientConfigs (Id, ClientName, ClientCode, Country, TimeZoneId, Currency, Vertical, Status,
                 IntegrationSettingsJson, MerkaiIntegrationEnabled, PosFirstIntegrationEnabled, CreatedAtUtc, KnowledgeBaseText, MenuText, StaffAlertEmail)
-            VALUES (@id, @name, @code, 'TH', 'Asia/Bangkok', 'THB', 1, @status, @settings, 0, 1, SYSUTCDATETIME(), @kb, @menu, @staff);",
+            VALUES (@id, @name, @code, @country, @tz, @currency, 1, @status, @settings, 0, 1, SYSUTCDATETIME(), @kb, @menu, @staff);",
             ("@id", id), ("@name", name), ("@code", code), ("@status", (int)status), ("@settings", settingsValue),
-            ("@kb", kb), ("@menu", menu), ("@staff", staffEmail));
+            ("@kb", kb), ("@menu", menu), ("@staff", staffEmail), ("@country", country), ("@tz", timeZone), ("@currency", currency));
 
         Guid? workflowId = null;
         if (withWorkflow)

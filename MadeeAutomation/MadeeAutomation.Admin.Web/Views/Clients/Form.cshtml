@@ -77,25 +77,34 @@
         <div class="row">
             <div class="col-md-3 mb-3">
                 <label asp-for="Country" class="form-label"></label>
-                <select asp-for="Country" class="form-select">
-                    @foreach (var c in ClientFormModel.Countries)
+                <select asp-for="Country" class="form-select" id="Country" data-testid="country">
+                    @foreach (var m in Markets.All)
                     {
-                        <option value="@c.Value">@c.Label</option>
+                        <option value="@m.CountryCode" data-currency="@m.Currency" data-tz="@m.TimeZoneId">@m.CountryName</option>
                     }
                 </select>
+                <div class="form-text" id="marketNote">@(Markets.Find(Model.Country)?.Note)</div>
+                <span asp-validation-for="Country" class="text-danger small"></span>
             </div>
             <div class="col-md-3 mb-3">
                 <label asp-for="TimeZoneId" class="form-label"></label>
-                <select asp-for="TimeZoneId" class="form-select">
-                    @foreach (var tz in ClientFormModel.TimeZones)
+                <select asp-for="TimeZoneId" class="form-select" id="TimeZoneId">
+                    @foreach (var tz in Markets.TimeZoneIds)
                     {
                         <option value="@tz">@tz</option>
                     }
                 </select>
+                <span asp-validation-for="TimeZoneId" class="text-danger small"></span>
             </div>
             <div class="col-md-2 mb-3">
                 <label asp-for="Currency" class="form-label"></label>
-                <input asp-for="Currency" class="form-control" maxlength="3" />
+                <select asp-for="Currency" class="form-select" id="Currency">
+                    @foreach (var c in Markets.Currencies)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+                <div class="form-text">One currency per client.</div>
                 <span asp-validation-for="Currency" class="text-danger small"></span>
             </div>
             <div class="col-md-2 mb-3">
@@ -123,15 +132,15 @@
         <h5 class="mv-section-title">What the AI may use</h5>
         <div class="mb-3">
             <label asp-for="KnowledgeBaseText" class="form-label"></label>
-            <textarea asp-for="KnowledgeBaseText" class="form-control" rows="6"
+            <textarea asp-for="KnowledgeBaseText" class="form-control" rows="6" dir="auto"
                       placeholder="Opening hours: 7am-6pm every day&#10;Delivery: Ban Chang only, free over 300 THB&#10;Payment: PromptPay or cash"></textarea>
             <div class="form-text">The bot answers questions ONLY from this text. Anything not covered goes to staff.</div>
         </div>
         <div class="mb-0">
             <label asp-for="MenuText" class="form-label"></label>
-            <textarea asp-for="MenuText" class="form-control" rows="6"
-                      placeholder="Croissant - 45 THB&#10;Sourdough loaf - 180 THB&#10;Chocolate cake (1 lb) - 450 THB"></textarea>
-            <div class="form-text">Order items are matched to these names.</div>
+            <textarea asp-for="MenuText" class="form-control" rows="6" dir="auto"
+                      placeholder="Croissant - 45&#10;Sourdough loaf - 180&#10;Chocolate cake (1 lb) - 450"></textarea>
+            <div class="form-text">One item per line, as <code>Name - price</code> (price in the client's currency). Order totals are worked out from these prices - the AI never makes up a price.</div>
         </div>
     </div>
 
@@ -139,8 +148,8 @@
         <h5 class="mv-section-title">When something needs a person</h5>
         <div class="mb-3">
             <label asp-for="FallbackReplyText" class="form-label"></label>
-            <textarea asp-for="FallbackReplyText" class="form-control" rows="2"
-                      placeholder="@(Model.Country == "TH" ? ClientConfig.DefaultFallbackThai + " / " + ClientConfig.DefaultFallbackEnglish : ClientConfig.DefaultFallbackEnglish)"></textarea>
+            <textarea asp-for="FallbackReplyText" class="form-control" rows="2" dir="auto"
+                      placeholder="@ClientConfig.DefaultFallbackEnglish"></textarea>
             <div class="form-text">Sent to the customer if the automatic reply fails (AI down, POSFirst error). Leave blank for the default shown.</div>
             <span asp-validation-for="FallbackReplyText" class="text-danger small"></span>
         </div>
@@ -206,10 +215,26 @@
 
 @section Scripts {
 <script>
+    // Secrets are type="text" + CSS dots so Chrome's password manager ignores them.
+    // Browsers without the dots feature get a password box instead, so a secret is never shown in plain text.
+    const dotsSupported = window.CSS && (CSS.supports('-webkit-text-security', 'disc') || CSS.supports('text-security', 'disc'));
+    document.querySelectorAll('.mv-secret').forEach(input => {
+        if (!dotsSupported) { input.type = 'password'; input.autocomplete = 'new-password'; }
+    });
     document.querySelectorAll('.mv-secret-toggle').forEach(btn => btn.addEventListener('click', () => {
         const input = document.getElementById(btn.dataset.target);
-        const shown = input.classList.toggle('mv-secret-shown');
+        const shown = !input.classList.contains('mv-secret-shown');
+        input.classList.toggle('mv-secret-shown', shown);
+        if (!dotsSupported) input.type = shown ? 'text' : 'password';
         btn.textContent = shown ? 'Hide' : 'Show';
     }));
+
+    // Choosing a country fills in its currency and time zone.
+    const country = document.getElementById('Country');
+    country.addEventListener('change', () => {
+        const opt = country.options[country.selectedIndex];
+        document.getElementById('Currency').value = opt.dataset.currency;
+        document.getElementById('TimeZoneId').value = opt.dataset.tz;
+    });
 </script>
 }

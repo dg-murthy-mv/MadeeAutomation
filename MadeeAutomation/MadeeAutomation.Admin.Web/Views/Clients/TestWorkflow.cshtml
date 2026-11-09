@@ -10,6 +10,10 @@
     <div>
         <h2>Test: @Model.WorkflowName</h2>
         <div class="mv-subtle">@Model.ClientName &middot; the AI really runs, but nothing is sent to anyone and no POSFirst order is created.</div>
+        @if (Model.ClientTimeZoneId is not null)
+        {
+            <div class="mv-subtle small" data-testid="test-clock">Business clock: @LocalTime.ToLocal(DateTime.UtcNow, Model.ClientTimeZoneId).ToString("ddd d MMM yyyy, HH:mm") (@Model.ClientTimeZoneId) &middot; prices in @Model.ClientCurrency</div>
+        }
     </div>
     <a asp-action="Details" asp-route-id="@Model.ClientConfigId" class="btn btn-outline-secondary">&larr; Back to client</a>
 </div>
@@ -18,7 +22,7 @@
     <form asp-action="TestWorkflow" asp-route-id="@Model.WorkflowId" method="post" data-testid="test-form">
         <div class="mb-3">
             <label asp-for="Message" class="form-label"></label>
-            <textarea asp-for="Message" class="form-control" rows="3" placeholder="e.g. 2 croissants for 9am tomorrow / ครัวซองต์ 2 ชิ้น / What time do you open?"></textarea>
+            <textarea asp-for="Message" class="form-control" rows="3" dir="auto" placeholder="e.g. 2 croissants for 9am tomorrow / ครัวซองต์ 2 ชิ้น / What time do you open?"></textarea>
             <span asp-validation-for="Message" class="text-danger small"></span>
         </div>
         <div class="mb-3" style="max-width: 240px;">
@@ -59,7 +63,7 @@
             {
                 foreach (var reply in replies)
                 {
-                    <div class="mv-chat-bubble" data-testid="test-reply">@reply.Parameters.GetValueOrDefault("message")</div>
+                    <div class="mv-chat-bubble" dir="auto" data-testid="test-reply">@reply.Parameters.GetValueOrDefault("message")</div>
                 }
             }
             else
@@ -72,7 +76,7 @@
                 <h6 class="mt-3">Staff alert that would be sent</h6>
                 foreach (var alert in alerts)
                 {
-                    <div class="alert alert-warning small" data-testid="test-alert">@alert.Parameters.GetValueOrDefault("message")</div>
+                    <div class="alert alert-warning small" dir="auto" data-testid="test-alert">@alert.Parameters.GetValueOrDefault("message")</div>
                 }
             }
 

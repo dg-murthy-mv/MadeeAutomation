@@ -17,6 +17,9 @@ public class AdminUser
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>Times on admin-only pages (e.g. last sign-in) are shown in this zone. Client pages use the client's zone.</summary>
+    public string TimeZoneId { get; set; } = "Asia/Bangkok";
+
     /// <summary>Set for accounts created with a temporary password - they must pick their own at first sign-in.</summary>
     public bool MustChangePassword { get; set; }
 

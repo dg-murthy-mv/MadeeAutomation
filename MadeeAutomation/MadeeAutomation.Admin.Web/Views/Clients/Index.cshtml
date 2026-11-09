@@ -40,6 +40,7 @@
                         <th>Client</th>
                         <th>Code</th>
                         <th>Country</th>
+                        <th>Currency</th>
                         <th>Vertical</th>
                         <th>Status</th>
                         <th># Workflows</th>
@@ -53,6 +54,7 @@
                         <td data-label="Client">@client.ClientName</td>
                         <td data-label="Code"><code>@client.ClientCode</code></td>
                         <td data-label="Country">@client.Country</td>
+                        <td data-label="Currency">@client.Currency</td>
                         <td data-label="Vertical"><span class="badge badge-vertical">@client.Vertical</span></td>
                         <td data-label="Status"><partial name="_StatusBadge" model="client.Status" /></td>
                         <td data-label="Workflows">@client.Workflows.Count</td>

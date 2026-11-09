@@ -2,6 +2,7 @@ using System.Text.Json;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Application.Common;
 using MadeeAutomation.Domain.Enums;
+using MadeeAutomation.Domain.Regional;
 
 namespace MadeeAutomation.Application.VerticalPacks.Messaging;
 
@@ -57,13 +58,44 @@ public abstract class CustomerMessageHandlerBase : IHandler
         // ---- Orders ----
         if (isOrder && Mode != AssistantMode.FaqOnly)
         {
+            var client = context.Client;
+            var currency = client?.Currency?.ToUpperInvariant();
+            var timeZoneId = client?.TimeZoneId;
+            var menu = MenuCatalog.Parse(client?.MenuText);
+
+            // Prices come from the client's own menu - never from the AI.
+            var lines = analysis.Items.Select(i =>
+            {
+                var match = MenuCatalog.Match(menu, i.Name);
+                var unitPrice = match?.Price;
+                return new
+                {
+                    name = match?.Name ?? i.Name,
+                    quantity = i.Quantity,
+                    unitPrice,
+                    lineTotal = unitPrice * i.Quantity,
+                    onMenu = match is not null
+                };
+            }).ToList();
+
+            decimal? orderTotal = lines.All(l => l.lineTotal.HasValue) ? lines.Sum(l => l.lineTotal!.Value) : null;
+
+            DateTimeOffset? deliveryLocal = analysis.RequestedDeliveryLocal is { } local
+                ? LocalTime.FromLocal(local, timeZoneId)
+                : null;
+
             var orderPayload = new
             {
                 source = channel,
                 customerId = from,
                 rawMessage = text,
-                items = analysis.Items.Select(i => new { name = i.Name, quantity = i.Quantity }).ToList(),
-                requestedDeliveryTime = analysis.RequestedDeliveryTime,
+                currency,
+                items = lines,
+                orderTotal,
+                requestedDeliveryLocal = deliveryLocal?.ToString("yyyy-MM-dd'T'HH:mm:sszzz"),
+                requestedDeliveryUtc = deliveryLocal?.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"),
+                requestedDeliveryText = analysis.RequestedDeliveryText,
+                timeZone = timeZoneId,
                 customerNote = analysis.CustomerNote
             };
 
@@ -73,13 +105,16 @@ public abstract class CustomerMessageHandlerBase : IHandler
                 : await _posFirst.CreateOrderAsync(context.ClientConfigId, orderPayload, cancellationToken);
 
             var reply = string.IsNullOrWhiteSpace(analysis.Reply)
-                ? $"Thanks! We've received your order (ref #{MessageAssistant.OrderRefPlaceholder}). We'll confirm the total and delivery time shortly."
+                ? $"Thanks! We've received your order (ref #{MessageAssistant.OrderRefPlaceholder})."
                 : analysis.Reply;
             reply = reply.Contains(MessageAssistant.OrderRefPlaceholder)
                 ? reply.Replace(MessageAssistant.OrderRefPlaceholder, orderId)
                 : $"{reply} (ref #{orderId})";
+            if (orderTotal is not null)
+                reply += $"\nTotal: {Money.Format(orderTotal.Value, currency)}";
 
-            return HandlerResult.Ok($"Order {orderId} created ({analysis.Items.Count} item(s)).", Reply(reply));
+            var totalText = orderTotal is null ? "" : $", total {Money.Format(orderTotal.Value, currency)}";
+            return HandlerResult.Ok($"Order {orderId} created ({analysis.Items.Count} item(s){totalText}).", Reply(reply));
         }
 
         // ---- Hand-over to staff ----
@@ -90,7 +125,8 @@ public abstract class CustomerMessageHandlerBase : IHandler
                 ? "Thanks for your message! A member of our team will get back to you shortly."
                 : analysis.Reply;
             var reason = cannotAnswerQuestion ? "question not covered by the knowledge base" : "needs a person";
-            return HandlerResult.Ok("Escalated to staff.", NotifyStaff(reason), Reply(reply));
+            // Customer's answer first, then the staff alert.
+            return HandlerResult.Ok("Escalated to staff.", Reply(reply), NotifyStaff(reason));
         }
 
         if (string.IsNullOrWhiteSpace(analysis.Reply))

@@ -9,6 +9,8 @@ public class WorkflowTestModel
     public Guid ClientConfigId { get; set; }
     public string? WorkflowName { get; set; }
     public string? ClientName { get; set; }
+    public string? ClientTimeZoneId { get; set; }
+    public string? ClientCurrency { get; set; }
 
     [Required(ErrorMessage = "Type what a customer might send.")]
     [StringLength(2000)]

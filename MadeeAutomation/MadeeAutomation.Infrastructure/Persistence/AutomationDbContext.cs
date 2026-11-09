@@ -44,6 +44,7 @@ public class AutomationDbContext : DbContext
             entity.Property(u => u.DisplayName).HasMaxLength(200).IsRequired();
             entity.Property(u => u.PasswordHash).HasMaxLength(500).IsRequired();
             entity.Property(u => u.SecurityStamp).HasMaxLength(64).IsRequired();
+            entity.Property(u => u.TimeZoneId).HasMaxLength(64).IsRequired();
         });
 
         modelBuilder.Entity<PasswordResetToken>(entity =>

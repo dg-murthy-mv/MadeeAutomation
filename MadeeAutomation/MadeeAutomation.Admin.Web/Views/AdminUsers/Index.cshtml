@@ -2,6 +2,8 @@
 @{
     ViewData["Title"] = "Admin users";
     Guid? me = ViewBag.CurrentUserId;
+    var myTz = MadeeAutomation.Admin.Web.Services.AdminAuthService.CurrentTimeZone(User);
+    string Local(DateTime? utc) => utc is null ? "-" : LocalTime.ToLocal(utc.Value, myTz).ToString("yyyy-MM-dd HH:mm");
 }
 
 <div class="mv-page-header">
@@ -15,7 +17,7 @@
 <div class="mv-card">
     <div class="table-responsive">
         <table class="table mv-table align-middle" data-testid="admins-table">
-            <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Last sign-in (UTC)</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Last sign-in (<span data-testid="admins-tz">@myTz</span>)</th><th></th></tr></thead>
             <tbody>
             @foreach (var u in Model)
             {
@@ -28,7 +30,7 @@
                         else { <span class="badge bg-success" data-testid="admin-status">Active</span> }
                         @if (u.IsLockedOut(DateTime.UtcNow)) { <span class="badge bg-danger ms-1">Locked</span> }
                     </td>
-                    <td data-label="Last sign-in">@(u.LastLoginAtUtc?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                    <td data-label="Last sign-in">@Local(u.LastLoginAtUtc)</td>
                     <td data-label="">
                         @if (u.Id != me)
                         {

@@ -28,6 +28,7 @@ public static class DependencyInjection
 
         services.AddScoped<WorkflowEngine>();
         services.AddScoped<MessageAssistant>();
+        services.AddSingleton(TimeProvider.System);   // swap in tests to freeze the clock
 
         // Webhook -> InboundEvents -> background worker pipeline
         services.AddSingleton<InboundSignal>();

@@ -16,6 +16,7 @@ public class AdminAuthService
 {
     public const string StampClaim = "madee_stamp";
     public const string MustChangeClaim = "madee_must_change";
+    public const string TimeZoneClaim = "madee_tz";
     public const int MaxFailedLogins = 5;
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
     public static readonly TimeSpan ResetLinkLifetime = TimeSpan.FromHours(1);
@@ -66,7 +67,8 @@ public class AdminAuthService
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Name, user.DisplayName),
             new(ClaimTypes.Email, user.Email),
-            new(StampClaim, user.SecurityStamp)
+            new(StampClaim, user.SecurityStamp),
+            new(TimeZoneClaim, string.IsNullOrWhiteSpace(user.TimeZoneId) ? "Asia/Bangkok" : user.TimeZoneId)
         };
         if (user.MustChangePassword) claims.Add(new Claim(MustChangeClaim, "1"));
 
@@ -77,6 +79,10 @@ public class AdminAuthService
             ExpiresUtc = rememberMe ? DateTimeOffset.UtcNow.AddDays(14) : null
         });
     }
+
+    /// <summary>The signed-in admin's own time zone (for admin-only pages).</summary>
+    public static string CurrentTimeZone(ClaimsPrincipal user) =>
+        user.FindFirstValue(TimeZoneClaim) is { Length: > 0 } tz ? tz : "Asia/Bangkok";
 
     public static Guid? CurrentUserId(ClaimsPrincipal user) =>
         Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;

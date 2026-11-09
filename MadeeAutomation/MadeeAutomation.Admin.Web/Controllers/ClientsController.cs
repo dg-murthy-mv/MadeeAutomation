@@ -6,6 +6,7 @@ using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Application.Common;
 using MadeeAutomation.Domain.Entities;
 using MadeeAutomation.Domain.Enums;
+using MadeeAutomation.Domain.Regional;
 using MadeeAutomation.Domain.Settings;
 using Microsoft.AspNetCore.Mvc;
 
@@ -71,6 +72,7 @@ public class ClientsController : Controller
         else if (await _clients.CodeExistsAsync(model.ClientCode))
             ModelState.AddModelError(nameof(model.ClientCode), "Another client already uses this code.");
 
+        ValidateMarket(model);
         if (!ModelState.IsValid) return View("Form", model);
 
         var client = new ClientConfig
@@ -151,6 +153,8 @@ public class ClientsController : Controller
                 !(Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) && (uri.Scheme == "http" || uri.Scheme == "https")))
                 ModelState.AddModelError(field, "Enter a full URL starting with http:// or https://");
         }
+
+        ValidateMarket(model);
 
         ClientIntegrationSettings settings;
         try
@@ -354,6 +358,8 @@ public class ClientsController : Controller
             ClientConfigId = workflow.ClientConfigId,
             WorkflowName = workflow.Name,
             ClientName = workflow.ClientConfig.ClientName,
+            ClientTimeZoneId = workflow.ClientConfig.TimeZoneId,
+            ClientCurrency = workflow.ClientConfig.Currency,
             Channel = workflow.Channel ?? Channels.Line
         });
     }
@@ -369,6 +375,8 @@ public class ClientsController : Controller
         model.ClientConfigId = workflow.ClientConfigId;
         model.WorkflowName = workflow.Name;
         model.ClientName = workflow.ClientConfig.ClientName;
+        model.ClientTimeZoneId = workflow.ClientConfig.TimeZoneId;
+        model.ClientCurrency = workflow.ClientConfig.Currency;
         model.Channel = Channels.Normalize(model.Channel) ?? workflow.Channel ?? Channels.Line;
 
         if (!ModelState.IsValid) return View(model);
@@ -395,6 +403,18 @@ public class ClientsController : Controller
         client.FallbackReplyText = Clean(model.FallbackReplyText);
         client.StaffAlertEmail = Clean(model.StaffAlertEmail)?.ToLowerInvariant();
         client.StaffAlertLineUserId = Clean(model.StaffAlertLineUserId);
+    }
+
+    /// <summary>Country, currency and time zone must be one of the four markets' values.</summary>
+    private void ValidateMarket(ClientFormModel model)
+    {
+        if (Markets.Find(model.Country) is null)
+            ModelState.AddModelError(nameof(model.Country), "Choose Thailand, India, Philippines or UAE.");
+        model.Currency = (model.Currency ?? "").Trim().ToUpperInvariant();
+        if (!Markets.Currencies.Contains(model.Currency))
+            ModelState.AddModelError(nameof(model.Currency), "Choose THB, INR, PHP or AED.");
+        if (!Markets.TimeZoneIds.Contains(model.TimeZoneId))
+            ModelState.AddModelError(nameof(model.TimeZoneId), "Choose one of the listed time zones.");
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

@@ -47,3 +47,10 @@ public class AdminUserFormModel
     [Required, StringLength(200), Display(Name = "Name")] public string DisplayName { get; set; } = string.Empty;
     [Required, EmailAddress, StringLength(256)] public string Email { get; set; } = string.Empty;
 }
+
+public class MyAccountModel
+{
+    public string Email { get; set; } = string.Empty;
+    [Required, StringLength(200), Display(Name = "Your name")] public string DisplayName { get; set; } = string.Empty;
+    [Required, Display(Name = "Your time zone")] public string TimeZoneId { get; set; } = "Asia/Bangkok";
+}

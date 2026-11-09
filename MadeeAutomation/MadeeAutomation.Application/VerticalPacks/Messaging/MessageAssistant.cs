@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Application.Common;
 using MadeeAutomation.Domain.Entities;
+using MadeeAutomation.Domain.Regional;
 
 namespace MadeeAutomation.Application.VerticalPacks.Messaging;
 
@@ -28,7 +30,13 @@ public class MessageAnalysis
     public bool CanAnswer { get; set; }
     public bool NeedsHuman { get; set; }
     public List<OrderLine> Items { get; set; } = new();
-    public string? RequestedDeliveryTime { get; set; }
+
+    /// <summary>The customer's own words, e.g. "tomorrow 9am".</summary>
+    public string? RequestedDeliveryText { get; set; }
+
+    /// <summary>Resolved wall-clock time in the CLIENT's time zone (Kind = Unspecified), or null.</summary>
+    public DateTime? RequestedDeliveryLocal { get; set; }
+
     public string? CustomerNote { get; set; }
 }
 
@@ -42,16 +50,18 @@ public class MessageAssistant
     public const string OrderRefPlaceholder = "{ORDER_REF}";
 
     private readonly IClaudeService _claude;
+    private readonly TimeProvider _clock;
 
-    public MessageAssistant(IClaudeService claude)
+    public MessageAssistant(IClaudeService claude, TimeProvider clock)
     {
         _claude = claude;
+        _clock = clock;
     }
 
     public async Task<MessageAnalysis?> AnalyzeAsync(ClientConfig? client, string customerMessage, AssistantMode mode,
         CancellationToken cancellationToken = default)
     {
-        var systemPrompt = BuildSystemPrompt(client, mode);
+        var systemPrompt = BuildSystemPrompt(client, mode, _clock.GetUtcNow().UtcDateTime);
         var raw = await _claude.CompleteJsonAsync(systemPrompt, customerMessage, cancellationToken);
 
         var parsed = JsonReply.TryParseObject(raw);
@@ -75,7 +85,8 @@ public class MessageAssistant
 
         if (root.TryGetProperty("order", out var order) && order.ValueKind == JsonValueKind.Object)
         {
-            analysis.RequestedDeliveryTime = order.GetString("requestedDeliveryTime");
+            analysis.RequestedDeliveryText = order.GetString("requestedDeliveryText");
+            analysis.RequestedDeliveryLocal = ParseLocal(order.GetString("requestedDeliveryTime"));
             analysis.CustomerNote = order.GetString("customerNote");
 
             if (order.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
@@ -95,12 +106,30 @@ public class MessageAssistant
         return analysis;
     }
 
-    public static string BuildSystemPrompt(ClientConfig? client, AssistantMode mode)
+    private static readonly string[] LocalFormats = { "yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd" };
+
+    /// <summary>Reads the AI's "yyyy-MM-ddTHH:mm" (client local time). Anything else -> null.</summary>
+    public static DateTime? ParseLocal(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        DateTime.TryParseExact(value.Trim(), LocalFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var local)
+            ? DateTime.SpecifyKind(local, DateTimeKind.Unspecified)
+            : null;
+
+    public static string BuildSystemPrompt(ClientConfig? client, AssistantMode mode, DateTime utcNow)
     {
         var businessName = string.IsNullOrWhiteSpace(client?.ClientName) ? "the business" : client!.ClientName;
+        var timeZoneId = string.IsNullOrWhiteSpace(client?.TimeZoneId) ? "UTC" : client!.TimeZoneId;
+        var localNow = LocalTime.ToLocal(utcNow, timeZoneId);
+        var currency = string.IsNullOrWhiteSpace(client?.Currency) ? null : client!.Currency.ToUpperInvariant();
         var sb = new StringBuilder();
 
         sb.AppendLine($"You are the customer chat assistant for {businessName}. Customers write to you on LINE, WhatsApp or Messenger.");
+        sb.AppendLine();
+        sb.AppendLine("BUSINESS CLOCK (use it for \"today\", \"tomorrow\", \"tonight\", \"are you open now?\"):");
+        sb.AppendLine($"Today is {localNow.ToString("dddd d MMMM yyyy", CultureInfo.InvariantCulture)}, local time {localNow.ToString("HH:mm", CultureInfo.InvariantCulture)} " +
+                      $"(time zone {timeZoneId}, {LocalTime.OffsetLabel(timeZoneId, utcNow)}). Local date: {localNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.");
+        if (currency is not null)
+            sb.AppendLine($"All prices are in {currency}.");
         sb.AppendLine();
         sb.AppendLine(mode switch
         {
@@ -117,7 +146,8 @@ public class MessageAssistant
         sb.AppendLine("- Answer questions ONLY from BUSINESS INFORMATION below. Never invent opening hours, prices, delivery areas or anything else.");
         sb.AppendLine("- If a question is not covered by BUSINESS INFORMATION, set canAnswer to false and needsHuman to true, and reply that a staff member will get back to them soon.");
         sb.AppendLine("- Set needsHuman to true for complaints, refunds, or anything you cannot handle.");
-        sb.AppendLine("- For orders, use the MENU names when an item clearly matches. Never invent prices or totals.");
+        sb.AppendLine("- For orders, use the MENU names exactly when an item clearly matches. Do NOT state prices or a total in the reply - the system adds the correct total.");
+        sb.AppendLine("- requestedDeliveryTime: when the customer gives a delivery/pick-up time, resolve it against the BUSINESS CLOCK to local \"yyyy-MM-ddTHH:mm\" (e.g. \"tomorrow 9am\" -> next day 09:00). Use null if no time was given. Put the customer's own words in requestedDeliveryText.");
         sb.AppendLine($"- When intent is \"order\" and there is at least one item, the reply must confirm the items and include the exact text {OrderRefPlaceholder} where the order reference goes.");
         sb.AppendLine("- A greeting like \"hello\" is NOT an order.");
         sb.AppendLine();
@@ -130,7 +160,7 @@ public class MessageAssistant
         sb.AppendLine("Respond with ONE JSON object only, in exactly this shape:");
         sb.AppendLine("{ \"intent\": \"order\" | \"question\" | \"greeting\" | \"other\", \"language\": string, \"reply\": string, " +
                       "\"canAnswer\": boolean, \"needsHuman\": boolean, " +
-                      "\"order\": { \"items\": [ { \"name\": string, \"quantity\": number } ], \"requestedDeliveryTime\": string|null, \"customerNote\": string|null } | null }");
+                      "\"order\": { \"items\": [ { \"name\": string, \"quantity\": number } ], \"requestedDeliveryTime\": \"yyyy-MM-ddTHH:mm\"|null, \"requestedDeliveryText\": string|null, \"customerNote\": string|null } | null }");
         return sb.ToString();
     }
 }

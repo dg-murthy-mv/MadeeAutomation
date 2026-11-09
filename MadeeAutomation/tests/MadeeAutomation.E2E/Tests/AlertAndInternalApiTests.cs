@@ -32,8 +32,8 @@ public class AlertAndInternalApiTests
 
         var calls = await Waits.LineCallsAsync(user);
         Assert.That(calls[0].Kind, Is.EqualTo("reply"));
-        Assert.That(calls[0].Text, Does.Contain("ขอบคุณ"), "Thailand clients get the Thai + English default");
-        Assert.That(calls[0].Text, Does.Contain("A member of our team will reply shortly"));
+        Assert.That(calls[0].Text, Is.EqualTo("Thanks for your message! A member of our team will reply shortly."),
+            "our side is English-only: the default fallback is English for every country");
 
         var log = await Waits.FinishedLogAsync(user);
         Assert.That(log["Status"], Is.EqualTo(4));

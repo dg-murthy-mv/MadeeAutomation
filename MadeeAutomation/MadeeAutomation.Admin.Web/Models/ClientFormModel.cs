@@ -19,7 +19,7 @@ public class ClientFormModel
 
     [Required] public string Country { get; set; } = "TH";
     [Required, Display(Name = "Time zone")] public string TimeZoneId { get; set; } = "Asia/Bangkok";
-    [Required, StringLength(3, MinimumLength = 3)] public string Currency { get; set; } = "THB";
+    [Required] public string Currency { get; set; } = "THB";
 
     public VerticalPack Vertical { get; set; } = VerticalPack.FnBRetail;
     public ClientStatus Status { get; set; } = ClientStatus.Trial;
@@ -66,13 +66,4 @@ public class ClientFormModel
         nameof(MessengerPageAccessToken), nameof(PosFirstApiKey), nameof(MerkaiApiKey)
     };
 
-    public static readonly (string Value, string Label)[] Countries =
-    {
-        ("TH", "Thailand"), ("IN", "India"), ("PH", "Philippines"), ("AE", "UAE")
-    };
-
-    public static readonly string[] TimeZones =
-    {
-        "Asia/Bangkok", "Asia/Kolkata", "Asia/Manila", "Asia/Dubai", "UTC"
-    };
 }

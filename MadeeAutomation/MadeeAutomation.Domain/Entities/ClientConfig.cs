@@ -36,7 +36,7 @@ public class ClientConfig
 
     /// <summary>
     /// Sent to the customer when the AI step fails (Claude down, bad answer, POSFirst error), so nobody
-    /// is left without a reply. Null = a default for the client's country (Thai + English for TH).
+    /// is left without a reply. Null = the English default. A client may write its own in any language.
     /// </summary>
     public string? FallbackReplyText { get; set; }
 
@@ -58,11 +58,8 @@ public class ClientConfig
     public bool CanRunWorkflows => Status is ClientStatus.Trial or ClientStatus.Active;
 
     public const string DefaultFallbackEnglish = "Thanks for your message! A member of our team will reply shortly.";
-    public const string DefaultFallbackThai = "ขอบคุณสำหรับข้อความค่ะ ทีมงานจะติดต่อกลับโดยเร็วที่สุด";
 
-    /// <summary>The fallback text actually used: the client's own, or a default for its country.</summary>
+    /// <summary>The fallback text actually used: the client's own, or the English default (our side is English-only).</summary>
     public string EffectiveFallbackReply =>
-        !string.IsNullOrWhiteSpace(FallbackReplyText) ? FallbackReplyText.Trim()
-        : string.Equals(Country, "TH", StringComparison.OrdinalIgnoreCase) ? DefaultFallbackThai + "\n" + DefaultFallbackEnglish
-        : DefaultFallbackEnglish;
+        !string.IsNullOrWhiteSpace(FallbackReplyText) ? FallbackReplyText.Trim() : DefaultFallbackEnglish;
 }

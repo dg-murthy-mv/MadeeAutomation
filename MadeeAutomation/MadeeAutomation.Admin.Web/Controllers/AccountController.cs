@@ -176,6 +176,42 @@ public class AccountController : Controller
         return RedirectToAction("Index", "Clients");
     }
 
+    // ================= My account =================
+
+    public async Task<IActionResult> MyAccount()
+    {
+        var user = await CurrentUserAsync();
+        if (user is null) return RedirectToAction(nameof(Login));
+        return View(new MyAccountModel { Email = user.Email, DisplayName = user.DisplayName, TimeZoneId = user.TimeZoneId });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> MyAccount(MyAccountModel model)
+    {
+        var user = await CurrentUserAsync();
+        if (user is null) return RedirectToAction(nameof(Login));
+        model.Email = user.Email;
+
+        if (!MadeeAutomation.Domain.Regional.Markets.TimeZoneIds.Contains(model.TimeZoneId))
+            ModelState.AddModelError(nameof(model.TimeZoneId), "Choose one of the listed time zones.");
+        if (!ModelState.IsValid) return View(model);
+
+        user.DisplayName = model.DisplayName.Trim();
+        user.TimeZoneId = model.TimeZoneId;
+        await _users.UpdateAsync(user);
+
+        await _auth.SignInAsync(HttpContext, user, rememberMe: false);   // refresh name + time zone in the cookie
+        TempData["Success"] = "Your account settings are saved.";
+        return RedirectToAction(nameof(MyAccount));
+    }
+
+    private async Task<AdminUser?> CurrentUserAsync()
+    {
+        var id = AdminAuthService.CurrentUserId(User);
+        return id is null ? null : await _users.GetByIdAsync(id.Value);
+    }
+
     // ================= Forgot / reset password =================
 
     [AllowAnonymous]
