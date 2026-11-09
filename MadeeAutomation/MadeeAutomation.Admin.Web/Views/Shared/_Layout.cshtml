@@ -35,11 +35,20 @@
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mvNav" aria-controls="mvNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            <div class="collapse navbar-collapse" id="mvNav">
-                <div class="navbar-nav ms-auto">
-                    <a class="nav-link" asp-controller="Clients" asp-action="Index">Clients</a>
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <div class="collapse navbar-collapse" id="mvNav">
+                    <div class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
+                        <a class="nav-link" asp-controller="Clients" asp-action="Index">Clients</a>
+                        <a class="nav-link" asp-controller="AdminUsers" asp-action="Index" data-testid="nav-admins">Admin users</a>
+                        <span class="nav-link mv-nav-user" data-testid="nav-user">@User.Identity.Name</span>
+                        <a class="nav-link" asp-controller="Account" asp-action="ChangePassword" data-testid="nav-change-password">Change password</a>
+                        <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
+                            <button type="submit" class="btn btn-sm btn-outline-light" data-testid="nav-logout">Sign out</button>
+                        </form>
+                    </div>
                 </div>
-            </div>
+            }
         </div>
     </nav>
 

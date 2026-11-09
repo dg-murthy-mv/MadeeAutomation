@@ -67,7 +67,10 @@ public abstract class CustomerMessageHandlerBase : IHandler
                 customerNote = analysis.CustomerNote
             };
 
-            var orderId = await _posFirst.CreateOrderAsync(context.ClientConfigId, orderPayload, cancellationToken);
+            // Admin test runs never create a real order.
+            var orderId = context.IsTest
+                ? "TEST-ORDER"
+                : await _posFirst.CreateOrderAsync(context.ClientConfigId, orderPayload, cancellationToken);
 
             var reply = string.IsNullOrWhiteSpace(analysis.Reply)
                 ? $"Thanks! We've received your order (ref #{MessageAssistant.OrderRefPlaceholder}). We'll confirm the total and delivery time shortly."

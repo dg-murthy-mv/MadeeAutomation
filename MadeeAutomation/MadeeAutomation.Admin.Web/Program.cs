@@ -1,9 +1,17 @@
+using System.Security.Claims;
+using MadeeAutomation.Admin.Web.Services;
+using MadeeAutomation.Application.Abstractions;
+using MadeeAutomation.Connectors;
 using MadeeAutomation.Infrastructure;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc.Authorization;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("System.Net.Http.HttpClient", Serilog.Events.LogEventLevel.Warning)
     .Enrich.FromLogContext()
     .WriteTo.Console()
     .WriteTo.File(
@@ -20,33 +28,84 @@ try
     var builder = WebApplication.CreateBuilder(args);
     builder.Host.UseSerilog();
 
-    builder.Services.AddControllersWithViews();
+    // Every page needs a signed-in admin unless it says [AllowAnonymous] (login, forgot/reset password, setup, errors).
+    builder.Services.AddControllersWithViews(options =>
+    {
+        options.Filters.Add(new AuthorizeFilter());
+        options.Filters.Add<MustChangePasswordFilter>();
+    });
 
-    // Admin.Web only manages data (clients, credentials, workflows, logs). It does not run
-    // workflows, so it needs no Claude key and no connector secrets - only the database
-    // and Security:SettingsEncryptionKey (the same key WebApi uses).
+    builder.Services
+        .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+        .AddCookie(options =>
+        {
+            options.Cookie.Name = "MadeeAutomation.Admin";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            options.LoginPath = "/Account/Login";
+            options.LogoutPath = "/Account/Logout";
+            options.AccessDeniedPath = "/Account/AccessDenied";
+            options.ExpireTimeSpan = TimeSpan.FromHours(8);
+            options.SlidingExpiration = true;
+
+            // Sign the browser out when the account was deactivated or its password changed elsewhere.
+            options.Events.OnValidatePrincipal = async context =>
+            {
+                var principal = context.Principal;
+                var idText = principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                var stamp = principal?.FindFirstValue(AdminAuthService.StampClaim);
+                var users = context.HttpContext.RequestServices.GetRequiredService<IAdminUserRepository>();
+                var user = Guid.TryParse(idText, out var id) ? await users.GetByIdAsync(id) : null;
+
+                if (user is null || !user.IsActive || user.SecurityStamp != stamp)
+                {
+                    context.RejectPrincipal();
+                    await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                }
+            };
+        });
+
+    // Admin.Web manages data (clients, credentials, workflows, logs, admins). It does not run workflows,
+    // so it needs no Claude key - only the database, Security:SettingsEncryptionKey (same as WebApi)
+    // and InternalApi:Key (same as WebApi) for the workflow Test button.
     builder.Services.AddInfrastructure(builder.Configuration);
+    builder.Services.AddLineCredentialCheck();
+    builder.Services.AddSingleton<AdminAuthService>();
+    builder.Services.AddScoped<IApiService, ApiService>();
+    builder.Services.AddHttpClient(ApiService.ClientName, client =>
+    {
+        var baseUrl = builder.Configuration["WebApi:InternalBaseUrl"] is { Length: > 0 } b ? b : "https://localhost:58715/";
+        client.BaseAddress = new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/");
+        client.Timeout = TimeSpan.FromSeconds(90);   // the test run waits for the AI
+    });
 
     var app = builder.Build();
 
-    if (!app.Environment.IsDevelopment())
+    if (app.Environment.IsDevelopment())
     {
-        app.UseExceptionHandler("/Home/Error");
+        app.UseDeveloperExceptionPage();
+    }
+    else
+    {
+        app.UseExceptionHandler("/Error");
         app.UseHsts();
     }
+    app.UseStatusCodePagesWithReExecute("/Error/{0}");
 
     app.UseSerilogRequestLogging();
 
     app.UseHttpsRedirection();
     app.UseStaticFiles();
     app.UseRouting();
+    app.UseAuthentication();
     app.UseAuthorization();
 
     app.MapControllerRoute(
         name: "default",
         pattern: "{controller=Home}/{action=Index}/{id?}");
 
-    app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+    app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 
     app.Run();
 }

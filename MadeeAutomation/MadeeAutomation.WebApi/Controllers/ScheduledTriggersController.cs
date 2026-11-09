@@ -1,16 +1,19 @@
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Application.Common;
 using MadeeAutomation.Domain.Enums;
+using MadeeAutomation.WebApi.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MadeeAutomation.WebApi.Controllers;
 
 /// <summary>
 /// Runs a client's scheduled workflows (e.g. LowStockAlertHandler) when called.
-/// A real scheduler that reads the cron in TriggerConfigJson, and protection on this endpoint,
-/// come in Phase 2/3 - until then call it from a scheduled task you trust.
+/// Protected: callers must send header X-Internal-Key (InternalApi:Key). A real scheduler that reads
+/// the cron in TriggerConfigJson comes in Phase 3 - until then call it from a Windows scheduled task:
+///   curl -X POST -H "X-Internal-Key: ..." https://localhost:58715/api/scheduled-triggers/run/{clientConfigId}
 /// </summary>
 [ApiController]
+[RequireInternalKey]
 [Route("api/scheduled-triggers")]
 public class ScheduledTriggersController : ControllerBase
 {

@@ -34,6 +34,18 @@ public class ClientConfig
     /// <summary>Menu / product list the order parser matches customer messages against.</summary>
     public string? MenuText { get; set; }
 
+    /// <summary>
+    /// Sent to the customer when the AI step fails (Claude down, bad answer, POSFirst error), so nobody
+    /// is left without a reply. Null = a default for the client's country (Thai + English for TH).
+    /// </summary>
+    public string? FallbackReplyText { get; set; }
+
+    /// <summary>Where staff alerts for this client go (hand-overs, failures). Both optional.</summary>
+    public string? StaffAlertEmail { get; set; }
+
+    /// <summary>A staff member's LINE user id - alerts are pushed to them through this client's LINE account.</summary>
+    public string? StaffAlertLineUserId { get; set; }
+
     public bool MerkaiIntegrationEnabled { get; set; }
     public bool PosFirstIntegrationEnabled { get; set; }
 
@@ -44,4 +56,13 @@ public class ClientConfig
 
     /// <summary>Paused and cancelled clients never run workflows.</summary>
     public bool CanRunWorkflows => Status is ClientStatus.Trial or ClientStatus.Active;
+
+    public const string DefaultFallbackEnglish = "Thanks for your message! A member of our team will reply shortly.";
+    public const string DefaultFallbackThai = "ขอบคุณสำหรับข้อความค่ะ ทีมงานจะติดต่อกลับโดยเร็วที่สุด";
+
+    /// <summary>The fallback text actually used: the client's own, or a default for its country.</summary>
+    public string EffectiveFallbackReply =>
+        !string.IsNullOrWhiteSpace(FallbackReplyText) ? FallbackReplyText.Trim()
+        : string.Equals(Country, "TH", StringComparison.OrdinalIgnoreCase) ? DefaultFallbackThai + "\n" + DefaultFallbackEnglish
+        : DefaultFallbackEnglish;
 }

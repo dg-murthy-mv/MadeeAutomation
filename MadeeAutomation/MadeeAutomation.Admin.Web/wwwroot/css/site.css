@@ -334,3 +334,42 @@ body {
 
 /* Hide the empty validation summary box until there is an error to show */
 .validation-summary-valid { display: none; }
+
+/* ---------- Round 002: sign-in pages, secrets, errors, test result ---------- */
+.mv-auth-card {
+    max-width: 440px;
+    margin: 2rem auto;
+}
+
+.mv-nav-user {
+    color: #cbd5e1 !important;
+    font-size: 0.9rem;
+}
+
+/* Secret fields are type="text" (so Chrome's password manager leaves them alone) but shown as dots */
+.mv-secret:not(.mv-secret-shown) {
+    -webkit-text-security: disc;
+    text-security: disc;
+}
+
+.mv-error-code {
+    font-family: 'Sora', sans-serif;
+    font-size: 4rem;
+    font-weight: 700;
+    line-height: 1;
+    background: linear-gradient(135deg, #22d3ee, #8b5cf6);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin-bottom: 0.5rem;
+}
+
+.mv-chat-bubble {
+    background: #06c755;
+    color: #fff;
+    padding: 0.65rem 0.9rem;
+    border-radius: 14px 14px 14px 4px;
+    max-width: 520px;
+    white-space: pre-wrap;
+    margin-bottom: 0.5rem;
+}

@@ -1,5 +1,7 @@
 using System.Text.Json;
 using MadeeAutomation.Admin.Web.Models;
+using MadeeAutomation.Admin.Web.Services;
+using MadeeAutomation.Connectors;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Application.Common;
 using MadeeAutomation.Domain.Entities;
@@ -21,15 +23,19 @@ public class ClientsController : Controller
     private readonly IWorkflowRepository _workflows;
     private readonly IClientSettingsService _settings;
     private readonly IConfiguration _configuration;
+    private readonly LineCredentialChecker _lineChecker;
+    private readonly IApiService _api;
     private readonly ILogger<ClientsController> _logger;
 
     public ClientsController(IClientRepository clients, IWorkflowRepository workflows, IClientSettingsService settings,
-        IConfiguration configuration, ILogger<ClientsController> logger)
+        IConfiguration configuration, LineCredentialChecker lineChecker, IApiService api, ILogger<ClientsController> logger)
     {
         _clients = clients;
         _workflows = workflows;
         _settings = settings;
         _configuration = configuration;
+        _lineChecker = lineChecker;
+        _api = api;
         _logger = logger;
     }
 
@@ -116,7 +122,10 @@ public class ClientsController : Controller
             MerkaiIntegrationEnabled = client.MerkaiIntegrationEnabled,
             PosFirstIntegrationEnabled = client.PosFirstIntegrationEnabled,
             KnowledgeBaseText = client.KnowledgeBaseText,
-            MenuText = client.MenuText
+            MenuText = client.MenuText,
+            FallbackReplyText = client.FallbackReplyText,
+            StaffAlertEmail = client.StaffAlertEmail,
+            StaffAlertLineUserId = client.StaffAlertLineUserId
         };
 
         LoadSettingsInto(client, model); // adds a page error if the saved settings can't be decrypted
@@ -303,6 +312,71 @@ public class ClientsController : Controller
         return RedirectToAction(nameof(Details), new { id = workflow.ClientConfigId });
     }
 
+    // ================= LINE credentials check =================
+
+    /// <summary>Asks LINE whether the saved access token works and which account it belongs to.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CheckLine(Guid id, CancellationToken cancellationToken)
+    {
+        var client = await _clients.GetWithWorkflowsAsync(id, cancellationToken);
+        if (client is null) return NotFound();
+
+        try
+        {
+            var settings = _settings.Read(client.IntegrationSettingsJson);
+            var result = await _lineChecker.CheckAccessTokenAsync(settings.LineChannelAccessToken, cancellationToken);
+            TempData[result.Ok ? "Success" : "Error"] = result.Message;
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    // ================= Test a message workflow =================
+
+    public async Task<IActionResult> TestWorkflow(Guid id)
+    {
+        var workflow = await _workflows.GetByIdAsync(id);
+        if (workflow is null) return NotFound();
+        if (workflow.TriggerType != TriggerType.MessageReceived)
+        {
+            TempData["Error"] = "Only customer-message workflows can be tested.";
+            return RedirectToAction(nameof(Details), new { id = workflow.ClientConfigId });
+        }
+
+        return View(new WorkflowTestModel
+        {
+            WorkflowId = workflow.Id,
+            ClientConfigId = workflow.ClientConfigId,
+            WorkflowName = workflow.Name,
+            ClientName = workflow.ClientConfig.ClientName,
+            Channel = workflow.Channel ?? Channels.Line
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TestWorkflow(Guid id, WorkflowTestModel model, CancellationToken cancellationToken)
+    {
+        var workflow = await _workflows.GetByIdAsync(id, cancellationToken);
+        if (workflow is null) return NotFound();
+
+        model.WorkflowId = workflow.Id;
+        model.ClientConfigId = workflow.ClientConfigId;
+        model.WorkflowName = workflow.Name;
+        model.ClientName = workflow.ClientConfig.ClientName;
+        model.Channel = Channels.Normalize(model.Channel) ?? workflow.Channel ?? Channels.Line;
+
+        if (!ModelState.IsValid) return View(model);
+
+        model.Result = await _api.TestWorkflowAsync(workflow.Id, model.Message.Trim(), model.Channel, cancellationToken);
+        return View(model);
+    }
+
     // ================= helpers =================
 
     private static void CopyBasics(ClientFormModel model, ClientConfig client)
@@ -318,6 +392,9 @@ public class ClientsController : Controller
         client.PosFirstIntegrationEnabled = model.PosFirstIntegrationEnabled;
         client.KnowledgeBaseText = string.IsNullOrWhiteSpace(model.KnowledgeBaseText) ? null : model.KnowledgeBaseText.Trim();
         client.MenuText = string.IsNullOrWhiteSpace(model.MenuText) ? null : model.MenuText.Trim();
+        client.FallbackReplyText = Clean(model.FallbackReplyText);
+        client.StaffAlertEmail = Clean(model.StaffAlertEmail)?.ToLowerInvariant();
+        client.StaffAlertLineUserId = Clean(model.StaffAlertLineUserId);
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

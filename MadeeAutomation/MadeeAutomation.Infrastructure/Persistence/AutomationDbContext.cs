@@ -16,6 +16,8 @@ public class AutomationDbContext : DbContext
     public DbSet<WorkflowDefinition> WorkflowDefinitions => Set<WorkflowDefinition>();
     public DbSet<ExecutionLog> ExecutionLogs => Set<ExecutionLog>();
     public DbSet<InboundEvent> InboundEvents => Set<InboundEvent>();
+    public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,6 +30,27 @@ public class AutomationDbContext : DbContext
             entity.Property(c => c.ClientName).HasMaxLength(200).IsRequired();
             entity.Property(c => c.ClientCode).HasMaxLength(50).IsRequired();
             entity.Ignore(c => c.CanRunWorkflows);
+            entity.Ignore(c => c.EffectiveFallbackReply);
+            entity.Property(c => c.FallbackReplyText).HasMaxLength(1000);
+            entity.Property(c => c.StaffAlertEmail).HasMaxLength(256);
+            entity.Property(c => c.StaffAlertLineUserId).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<AdminUser>(entity =>
+        {
+            entity.ToTable("AdminUsers");
+            entity.HasIndex(u => u.Email).IsUnique();
+            entity.Property(u => u.Email).HasMaxLength(256).IsRequired();
+            entity.Property(u => u.DisplayName).HasMaxLength(200).IsRequired();
+            entity.Property(u => u.PasswordHash).HasMaxLength(500).IsRequired();
+            entity.Property(u => u.SecurityStamp).HasMaxLength(64).IsRequired();
+        });
+
+        modelBuilder.Entity<PasswordResetToken>(entity =>
+        {
+            entity.ToTable("PasswordResetTokens");
+            entity.HasIndex(t => t.TokenHash).IsUnique();
+            entity.Property(t => t.TokenHash).HasMaxLength(64).IsRequired();
         });
 
         modelBuilder.Entity<WorkflowDefinition>(entity =>

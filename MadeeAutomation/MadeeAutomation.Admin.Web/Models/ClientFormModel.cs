@@ -30,6 +30,17 @@ public class ClientFormModel
     [Display(Name = "Knowledge base (FAQ)")] public string? KnowledgeBaseText { get; set; }
     [Display(Name = "Menu / products")] public string? MenuText { get; set; }
 
+    // ---- When something needs a person ----
+    [StringLength(1000), Display(Name = "Fallback reply")]
+    public string? FallbackReplyText { get; set; }
+
+    [EmailAddress, StringLength(256), Display(Name = "Staff alert email")]
+    public string? StaffAlertEmail { get; set; }
+
+    [StringLength(100), RegularExpression("^U[0-9a-f]{32}$", ErrorMessage = "A LINE user id looks like U followed by 32 letters/numbers (copy it from Inbound events).")]
+    [Display(Name = "Staff LINE user id")]
+    public string? StaffAlertLineUserId { get; set; }
+
     // ---- Credentials (Edit only). Blank secret = keep the saved one. ----
     [Display(Name = "LINE channel secret")] public string? LineChannelSecret { get; set; }
     [Display(Name = "LINE channel access token")] public string? LineChannelAccessToken { get; set; }

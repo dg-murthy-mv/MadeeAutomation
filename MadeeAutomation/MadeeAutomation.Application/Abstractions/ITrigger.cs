@@ -41,4 +41,10 @@ public class TriggerContext
 
     /// <summary>The client this run belongs to. Filled in by the WorkflowEngine before the handler runs.</summary>
     public ClientConfig? Client { get; set; }
+
+    /// <summary>
+    /// Admin "Test" run: the AI really runs, but nothing is sent, no POSFirst order is created and
+    /// no staff alert goes out. The engine records what WOULD have happened.
+    /// </summary>
+    public bool IsTest { get; set; }
 }

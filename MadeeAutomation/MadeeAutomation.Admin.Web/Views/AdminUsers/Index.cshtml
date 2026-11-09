@@ -1,0 +1,50 @@
+@model List<AdminUser>
+@{
+    ViewData["Title"] = "Admin users";
+    Guid? me = ViewBag.CurrentUserId;
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Admin users</h2>
+        <div class="mv-subtle">People who can sign in to this dashboard.</div>
+    </div>
+    <a class="btn btn-primary" asp-action="Create" data-testid="new-admin">+ Add admin</a>
+</div>
+
+<div class="mv-card">
+    <div class="table-responsive">
+        <table class="table mv-table align-middle" data-testid="admins-table">
+            <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Last sign-in (UTC)</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var u in Model)
+            {
+                <tr data-testid="admin-row" data-email="@u.Email">
+                    <td data-label="Name">@u.DisplayName @if (u.Id == me) { <span class="badge bg-light text-dark ms-1">you</span> }</td>
+                    <td data-label="Email">@u.Email</td>
+                    <td data-label="Status">
+                        @if (!u.IsActive) { <span class="badge bg-secondary" data-testid="admin-status">Deactivated</span> }
+                        else if (u.MustChangePassword) { <span class="badge bg-warning text-dark" data-testid="admin-status">Must change password</span> }
+                        else { <span class="badge bg-success" data-testid="admin-status">Active</span> }
+                        @if (u.IsLockedOut(DateTime.UtcNow)) { <span class="badge bg-danger ms-1">Locked</span> }
+                    </td>
+                    <td data-label="Last sign-in">@(u.LastLoginAtUtc?.ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                    <td data-label="">
+                        @if (u.Id != me)
+                        {
+                            <form asp-action="ResetPassword" asp-route-id="@u.Id" method="post" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary" data-testid="reset-admin-password">New temporary password</button>
+                            </form>
+                            <form asp-action="ToggleActive" asp-route-id="@u.Id" method="post" class="d-inline">
+                                <button type="submit" class="btn btn-sm @(u.IsActive ? "btn-outline-warning" : "btn-outline-success")" data-testid="toggle-admin">
+                                    @(u.IsActive ? "Deactivate" : "Activate")
+                                </button>
+                            </form>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>

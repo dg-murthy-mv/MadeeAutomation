@@ -1,0 +1,85 @@
+@model WorkflowTestModel
+@{
+    ViewData["Title"] = "Test workflow";
+    var r = Model.Result;
+    var replies = r?.Actions.Where(a => a.Type == "SendMessage").ToList() ?? new();
+    var alerts = r?.Actions.Where(a => a.Type == "NotifyInternal").ToList() ?? new();
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Test: @Model.WorkflowName</h2>
+        <div class="mv-subtle">@Model.ClientName &middot; the AI really runs, but nothing is sent to anyone and no POSFirst order is created.</div>
+    </div>
+    <a asp-action="Details" asp-route-id="@Model.ClientConfigId" class="btn btn-outline-secondary">&larr; Back to client</a>
+</div>
+
+<div class="mv-card mv-card-body mb-4" style="max-width: 820px;">
+    <form asp-action="TestWorkflow" asp-route-id="@Model.WorkflowId" method="post" data-testid="test-form">
+        <div class="mb-3">
+            <label asp-for="Message" class="form-label"></label>
+            <textarea asp-for="Message" class="form-control" rows="3" placeholder="e.g. 2 croissants for 9am tomorrow / ครัวซองต์ 2 ชิ้น / What time do you open?"></textarea>
+            <span asp-validation-for="Message" class="text-danger small"></span>
+        </div>
+        <div class="mb-3" style="max-width: 240px;">
+            <label asp-for="Channel" class="form-label">Pretend it came from</label>
+            <select asp-for="Channel" class="form-select">
+                <option value="line">LINE</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="messenger">Messenger</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary" data-testid="run-test">Run test</button>
+        <span class="small mv-subtle ms-2">Takes a few seconds - it waits for the AI.</span>
+    </form>
+</div>
+
+@if (r is not null)
+{
+    <div class="mv-card mv-card-body" style="max-width: 820px;" data-testid="test-result">
+        @if (r.CallFailed)
+        {
+            <div class="alert alert-danger mb-0" data-testid="test-call-error">@r.CallError</div>
+        }
+        else
+        {
+            <h5 class="mv-section-title">Result
+                <span class="badge @(r.Status == "Succeeded" ? "bg-success" : "bg-danger") align-middle" data-testid="test-status">@r.Status</span>
+            </h5>
+            <dl class="row mv-dl">
+                <dt class="col-sm-3">What happened</dt><dd class="col-sm-9" data-testid="test-summary">@(r.Summary ?? "-")</dd>
+                @if (!string.IsNullOrEmpty(r.Error))
+                {
+                    <dt class="col-sm-3">Error</dt><dd class="col-sm-9 text-danger" data-testid="test-error">@r.Error</dd>
+                }
+            </dl>
+
+            <h6>Reply the customer would get</h6>
+            @if (replies.Any())
+            {
+                foreach (var reply in replies)
+                {
+                    <div class="mv-chat-bubble" data-testid="test-reply">@reply.Parameters.GetValueOrDefault("message")</div>
+                }
+            }
+            else
+            {
+                <p class="mv-subtle">No reply.</p>
+            }
+
+            @if (alerts.Any())
+            {
+                <h6 class="mt-3">Staff alert that would be sent</h6>
+                foreach (var alert in alerts)
+                {
+                    <div class="alert alert-warning small" data-testid="test-alert">@alert.Parameters.GetValueOrDefault("message")</div>
+                }
+            }
+
+            @if (r.ExecutionLogId is not null)
+            {
+                <a asp-controller="ExecutionLogs" asp-action="Details" asp-route-id="@r.ExecutionLogId" class="small">Open the logged test run</a>
+            }
+        }
+    </div>
+}

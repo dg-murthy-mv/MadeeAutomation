@@ -95,6 +95,51 @@ public interface IInboundEventRepository
 
     /// <summary>Events left in Processing by a crash/restart are marked Failed (not re-run, to avoid duplicate orders).</summary>
     Task<int> FailStuckAsync(TimeSpan olderThan, CancellationToken cancellationToken = default);
+
+    /// <summary>Newest first, for the Admin "Inbound events" page.</summary>
+    Task<PagedResult<InboundEvent>> GetPagedAsync(Guid clientConfigId, int page, int pageSize, InboundEventStatus? status = null,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>Admin.Web sign-in accounts and their password-reset links.</summary>
+public interface IAdminUserRepository
+{
+    Task<int> CountAsync(CancellationToken cancellationToken = default);
+    Task<AdminUser?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<AdminUser?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
+    Task<List<AdminUser>> ListAsync(CancellationToken cancellationToken = default);
+    Task AddAsync(AdminUser user, CancellationToken cancellationToken = default);
+    Task UpdateAsync(AdminUser user, CancellationToken cancellationToken = default);
+
+    Task AddResetTokenAsync(PasswordResetToken token, CancellationToken cancellationToken = default);
+    Task<PasswordResetToken?> GetResetTokenAsync(string tokenHash, CancellationToken cancellationToken = default);
+
+    /// <summary>Marks every unused link of this user as used (after a successful reset or a new link).</summary>
+    Task UseAllResetTokensAsync(Guid adminUserId, CancellationToken cancellationToken = default);
+}
+
+public class EmailSendResult
+{
+    public bool Success { get; set; }
+    public string Mode { get; set; } = string.Empty;   // "smtp", "pickup" (written to a folder), "not-configured"
+    public string? Error { get; set; }
+}
+
+/// <summary>Plain-text email (password resets, staff alerts). SMTP or a pickup folder - see Email:* settings.</summary>
+public interface IEmailSender
+{
+    bool IsConfigured { get; }
+    Task<EmailSendResult> SendAsync(string to, string subject, string textBody, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Tells people when something needs a human: the client's staff LINE user (pushed through the
+/// client's own LINE account), the client's staff alert email, and MadeeAutomation's own internal
+/// WhatsApp number. Whatever is configured gets the alert.
+/// </summary>
+public interface IStaffAlertService
+{
+    Task<MessageSendResult> SendAsync(Guid? clientConfigId, string message, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Thin wrapper over the Anthropic Messages API - see MadeeAutomation.AI project.</summary>

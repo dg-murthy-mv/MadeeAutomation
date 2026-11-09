@@ -51,29 +51,33 @@ public class SendMessageAction : IAction
     }
 }
 
-/// <summary>Notifies MadeeAutomation / client ops staff on MadeeAutomation's own internal channel.</summary>
+/// <summary>
+/// Alerts a person: the client's staff LINE user / staff email, and MadeeAutomation's internal
+/// WhatsApp - whichever are configured (see IStaffAlertService). Parameters: message.
+/// </summary>
 public class NotifyInternalAction : IAction
 {
     public ActionType Type => ActionType.NotifyInternal;
 
     private readonly ILogger<NotifyInternalAction> _logger;
-    private readonly IMessagingConnector _messaging;
+    private readonly IStaffAlertService _alerts;
 
-    public NotifyInternalAction(ILogger<NotifyInternalAction> logger, IMessagingConnector messaging)
+    public NotifyInternalAction(ILogger<NotifyInternalAction> logger, IStaffAlertService alerts)
     {
         _logger = logger;
-        _messaging = messaging;
+        _alerts = alerts;
     }
 
     public async Task<ActionResult> ExecuteAsync(ActionRequest request, CancellationToken cancellationToken = default)
     {
         var message = request.Parameters.GetValueOrDefault("message", "");
-        _logger.LogInformation("Internal notification: {Message}", message);
+        Guid? clientConfigId = Guid.TryParse(request.Parameters.GetValueOrDefault("clientConfigId", ""), out var id) ? id : null;
+        _logger.LogInformation("Staff alert: {Message}", message);
 
-        var result = await _messaging.SendInternalNotificationAsync(message, cancellationToken);
+        var result = await _alerts.SendAsync(clientConfigId, message, cancellationToken);
         return result.Success
-            ? ActionResult.Ok($"Internal notification sent ({result.Mode}).")
-            : ActionResult.Fail($"Internal notification failed: {result.Error}");
+            ? ActionResult.Ok($"Staff alerted ({result.Mode}).")
+            : ActionResult.Fail($"Staff alert failed: {result.Error}");
     }
 }
 

@@ -1,4 +1,5 @@
 using MadeeAutomation.Application.Abstractions;
+using MadeeAutomation.Application.Common;
 using MadeeAutomation.Domain.Entities;
 using MadeeAutomation.Domain.Enums;
 using Microsoft.Data.SqlClient;
@@ -80,5 +81,22 @@ public class InboundEventRepository : IInboundEventRepository
                 .SetProperty(e => e.Status, InboundEventStatus.Failed)
                 .SetProperty(e => e.LastError, "Interrupted (the app stopped while this event was running). Not re-run, to avoid duplicate orders.")
                 .SetProperty(e => e.ProcessedAtUtc, now), cancellationToken);
+    }
+
+    public async Task<PagedResult<InboundEvent>> GetPagedAsync(Guid clientConfigId, int page, int pageSize, InboundEventStatus? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        var query = _db.InboundEvents.AsNoTracking().Where(e => e.ClientConfigId == clientConfigId);
+        if (status is not null) query = query.Where(e => e.Status == status);
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(e => e.ReceivedAtUtc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<InboundEvent> { Items = items, TotalCount = total, Page = page, PageSize = pageSize };
     }
 }

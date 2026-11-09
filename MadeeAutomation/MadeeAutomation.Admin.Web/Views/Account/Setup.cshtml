@@ -1,0 +1,33 @@
+@model SetupModel
+@{ ViewData["Title"] = "Create the first admin"; }
+
+<div class="mv-auth-card mv-card mv-card-body">
+    <h2 class="mb-1">Create the first admin</h2>
+    <p class="mv-subtle mb-4">There are no admin accounts yet. This page disappears once one exists.</p>
+
+    <form asp-action="Setup" method="post" data-testid="setup-form">
+        <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+        <div class="mb-3">
+            <label asp-for="DisplayName" class="form-label"></label>
+            <input asp-for="DisplayName" class="form-control" autofocus />
+            <span asp-validation-for="DisplayName" class="text-danger small"></span>
+        </div>
+        <div class="mb-3">
+            <label asp-for="Email" class="form-label"></label>
+            <input asp-for="Email" class="form-control" autocomplete="username" />
+            <span asp-validation-for="Email" class="text-danger small"></span>
+        </div>
+        <div class="mb-3">
+            <label asp-for="Password" class="form-label"></label>
+            <input asp-for="Password" class="form-control" autocomplete="new-password" />
+            <div class="form-text">At least 10 characters, with a letter and a number.</div>
+            <span asp-validation-for="Password" class="text-danger small"></span>
+        </div>
+        <div class="mb-3">
+            <label asp-for="ConfirmPassword" class="form-label"></label>
+            <input asp-for="ConfirmPassword" class="form-control" autocomplete="new-password" />
+            <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+        </div>
+        <button type="submit" class="btn btn-primary w-100" data-testid="setup-submit">Create admin account</button>
+    </form>
+</div>

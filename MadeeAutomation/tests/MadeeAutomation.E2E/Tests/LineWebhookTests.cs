@@ -288,7 +288,7 @@ public class LineWebhookTests
     }
 
     [Test]
-    public async Task T19_Unreadable_AI_answer_fails_the_run_without_replying()
+    public async Task T19_Unreadable_AI_answer_fails_the_run_but_customer_gets_the_fallback_reply()
     {
         var user = Line.NewUser("t19");
         await Line.SendAsync(World.Bakery, Line.TextEvent(user, "[badjson] hello"));
@@ -296,7 +296,10 @@ public class LineWebhookTests
         var log = await Waits.FinishedLogAsync(user);
         Assert.That(log["Status"], Is.EqualTo(4));
         Assert.That((string)log["ErrorMessage"]!, Does.Contain("not valid JSON"));
-        Assert.That(Fakes.LineCallsFor(user), Is.Empty);
+        Assert.That(log["ResultSummary"], Is.EqualTo("Fallback reply sent; staff alerted."));
+
+        var calls = await Waits.LineCallsAsync(user);
+        Assert.That(calls[0].Text, Does.Contain("A member of our team will reply shortly"), "since Round 002 the customer always gets an answer");
     }
 
     [Test]

@@ -1,3 +1,4 @@
+using MadeeAutomation.Domain.Entities;
 using MadeeAutomation.Domain.Enums;
 using MadeeAutomation.Domain.Security;
 using MadeeAutomation.Domain.Settings;
@@ -18,6 +19,11 @@ public record SeededClient(Guid Id, string Code, string LineSecret, Guid? Workfl
 ///   toggle    Active, LINE secret+token, workflow the UI test disables/enables
 ///   other     Active, LINE secret+token, workflow                   -> cross-client URL check
 ///   legacy    Active, credentials stored as OLD plain JSON (not encrypted) -> still works
+///
+/// Admin accounts (password for all: World.AdminPassword)
+///   admin@e2e.test          used by every Admin UI test
+///   lockme / resetme / changeme / deactivateme @e2e.test - one account per auth test, so they don't interfere
+/// Staff alert emails: bakery -> owner@bakery.test, failsend -> ops@failsend.test
 /// </summary>
 public static class World
 {
@@ -29,6 +35,9 @@ public static class World
     public static SeededClient Toggle { get; private set; } = null!;
     public static SeededClient Other { get; private set; } = null!;
     public static SeededClient Legacy { get; private set; } = null!;
+
+    public const string AdminEmail = "admin@e2e.test";
+    public const string AdminPassword = "E2eAdmin2026x";
 
     public const string BakeryKnowledgeBase = "Opening hours: 7am-6pm every day\nDelivery: Ban Chang only, free over 300 THB";
     public const string BakeryMenu = "Croissant - 45 THB\nSourdough loaf - 180 THB";
@@ -48,6 +57,15 @@ public static class World
             LineChannelAccessToken = token
         };
 
+        foreach (var (email, name) in new[]
+                 {
+                     (AdminEmail, "E2E Admin"), ("lockme@e2e.test", "Lock Me"), ("resetme@e2e.test", "Reset Me"),
+                     ("changeme@e2e.test", "Change Me"), ("deactivateme@e2e.test", "Deactivate Me")
+                 })
+        {
+            await AddAdminAsync(db, email, name, AdminPassword);
+        }
+
         Bakery = await AddClientAsync(db, "bakery", "E2E Bakery", ClientStatus.Active,
             Encrypted(new ClientIntegrationSettings
             {
@@ -55,7 +73,7 @@ public static class World
                 LineChannelAccessToken = "bakery-token-1234",
                 PosFirstBaseUrl = settings.FakeServerUrl,
                 PosFirstApiKey = "pos-key-bakery"
-            }), "bakery-secret", withWorkflow: true, kb: BakeryKnowledgeBase, menu: BakeryMenu);
+            }), "bakery-secret", withWorkflow: true, kb: BakeryKnowledgeBase, menu: BakeryMenu, staffEmail: "owner@bakery.test");
 
         NoSecret = await AddClientAsync(db, "nosecret", "E2E No Secret", ClientStatus.Active,
             Encrypted(new ClientIntegrationSettings { LineChannelAccessToken = "nosecret-token" }), "", withWorkflow: true);
@@ -67,7 +85,7 @@ public static class World
             Encrypted(Line("noflow-secret", "noflow-token")), "noflow-secret", withWorkflow: false);
 
         FailSend = await AddClientAsync(db, "failsend", "E2E Fail Send", ClientStatus.Active,
-            Encrypted(Line("failsend-secret", "fail-token")), "failsend-secret", withWorkflow: true);
+            Encrypted(Line("failsend-secret", "fail-token")), "failsend-secret", withWorkflow: true, staffEmail: "ops@failsend.test");
 
         Toggle = await AddClientAsync(db, "toggle", "E2E Toggle", ClientStatus.Active,
             Encrypted(Line("toggle-secret", "toggle-token")), "toggle-secret", withWorkflow: true);
@@ -81,15 +99,15 @@ public static class World
     }
 
     private static async Task<SeededClient> AddClientAsync(TestDatabase db, string code, string name, ClientStatus status,
-        string settingsValue, string secret, bool withWorkflow, string? kb = null, string? menu = null)
+        string settingsValue, string secret, bool withWorkflow, string? kb = null, string? menu = null, string? staffEmail = null)
     {
         var id = Guid.NewGuid();
         await db.ExecAsync(@"
             INSERT INTO dbo.ClientConfigs (Id, ClientName, ClientCode, Country, TimeZoneId, Currency, Vertical, Status,
-                IntegrationSettingsJson, MerkaiIntegrationEnabled, PosFirstIntegrationEnabled, CreatedAtUtc, KnowledgeBaseText, MenuText)
-            VALUES (@id, @name, @code, 'TH', 'Asia/Bangkok', 'THB', 1, @status, @settings, 0, 1, SYSUTCDATETIME(), @kb, @menu);",
+                IntegrationSettingsJson, MerkaiIntegrationEnabled, PosFirstIntegrationEnabled, CreatedAtUtc, KnowledgeBaseText, MenuText, StaffAlertEmail)
+            VALUES (@id, @name, @code, 'TH', 'Asia/Bangkok', 'THB', 1, @status, @settings, 0, 1, SYSUTCDATETIME(), @kb, @menu, @staff);",
             ("@id", id), ("@name", name), ("@code", code), ("@status", (int)status), ("@settings", settingsValue),
-            ("@kb", kb), ("@menu", menu));
+            ("@kb", kb), ("@menu", menu), ("@staff", staffEmail));
 
         Guid? workflowId = null;
         if (withWorkflow)
@@ -103,5 +121,16 @@ public static class World
         }
 
         return new SeededClient(id, code, secret, workflowId);
+    }
+
+    private static async Task AddAdminAsync(TestDatabase db, string email, string name, string password)
+    {
+        var user = new AdminUser { Email = email, DisplayName = name };
+        var hash = new Microsoft.AspNetCore.Identity.PasswordHasher<AdminUser>().HashPassword(user, password);
+        await db.ExecAsync(@"
+            INSERT INTO dbo.AdminUsers (Id, Email, DisplayName, PasswordHash, SecurityStamp, IsActive, MustChangePassword,
+                FailedLoginCount, CreatedAtUtc)
+            VALUES (@id, @email, @name, @hash, @stamp, 1, 0, 0, SYSUTCDATETIME());",
+            ("@id", user.Id), ("@email", email), ("@name", name), ("@hash", hash), ("@stamp", user.SecurityStamp));
     }
 }

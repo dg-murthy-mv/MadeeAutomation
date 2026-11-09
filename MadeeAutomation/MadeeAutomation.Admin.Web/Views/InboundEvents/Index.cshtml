@@ -1,0 +1,96 @@
+@model PagedResult<InboundEvent>
+@{
+    ClientConfig client = ViewBag.Client;
+    ViewData["Title"] = $"Inbound events - {client.ClientName}";
+    string? status = ViewBag.Status;
+    int pageSize = ViewBag.PageSize;
+    TimeZoneInfo tz;
+    try { tz = TimeZoneInfo.FindSystemTimeZoneById(client.TimeZoneId); } catch (TimeZoneNotFoundException) { tz = TimeZoneInfo.Utc; }
+    string Local(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), tz).ToString("yyyy-MM-dd HH:mm:ss");
+
+    string Badge(InboundEventStatus s) => s switch
+    {
+        InboundEventStatus.Done => "bg-success",
+        InboundEventStatus.Skipped => "bg-secondary",
+        InboundEventStatus.Failed => "bg-danger",
+        _ => "bg-info"
+    };
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Inbound events</h2>
+        <div class="mv-subtle">@client.ClientName &middot; every message the webhooks received, newest first &middot; times in <strong>@client.TimeZoneId</strong></div>
+    </div>
+    <a asp-controller="Clients" asp-action="Details" asp-route-id="@client.Id" class="btn btn-outline-secondary">&larr; Back to client</a>
+</div>
+
+<div class="mv-card">
+    <div class="mv-toolbar">
+        <form method="get" asp-action="Index">
+            <input type="hidden" name="clientConfigId" value="@client.Id" />
+            <select name="status" class="form-select" style="max-width:200px;" data-testid="inbound-status-filter">
+                <option value="" selected="@(status == null)">All statuses</option>
+                @foreach (var s in Enum.GetValues<InboundEventStatus>())
+                {
+                    <option value="@s" selected="@(status == s.ToString())">@s</option>
+                }
+            </select>
+            <select name="pageSize" class="form-select" style="max-width:140px;">
+                @foreach (var size in new[] { 10, 25, 50 })
+                {
+                    <option value="@size" selected="@(pageSize == size)">@size / page</option>
+                }
+            </select>
+            <button type="submit" class="btn btn-outline-secondary">Filter</button>
+        </form>
+    </div>
+
+    @if (Model.Items.Any())
+    {
+        <div class="table-responsive">
+            <table class="table mv-table align-middle" data-testid="inbound-table">
+                <thead><tr><th>Received</th><th>Channel</th><th>Customer</th><th>Message</th><th>Status</th><th>Details</th></tr></thead>
+                <tbody>
+                @foreach (var e in Model.Items)
+                {
+                    <tr data-testid="inbound-row">
+                        <td data-label="Received" class="text-nowrap">@Local(e.ReceivedAtUtc)</td>
+                        <td data-label="Channel">@Channels.DisplayName(e.Channel)</td>
+                        <td data-label="Customer"><code class="text-break" data-testid="inbound-customer">@e.CustomerId</code></td>
+                        <td data-label="Message" class="text-break">@e.MessageText</td>
+                        <td data-label="Status"><span class="badge @Badge(e.Status)" data-testid="inbound-status">@e.Status</span></td>
+                        <td data-label="Details" class="small">
+                            @if (!string.IsNullOrEmpty(e.LastError)) { <div class="text-danger" data-testid="inbound-error">@e.LastError</div> }
+                            @if (e.ExecutionLogId is not null)
+                            {
+                                <a asp-controller="ExecutionLogs" asp-action="Details" asp-route-id="@e.ExecutionLogId" data-testid="inbound-run-link">View run</a>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <div class="mv-pagination">
+            <span class="mv-subtle">Page @Model.Page of @Model.TotalPages &middot; @Model.TotalCount event(s)</span>
+            @if (Model.TotalPages > 1)
+            {
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(!Model.HasPrevious ? "disabled" : "")">
+                            <a class="page-link" asp-action="Index" asp-route-clientConfigId="@client.Id" asp-route-status="@status" asp-route-page="@(Model.Page - 1)" asp-route-pageSize="@pageSize">Previous</a>
+                        </li>
+                        <li class="page-item @(!Model.HasNext ? "disabled" : "")">
+                            <a class="page-link" asp-action="Index" asp-route-clientConfigId="@client.Id" asp-route-status="@status" asp-route-page="@(Model.Page + 1)" asp-route-pageSize="@pageSize">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="mv-empty"><p>No inbound events@(status is null ? "" : $" with status {status}") yet.</p></div>
+    }
+</div>

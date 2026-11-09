@@ -19,6 +19,9 @@ public class E2ESettings
     /// <summary>Fixed test-only key (NOT your real one). The apps under test get it via environment variable.</summary>
     public const string EncryptionKey = "bWFkZWUtYXV0b21hdGlvbi1lMmUtdGVzdC1rZXktMzI=";
 
+    /// <summary>Shared Admin.Web/WebApi key for internal endpoints (test-only value).</summary>
+    public const string InternalApiKey = "e2e-internal-key-123";
+
     public string WebApiUrl => $"http://127.0.0.1:{WebApiPort}";
     public string AdminUrl => $"http://127.0.0.1:{AdminPort}";
     public string FakeServerUrl => $"http://127.0.0.1:{FakeServerPort}";

@@ -19,6 +19,14 @@ public class AdminTests : PageTest
 
     public override BrowserNewContextOptions ContextOptions() => new() { BaseURL = Settings.AdminUrl };
 
+    /// <summary>Admin.Web needs a signed-in admin since Round 002.</summary>
+    [SetUp]
+    public async Task SignInAsync()
+    {
+        await AdminSession.SignInAsync(Page, World.AdminEmail, World.AdminPassword);
+        await Expect(Page.Locator("[data-testid=nav-logout]")).ToBeVisibleAsync();
+    }
+
     // ---------------- helpers ----------------
 
     private async Task CreateClientAsync(string name, string code)

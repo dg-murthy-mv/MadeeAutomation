@@ -1,4 +1,5 @@
 using MadeeAutomation.Application.Abstractions;
+using MadeeAutomation.Infrastructure.Email;
 using MadeeAutomation.Infrastructure.Persistence;
 using MadeeAutomation.Infrastructure.Persistence.Repositories;
 using MadeeAutomation.Infrastructure.Security;
@@ -25,6 +26,8 @@ public static class DependencyInjection
         services.AddScoped<ICurrentClientService>(sp => sp.GetRequiredService<ClientRepository>());
 
         services.AddScoped<IClientSettingsService, ClientSettingsService>();
+        services.AddScoped<IAdminUserRepository, AdminUserRepository>();
+        services.AddSingleton<IEmailSender, SmtpEmailSender>();
 
         return services;
     }

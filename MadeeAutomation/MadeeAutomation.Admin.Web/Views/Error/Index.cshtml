@@ -1,0 +1,13 @@
+@model MadeeAutomation.Admin.Web.Controllers.ErrorViewModel
+@{ ViewData["Title"] = Model.Title; }
+
+<div class="mv-auth-card mv-card mv-card-body text-center" data-testid="error-page">
+    <div class="mv-error-code" data-testid="error-code">@Model.StatusCode</div>
+    <h2 class="mb-2" data-testid="error-title">@Model.Title</h2>
+    <p class="mv-subtle">@Model.Message</p>
+    @if (Model.StatusCode >= 500 && !string.IsNullOrEmpty(Model.RequestId))
+    {
+        <p class="small mv-subtle">Request id: <code data-testid="error-request-id">@Model.RequestId</code></p>
+    }
+    <a href="~/" class="btn btn-primary mt-2">Go to Clients</a>
+</div>

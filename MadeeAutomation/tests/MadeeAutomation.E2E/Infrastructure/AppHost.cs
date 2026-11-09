@@ -19,6 +19,7 @@ public sealed class AppHost : IAsyncDisposable
     public async Task StartAsync(E2ESettings settings)
     {
         Directory.CreateDirectory(LogFolder);
+        Mailbox.Clear();
         var root = E2ESettings.SolutionRoot();
 
         var common = new Dictionary<string, string>
@@ -26,6 +27,9 @@ public sealed class AppHost : IAsyncDisposable
             ["ASPNETCORE_ENVIRONMENT"] = "E2E",
             ["ConnectionStrings__AutomationDb"] = settings.AppConnectionString,
             ["Security__SettingsEncryptionKey"] = E2ESettings.EncryptionKey,
+            ["InternalApi__Key"] = E2ESettings.InternalApiKey,
+            ["Email__PickupDirectory"] = Mailbox.Folder,
+            ["Email__FromAddress"] = "noreply@madeeautomation.test",
         };
 
         var webApi = new Dictionary<string, string>(common)
@@ -47,6 +51,8 @@ public sealed class AppHost : IAsyncDisposable
         {
             ["ASPNETCORE_URLS"] = settings.AdminUrl,
             ["WebApi__PublicBaseUrl"] = settings.WebApiUrl,
+            ["WebApi__InternalBaseUrl"] = settings.WebApiUrl,
+            ["Connectors__Line__ApiBaseUrl"] = settings.FakeServerUrl + "/",
         };
 
         Start(root, "MadeeAutomation.WebApi", settings.Configuration, webApi, "webapi.out.log");

@@ -25,7 +25,8 @@ public record PosOrder(string OrderId, string CustomerId, string BodyJson, strin
 /// Behaviour is chosen by the DATA, so tests never interfere with each other:
 ///   LINE   - token "fail-token"            -> every call returns 500
 ///          - reply token starting "expired" -> reply returns 400 (the app should fall back to push)
-///   Claude - customer text decides the answer (see ClaudeReplyFor); "[slow]" waits 3 s, "[badjson]" returns prose
+///   Claude - customer text decides the answer (see ClaudeReplyFor); "[slow]" waits 3 s, "[badjson]" returns prose,
+///            "[aidown]" answers 500 (as if Anthropic were down)
 /// </summary>
 public sealed class FakeServer : IAsyncDisposable
 {
@@ -79,6 +80,14 @@ public sealed class FakeServer : IAsyncDisposable
                 : Results.Json(new { sentMessages = new[] { new { id = "2" } } });
         });
 
+        app.MapGet("/v2/bot/info", (HttpContext ctx) =>
+        {
+            var auth = ctx.Request.Headers.Authorization.ToString();
+            return auth.EndsWith("fail-token") || !auth.StartsWith("Bearer ")
+                ? Results.Json(new { message = "Authentication failed." }, statusCode: 401)
+                : Results.Json(new { userId = "Ubot", basicId = "@e2ebot", displayName = "E2E Bot", chatMode = "bot" });
+        });
+
         // ---------------- Anthropic Messages API ----------------
         app.MapPost("/v1/messages", async (HttpContext ctx) =>
         {
@@ -88,6 +97,8 @@ public sealed class FakeServer : IAsyncDisposable
             ClaudeCalls.Enqueue(new ClaudeCall(system, user, ctx.Request.Headers["x-api-key"].ToString(), DateTime.UtcNow));
 
             if (user.Contains("[slow]")) await Task.Delay(3000);
+            if (user.Contains("[aidown]"))
+                return Results.Json(new { type = "error", error = new { type = "api_error", message = "fake outage" } }, statusCode: 500);
 
             var text = ClaudeReplyFor(system, user);
             return Results.Json(new

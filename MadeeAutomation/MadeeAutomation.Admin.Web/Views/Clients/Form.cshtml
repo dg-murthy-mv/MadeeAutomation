@@ -8,8 +8,14 @@
         var hint = Model.SavedSecretHints.GetValueOrDefault(field);
         <div class="mb-3">
             <label class="form-label" for="@field">@label</label>
-            <input type="password" class="form-control" id="@field" name="@field" autocomplete="new-password"
-                   placeholder="@(hint is null ? "Not set" : "Saved " + hint + " - leave blank to keep")" />
+            @* type="text" + CSS dots, NOT type="password": Chrome's password manager only fills/saves password
+               fields, and it was putting saved values into these boxes. *@
+            <div class="input-group">
+                <input type="text" class="form-control mv-secret" id="@field" name="@field"
+                       autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
+                       placeholder="@(hint is null ? "Not set" : "Saved " + hint + " - leave blank to keep")" />
+                <button type="button" class="btn btn-outline-secondary mv-secret-toggle" data-target="@field" tabindex="-1">Show</button>
+            </div>
             <div class="form-text">
                 @if (hint is not null)
                 {
@@ -42,7 +48,7 @@
     }
 </div>
 
-<form asp-action="@action" asp-route-id="@Model.Id" method="post" data-testid="client-form">
+<form asp-action="@action" asp-route-id="@Model.Id" method="post" autocomplete="off" data-testid="client-form">
     @Html.AntiForgeryToken()
     <div asp-validation-summary="ModelOnly" class="alert alert-danger" data-testid="form-errors"></div>
 
@@ -129,6 +135,31 @@
         </div>
     </div>
 
+    <div class="mv-card mv-card-body mb-4" data-testid="alerts-section">
+        <h5 class="mv-section-title">When something needs a person</h5>
+        <div class="mb-3">
+            <label asp-for="FallbackReplyText" class="form-label"></label>
+            <textarea asp-for="FallbackReplyText" class="form-control" rows="2"
+                      placeholder="@(Model.Country == "TH" ? ClientConfig.DefaultFallbackThai + " / " + ClientConfig.DefaultFallbackEnglish : ClientConfig.DefaultFallbackEnglish)"></textarea>
+            <div class="form-text">Sent to the customer if the automatic reply fails (AI down, POSFirst error). Leave blank for the default shown.</div>
+            <span asp-validation-for="FallbackReplyText" class="text-danger small"></span>
+        </div>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label asp-for="StaffAlertLineUserId" class="form-label"></label>
+                <input asp-for="StaffAlertLineUserId" class="form-control font-monospace" autocomplete="off" placeholder="U520e36a2..." />
+                <div class="form-text">Alerts are pushed to this LINE user through this client's LINE account. Send the account a message from your phone, then copy your id from <strong>Inbound events</strong>.</div>
+                <span asp-validation-for="StaffAlertLineUserId" class="text-danger small" data-testid="error-StaffAlertLineUserId"></span>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label asp-for="StaffAlertEmail" class="form-label"></label>
+                <input asp-for="StaffAlertEmail" class="form-control" autocomplete="off" placeholder="owner@example.com" />
+                <div class="form-text">Needs the Email settings in WebApi (see SETUP.md).</div>
+                <span asp-validation-for="StaffAlertEmail" class="text-danger small"></span>
+            </div>
+        </div>
+    </div>
+
     @if (Model.IsEdit)
     {
         <div class="mv-card mv-card-body mb-4" data-testid="credentials">
@@ -172,3 +203,13 @@
     <button type="submit" class="btn btn-primary" data-testid="save-client">@(Model.IsEdit ? "Save client" : "Create client")</button>
     <a asp-action="@(Model.IsEdit ? "Details" : "Index")" asp-route-id="@Model.Id" class="btn btn-link">Cancel</a>
 </form>
+
+@section Scripts {
+<script>
+    document.querySelectorAll('.mv-secret-toggle').forEach(btn => btn.addEventListener('click', () => {
+        const input = document.getElementById(btn.dataset.target);
+        const shown = input.classList.toggle('mv-secret-shown');
+        btn.textContent = shown ? 'Hide' : 'Show';
+    }));
+</script>
+}

@@ -34,6 +34,7 @@
     <div class="d-flex gap-2 flex-wrap">
         <a class="btn btn-outline-secondary" asp-action="Edit" asp-route-id="@client.Id" data-testid="edit-client">Edit client &amp; credentials</a>
         <a class="btn btn-outline-secondary" asp-controller="ExecutionLogs" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="view-logs">View Execution Logs</a>
+        <a class="btn btn-outline-secondary" asp-controller="InboundEvents" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="view-inbound">Inbound events</a>
         <a class="btn btn-primary" asp-action="CreateWorkflow" asp-route-clientConfigId="@client.Id" data-testid="new-workflow">+ New Workflow</a>
     </div>
 </div>
@@ -53,6 +54,13 @@
             @{ Status(s?.HasLineToken == true, "Access token saved", "No access token - replies are mock only", "line-token-status"); }
         </div>
         @{ UrlRow("Webhook URL", Model.LineWebhookUrl, "line-webhook-url"); }
+        @if (s?.HasLineToken == true)
+        {
+            <form asp-action="CheckLine" asp-route-id="@client.Id" method="post" class="mt-2">
+                <button type="submit" class="btn btn-sm btn-outline-primary" data-testid="check-line">Check LINE access token</button>
+                <span class="small mv-subtle ms-1">Asks LINE which account the saved token belongs to. Nothing is sent.</span>
+            </form>
+        }
         <div class="form-text">Paste into LINE Developers Console &rarr; Messaging API &rarr; Webhook URL, turn "Use webhook" on, and turn Chat OFF in LINE Official Account Manager &rarr; Response settings.</div>
     </div>
 
@@ -115,6 +123,10 @@
                         </td>
                         <td data-label="" class="text-nowrap">
                             <a class="btn btn-sm btn-outline-primary" asp-action="EditWorkflow" asp-route-id="@workflow.Id" data-testid="edit-workflow">Edit</a>
+                            @if (workflow.TriggerType == TriggerType.MessageReceived)
+                            {
+                                <a class="btn btn-sm btn-outline-secondary" asp-action="TestWorkflow" asp-route-id="@workflow.Id" data-testid="test-workflow">Test</a>
+                            }
                             <form asp-action="ToggleWorkflow" asp-route-id="@workflow.Id" method="post" class="d-inline">
                                 @Html.AntiForgeryToken()
                                 <button type="submit" class="btn btn-sm @(workflow.IsEnabled ? "btn-outline-warning" : "btn-outline-success")" data-testid="toggle-workflow">
