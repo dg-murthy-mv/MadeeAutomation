@@ -1,163 +1,205 @@
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using MadeeAutomation.Application.Abstractions;
+using MadeeAutomation.Domain.Enums;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace MadeeAutomation.Connectors;
 
 /// <summary>
-/// Routes outbound messages to WhatsApp Business API or LINE Messaging API.
-/// Customer-facing sends (SendTextMessageAsync) use each client's OWN credentials, looked
-/// up from ClientConfig.IntegrationSettingsJson - never a shared/global account, since every
-/// client has their own WhatsApp Business number or LINE Official Account.
-/// Internal-ops sends (SendInternalNotificationAsync) use MadeeAutomation's own single
-/// WhatsApp number (from appsettings/user-secrets) since that's your team's channel, not
-/// any particular client's.
+/// Sends outbound messages on LINE, WhatsApp and Messenger and REPORTS whether it worked
+/// (the old version only logged failures, so failed sends showed as "Succeeded").
+///
+/// Customer-facing sends use each client's OWN credentials (IClientSettingsService).
+/// When a client has no credentials for the channel, the send runs in "mock" mode: it is only
+/// logged and counts as success - handy while setting a client up.
+///
+/// LINE: replies with the reply token first (free); if that fails (token expired/used),
+/// falls back to a push message (counts against the LINE plan's monthly quota).
+///
+/// Config: Connectors:Line:ApiBaseUrl (default https://api.line.me/),
+///         Connectors:Meta:GraphBaseUrl (default https://graph.facebook.com/),
+///         Connectors:Meta:GraphApiVersion (default v23.0 - check Meta's changelog for the current version).
 /// </summary>
 public class MessagingConnector : IMessagingConnector
 {
+    private const int LineMaxTextLength = 5000;
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
-    private readonly ICurrentClientService _currentClientService;
+    private readonly IClientSettingsService _settings;
     private readonly ILogger<MessagingConnector> _logger;
 
     public MessagingConnector(IHttpClientFactory httpClientFactory, IConfiguration configuration,
-        ICurrentClientService currentClientService, ILogger<MessagingConnector> logger)
+        IClientSettingsService settings, ILogger<MessagingConnector> logger)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
-        _currentClientService = currentClientService;
+        _settings = settings;
         _logger = logger;
     }
 
-    // ---------- Customer-facing sends: each client's own credentials ----------
+    private Uri LineBase => BaseUri(_configuration["Connectors:Line:ApiBaseUrl"], "https://api.line.me/");
+    private Uri GraphBase => BaseUri(_configuration["Connectors:Meta:GraphBaseUrl"], "https://graph.facebook.com/");
+    private string GraphVersion => _configuration["Connectors:Meta:GraphApiVersion"] is { Length: > 0 } v ? v.Trim('/') : "v23.0";
 
-    public async Task SendTextMessageAsync(string channel, string toAddress, string message, Guid clientConfigId, CancellationToken cancellationToken = default)
+    private static Uri BaseUri(string? configured, string fallback)
     {
-        switch (channel.ToLowerInvariant())
-        {
-            case "whatsapp":
-                await SendClientWhatsAppAsync(clientConfigId, toAddress, message, cancellationToken);
-                break;
-            case "line":
-                await SendClientLineAsync(clientConfigId, toAddress, message, cancellationToken);
-                break;
-            default:
-                _logger.LogWarning("Unknown messaging channel '{Channel}' - message not sent.", channel);
-                break;
-        }
+        var url = string.IsNullOrWhiteSpace(configured) ? fallback : configured.Trim();
+        return new Uri(url.EndsWith('/') ? url : url + "/");
     }
 
-    private async Task<(string? phoneNumberId, string? accessToken)> GetClientWhatsAppSettingsAsync(Guid clientConfigId, CancellationToken cancellationToken)
+    private static bool IsPlaceholder(string? value) =>
+        string.IsNullOrWhiteSpace(value) || value.StartsWith("SET_", StringComparison.OrdinalIgnoreCase);
+
+    // ---------------- Customer-facing sends ----------------
+
+    public async Task<MessageSendResult> SendAsync(OutboundMessage message, CancellationToken cancellationToken = default)
     {
-        var client = await _currentClientService.GetClientAsync(clientConfigId, cancellationToken);
-        if (client is null) return (null, null);
         try
         {
-            using var doc = JsonDocument.Parse(client.IntegrationSettingsJson);
-            var phoneId = doc.RootElement.TryGetProperty("whatsAppPhoneNumberId", out var p) ? p.GetString() : null;
-            var token = doc.RootElement.TryGetProperty("whatsAppAccessToken", out var t) ? t.GetString() : null;
-            return (phoneId, token);
+            return message.Channel switch
+            {
+                Channels.Line => await SendLineAsync(message, cancellationToken),
+                Channels.WhatsApp => await SendWhatsAppAsync(message, cancellationToken),
+                Channels.Messenger => await SendMessengerAsync(message, cancellationToken),
+                _ => MessageSendResult.Fail("send", $"Unknown channel '{message.Channel}'.")
+            };
         }
-        catch (JsonException) { return (null, null); }
-    }
-
-    private async Task<string?> GetClientLineTokenAsync(Guid clientConfigId, CancellationToken cancellationToken)
-    {
-        var client = await _currentClientService.GetClientAsync(clientConfigId, cancellationToken);
-        if (client is null) return null;
-        try
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
-            using var doc = JsonDocument.Parse(client.IntegrationSettingsJson);
-            return doc.RootElement.TryGetProperty("lineChannelAccessToken", out var t) ? t.GetString() : null;
-        }
-        catch (JsonException) { return null; }
-    }
-
-    private async Task SendClientWhatsAppAsync(Guid clientConfigId, string toAddress, string message, CancellationToken cancellationToken)
-    {
-        var (phoneNumberId, accessToken) = await GetClientWhatsAppSettingsAsync(clientConfigId, cancellationToken);
-
-        if (string.IsNullOrWhiteSpace(phoneNumberId) || string.IsNullOrWhiteSpace(accessToken))
-        {
-            _logger.LogWarning(
-                "MessagingConnector MOCK MODE (WhatsApp) - client {ClientConfigId} has no whatsAppPhoneNumberId/AccessToken configured. " +
-                "Would have sent to {ToAddress}: \"{Message}\"", clientConfigId, toAddress, message);
-            return;
-        }
-
-        var client = _httpClientFactory.CreateClient("WhatsAppApi");
-        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
-
-        var payload = new { messaging_product = "whatsapp", to = toAddress, type = "text", text = new { body = message } };
-        var json = JsonSerializer.Serialize(payload);
-        var response = await client.PostAsync($"https://graph.facebook.com/v19.0/{phoneNumberId}/messages",
-            new StringContent(json, Encoding.UTF8, "application/json"), cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("WhatsApp send failed for client {ClientConfigId}: {StatusCode} {Body}", clientConfigId, response.StatusCode, body);
+            _logger.LogError(ex, "{Channel} send failed for client {ClientConfigId}", message.Channel, message.ClientConfigId);
+            return MessageSendResult.Fail("send", ex.Message);
         }
     }
 
-    private async Task SendClientLineAsync(Guid clientConfigId, string toAddress, string message, CancellationToken cancellationToken)
+    private async Task<MessageSendResult> SendLineAsync(OutboundMessage message, CancellationToken cancellationToken)
     {
-        var token = await GetClientLineTokenAsync(clientConfigId, cancellationToken);
+        var settings = await _settings.GetAsync(message.ClientConfigId, cancellationToken);
+        var text = message.Text.Length > LineMaxTextLength ? message.Text[..LineMaxTextLength] : message.Text;
 
-        if (string.IsNullOrWhiteSpace(token))
+        if (!settings.HasLineToken)
         {
-            _logger.LogWarning(
-                "MessagingConnector MOCK MODE (LINE) - client {ClientConfigId} has no lineChannelAccessToken configured. " +
-                "Would have sent to {ToAddress}: \"{Message}\"", clientConfigId, toAddress, message);
-            return;
+            _logger.LogWarning("MOCK (LINE) - client {ClientConfigId} has no LINE channel access token. Would have sent to {To}: \"{Text}\"",
+                message.ClientConfigId, message.To, text);
+            return MessageSendResult.Ok("mock");
         }
 
         var client = _httpClientFactory.CreateClient("LineApi");
-        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        var messages = new[] { new { type = "text", text } };
+        string? replyError = null;
 
-        var payload = new { to = toAddress, messages = new[] { new { type = "text", text = message } } };
-        var json = JsonSerializer.Serialize(payload);
-        var response = await client.PostAsync("https://api.line.me/v2/bot/message/push",
-            new StringContent(json, Encoding.UTF8, "application/json"), cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
+        if (!string.IsNullOrWhiteSpace(message.ReplyToken))
         {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("LINE send failed for client {ClientConfigId}: {StatusCode} {Body}", clientConfigId, response.StatusCode, body);
+            using var reply = new HttpRequestMessage(HttpMethod.Post, new Uri(LineBase, "v2/bot/message/reply"))
+            {
+                Content = Json(new { replyToken = message.ReplyToken, messages })
+            };
+            reply.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.LineChannelAccessToken);
+
+            using var replyResponse = await client.SendAsync(reply, cancellationToken);
+            if (replyResponse.IsSuccessStatusCode) return MessageSendResult.Ok("reply");
+
+            replyError = $"{(int)replyResponse.StatusCode} {await replyResponse.Content.ReadAsStringAsync(cancellationToken)}";
+            _logger.LogWarning("LINE reply failed for client {ClientConfigId} ({Error}) - falling back to push", message.ClientConfigId, replyError);
         }
+
+        if (string.IsNullOrWhiteSpace(message.To))
+            return MessageSendResult.Fail("reply", $"Reply failed ({replyError}) and there is no user id to push to.");
+
+        using var push = new HttpRequestMessage(HttpMethod.Post, new Uri(LineBase, "v2/bot/message/push"))
+        {
+            Content = Json(new { to = message.To, messages })
+        };
+        push.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.LineChannelAccessToken);
+        // Lets LINE drop a duplicate if this exact request is ever retried.
+        push.Headers.Add("X-Line-Retry-Key", Guid.NewGuid().ToString());
+
+        using var pushResponse = await client.SendAsync(push, cancellationToken);
+        if (pushResponse.IsSuccessStatusCode) return MessageSendResult.Ok(replyError is null ? "push" : "push (reply token failed)");
+
+        var pushError = $"{(int)pushResponse.StatusCode} {await pushResponse.Content.ReadAsStringAsync(cancellationToken)}";
+        _logger.LogError("LINE push failed for client {ClientConfigId}: {Error}", message.ClientConfigId, pushError);
+        return MessageSendResult.Fail("push", replyError is null ? pushError : $"reply: {replyError}; push: {pushError}");
     }
 
-    // ---------- Internal ops notifications: MadeeAutomation's own single channel ----------
+    private async Task<MessageSendResult> SendWhatsAppAsync(OutboundMessage message, CancellationToken cancellationToken)
+    {
+        var settings = await _settings.GetAsync(message.ClientConfigId, cancellationToken);
+        if (!settings.HasWhatsApp)
+        {
+            _logger.LogWarning("MOCK (WhatsApp) - client {ClientConfigId} has no WhatsApp phone number id/token. Would have sent to {To}: \"{Text}\"",
+                message.ClientConfigId, message.To, message.Text);
+            return MessageSendResult.Ok("mock");
+        }
 
-    public async Task SendInternalNotificationAsync(string message, CancellationToken cancellationToken = default)
+        return await PostGraphAsync($"{settings.WhatsAppPhoneNumberId}/messages", settings.WhatsAppAccessToken!,
+            new { messaging_product = "whatsapp", to = message.To, type = "text", text = new { body = message.Text } },
+            "WhatsApp", cancellationToken);
+    }
+
+    private async Task<MessageSendResult> SendMessengerAsync(OutboundMessage message, CancellationToken cancellationToken)
+    {
+        var settings = await _settings.GetAsync(message.ClientConfigId, cancellationToken);
+        if (!settings.HasMessenger)
+        {
+            _logger.LogWarning("MOCK (Messenger) - client {ClientConfigId} has no page access token. Would have sent to PSID {To}: \"{Text}\"",
+                message.ClientConfigId, message.To, message.Text);
+            return MessageSendResult.Ok("mock");
+        }
+
+        // Token goes in the Authorization header, NOT the URL - URLs end up in log files.
+        return await PostGraphAsync("me/messages", settings.MessengerPageAccessToken!,
+            new { recipient = new { id = message.To }, messaging_type = "RESPONSE", message = new { text = message.Text } },
+            "Messenger", cancellationToken);
+    }
+
+    private async Task<MessageSendResult> PostGraphAsync(string path, string accessToken, object payload, string label,
+        CancellationToken cancellationToken)
+    {
+        var client = _httpClientFactory.CreateClient(label == "Messenger" ? "MessengerApi" : "WhatsAppApi");
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(GraphBase, $"{GraphVersion}/{path}"))
+        {
+            Content = Json(payload)
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        if (response.IsSuccessStatusCode) return MessageSendResult.Ok("send");
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger.LogError("{Label} send failed: {StatusCode} {Body}", label, (int)response.StatusCode, body);
+        return MessageSendResult.Fail("send", $"{(int)response.StatusCode} {body}");
+    }
+
+    // ---------------- Internal ops notifications (MadeeAutomation's own WhatsApp number) ----------------
+
+    public async Task<MessageSendResult> SendInternalNotificationAsync(string message, CancellationToken cancellationToken = default)
     {
         var phoneNumberId = _configuration["Connectors:WhatsApp:PhoneNumberId"];
         var accessToken = _configuration["Connectors:WhatsApp:AccessToken"];
-        var notifyTo = _configuration["Connectors:WhatsApp:InternalNotifyTo"] ?? "internal-ops-group";
+        var notifyTo = _configuration["Connectors:WhatsApp:InternalNotifyTo"];
 
-        if (string.IsNullOrWhiteSpace(phoneNumberId) || phoneNumberId == "SET_ME" ||
-            string.IsNullOrWhiteSpace(accessToken) || accessToken == "SET_VIA_USER_SECRETS_OR_ENV_VAR")
+        if (IsPlaceholder(phoneNumberId) || IsPlaceholder(accessToken) || IsPlaceholder(notifyTo))
         {
-            _logger.LogWarning(
-                "MessagingConnector MOCK MODE (internal ops) - no internal WhatsApp credentials configured in appsettings/user-secrets. " +
-                "Would have sent to {NotifyTo}: \"{Message}\"", notifyTo, message);
-            return;
+            _logger.LogWarning("MOCK (internal ops) - no internal WhatsApp credentials configured. Would have sent: \"{Message}\"", message);
+            return MessageSendResult.Ok("mock");
         }
 
-        var client = _httpClientFactory.CreateClient("WhatsAppApi");
-        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
-
-        var payload = new { messaging_product = "whatsapp", to = notifyTo, type = "text", text = new { body = message } };
-        var json = JsonSerializer.Serialize(payload);
-        var response = await client.PostAsync($"https://graph.facebook.com/v19.0/{phoneNumberId}/messages",
-            new StringContent(json, Encoding.UTF8, "application/json"), cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("Internal notification send failed: {StatusCode} {Body}", response.StatusCode, body);
+            return await PostGraphAsync($"{phoneNumberId}/messages", accessToken!,
+                new { messaging_product = "whatsapp", to = notifyTo, type = "text", text = new { body = message } },
+                "Internal WhatsApp", cancellationToken);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            return MessageSendResult.Fail("send", ex.Message);
         }
     }
+
+    private static StringContent Json(object payload) =>
+        new(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 }

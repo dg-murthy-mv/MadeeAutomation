@@ -2,11 +2,14 @@ using MadeeAutomation.AI;
 using MadeeAutomation.Application;
 using MadeeAutomation.Connectors;
 using MadeeAutomation.Infrastructure;
+using MadeeAutomation.WebApi.Background;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
+    // HttpClient logs full request URLs at Information - keep them out of the files.
+    .MinimumLevel.Override("System.Net.Http.HttpClient", Serilog.Events.LogEventLevel.Warning)
     .Enrich.FromLogContext()
     .WriteTo.Console()
     .WriteTo.File(
@@ -32,6 +35,9 @@ try
     builder.Services.AddConnectors();
     builder.Services.AddClaudeAI();
 
+    // Runs the customer messages the webhooks store (see WebhooksController).
+    builder.Services.AddHostedService<InboundEventWorker>();
+
     var app = builder.Build();
 
     if (app.Environment.IsDevelopment())
@@ -46,9 +52,12 @@ try
     app.UseAuthorization();
     app.MapControllers();
 
+    // Used by the E2E tests (and any uptime monitor) to know the app is up.
+    app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
     app.Run();
 }
-catch (Exception ex)
+catch (Exception ex) when (ex is not HostAbortedException)
 {
     Log.Fatal(ex, "MadeeAutomation.WebApi terminated unexpectedly");
 }

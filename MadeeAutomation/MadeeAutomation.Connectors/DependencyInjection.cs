@@ -11,6 +11,7 @@ public static class DependencyInjection
         services.AddHttpClient("PosFirstApi");
         services.AddHttpClient("WhatsAppApi");
         services.AddHttpClient("LineApi");
+        services.AddHttpClient("MessengerApi");
         services.AddHttpClient("MadeeAutomationExternal");
 
         services.AddScoped<IMerkaiConnector, MerkaiApiConnector>();

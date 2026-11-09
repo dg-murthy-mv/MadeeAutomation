@@ -1,0 +1,107 @@
+@model ExecutionLog
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Execution";
+    string tzId = ViewBag.ClientTimeZoneId ?? "UTC";
+    TimeZoneInfo tz;
+    try { tz = TimeZoneInfo.FindSystemTimeZoneById(tzId); } catch (TimeZoneNotFoundException) { tz = TimeZoneInfo.Utc; tzId = "UTC"; }
+    string Local(DateTime? utc) => utc is null ? "-" :
+        TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc.Value, DateTimeKind.Utc), tz).ToString("yyyy-MM-dd HH:mm:ss");
+
+    string Pretty(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return "-";
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+        }
+        catch (JsonException) { return json; }
+    }
+
+    var actions = new List<ActionRecord>();
+    if (!string.IsNullOrWhiteSpace(Model.ActionsJson))
+    {
+        try { actions = JsonSerializer.Deserialize<List<ActionRecord>>(Model.ActionsJson) ?? new(); } catch (JsonException) { }
+    }
+    var statusClass = Model.Status switch
+    {
+        ExecutionStatus.Succeeded => "bg-success",
+        ExecutionStatus.Failed => "bg-danger",
+        ExecutionStatus.Skipped => "bg-secondary",
+        _ => "bg-info"
+    };
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Execution <span class="badge @statusClass align-middle" data-testid="log-status">@Model.Status</span></h2>
+        <div class="mv-subtle">@ViewBag.ClientName &middot; @Model.WorkflowDefinition?.Name &middot; times in <strong>@tzId</strong></div>
+    </div>
+    <a class="btn btn-outline-secondary" asp-action="Index" asp-route-clientConfigId="@Model.ClientConfigId">&larr; Back to logs</a>
+</div>
+
+<div class="mv-card mv-card-body mb-4">
+    <dl class="row mb-0 mv-dl">
+        <dt class="col-sm-3">Summary</dt><dd class="col-sm-9" data-testid="log-summary">@(Model.ResultSummary ?? "-")</dd>
+        <dt class="col-sm-3">Error</dt><dd class="col-sm-9 text-danger" data-testid="log-error">@(Model.ErrorMessage ?? "-")</dd>
+        <dt class="col-sm-3">Channel</dt><dd class="col-sm-9" data-testid="log-channel">@(Model.Channel is null ? "-" : Channels.DisplayName(Model.Channel))</dd>
+        <dt class="col-sm-3">Customer</dt><dd class="col-sm-9" data-testid="log-customer"><code>@(Model.CustomerId ?? "-")</code></dd>
+        <dt class="col-sm-3">Started</dt><dd class="col-sm-9">@Local(Model.StartedAtUtc)</dd>
+        <dt class="col-sm-3">Completed</dt><dd class="col-sm-9">@Local(Model.CompletedAtUtc)</dd>
+        <dt class="col-sm-3">Duration</dt><dd class="col-sm-9">@(Model.DurationMs is null ? "-" : $"{Model.DurationMs} ms")</dd>
+        <dt class="col-sm-3">Handler</dt><dd class="col-sm-9"><code>@Model.WorkflowDefinition?.HandlerKey</code></dd>
+    </dl>
+</div>
+
+<div class="mv-card mb-4">
+    <div class="mv-card-body pb-0"><h5 class="mv-section-title">Actions</h5></div>
+    @if (actions.Any())
+    {
+        <div class="table-responsive">
+            <table class="table mv-table align-middle" data-testid="actions-table">
+                <thead><tr><th>Action</th><th>Result</th><th>Details</th></tr></thead>
+                <tbody>
+                @foreach (var a in actions)
+                {
+                    <tr data-testid="action-row">
+                        <td data-label="Action">
+                            <strong>@a.Type</strong>
+                            @if (!a.Required) { <span class="badge bg-light text-dark ms-1">optional</span> }
+                        </td>
+                        <td data-label="Result">
+                            @if (a.Success)
+                            {
+                                <span class="badge bg-success">OK</span> <span class="small">@a.Result</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger">Failed</span> <span class="small text-danger">@a.Error</span>
+                            }
+                        </td>
+                        <td data-label="Details" class="small">
+                            @foreach (var p in a.Parameters)
+                            {
+                                <div><span class="mv-subtle">@p.Key:</span> <span class="text-break">@p.Value</span></div>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="mv-empty"><p>No actions were run.</p></div>
+    }
+</div>
+
+<div class="mv-card mv-card-body">
+    <h5 class="mv-section-title">Trigger payload</h5>
+    <pre class="mv-pre" data-testid="log-payload">@Pretty(Model.TriggerPayloadJson)</pre>
+</div>

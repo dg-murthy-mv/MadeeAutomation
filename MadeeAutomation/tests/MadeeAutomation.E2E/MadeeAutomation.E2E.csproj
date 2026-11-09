@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>MadeeAutomation.E2E</RootNamespace>
+    <RunSettingsFilePath>$(MSBuildProjectDirectory)\e2e.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Kestrel for the fake LINE / Claude / POSFirst server that runs inside the test process -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="NUnit" Version="4.2.2" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+    <PackageReference Include="Microsoft.Playwright.NUnit" Version="1.47.0" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Only the Domain project: SettingsCipher + ClientIntegrationSettings to seed encrypted credentials -->
+    <ProjectReference Include="..\..\MadeeAutomation.Domain\MadeeAutomation.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="e2e.settings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

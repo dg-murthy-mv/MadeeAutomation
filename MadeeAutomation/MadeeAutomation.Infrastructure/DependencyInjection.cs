@@ -1,5 +1,7 @@
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Infrastructure.Persistence;
+using MadeeAutomation.Infrastructure.Persistence.Repositories;
+using MadeeAutomation.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,7 +17,14 @@ public static class DependencyInjection
 
         services.AddScoped<IWorkflowRepository, WorkflowRepository>();
         services.AddScoped<IExecutionLogRepository, ExecutionLogRepository>();
-        services.AddScoped<ICurrentClientService, CurrentClientService>();
+        services.AddScoped<IInboundEventRepository, InboundEventRepository>();
+
+        // One class serves both: the engine's client lookup and the Admin client screens.
+        services.AddScoped<ClientRepository>();
+        services.AddScoped<IClientRepository>(sp => sp.GetRequiredService<ClientRepository>());
+        services.AddScoped<ICurrentClientService>(sp => sp.GetRequiredService<ClientRepository>());
+
+        services.AddScoped<IClientSettingsService, ClientSettingsService>();
 
         return services;
     }

@@ -1,17 +1,28 @@
+using System.Text;
+using System.Text.Json;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Application.Common;
+using MadeeAutomation.Application.Inbound;
+using MadeeAutomation.Domain.Entities;
 using MadeeAutomation.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MadeeAutomation.WebApi.Controllers;
 
 /// <summary>
-/// Single entry point for all inbound events: WhatsApp/LINE messages, POS webhooks,
-/// lead-form submissions, file uploads. Each route resolves a specific ClientConfig +
-/// WorkflowDefinition, wraps the payload into a TriggerContext, and hands off to the
-/// WorkflowEngine. New client integrations rarely need a new controller action -
-/// most reuse "generic" and are told which workflow to run by the client's WhatsApp
-/// number / webhook path stored in WorkflowDefinition.TriggerConfigJson.
+/// Entry point for all inbound events.
+///
+/// Customer messages (LINE / WhatsApp / Messenger) are NOT processed inside the request any more:
+/// the controller checks the signature, stores every message as an InboundEvent (duplicates are
+/// ignored) and answers 200 straight away. The InboundEventWorker then runs the workflow and replies.
+/// That stops the platforms timing out and re-sending, which used to create duplicate orders.
+///
+/// URLs
+///   POST /api/webhooks/line/{clientCode}                       one URL per LINE Official Account (recommended)
+///   POST /api/webhooks/line/{clientCode}/{workflowId}          old per-workflow URL - still works
+///   GET+POST /api/webhooks/whatsapp/{clientCode}[/{workflowId}]
+///   GET+POST /api/webhooks/messenger/{clientCode}[/{workflowId}]
+///   POST /api/webhooks/generic/{clientCode}/{workflowId}       runs synchronously (forms, POS events)
 /// </summary>
 [ApiController]
 [Route("api/webhooks")]
@@ -19,150 +30,198 @@ public class WebhooksController : ControllerBase
 {
     private readonly WorkflowEngine _workflowEngine;
     private readonly IWorkflowRepository _workflowRepository;
+    private readonly ICurrentClientService _clients;
+    private readonly IClientSettingsService _settings;
+    private readonly InboundEventIngestor _ingestor;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<WebhooksController> _logger;
 
-    public WebhooksController(WorkflowEngine workflowEngine, IWorkflowRepository workflowRepository, ILogger<WebhooksController> logger)
+    public WebhooksController(WorkflowEngine workflowEngine, IWorkflowRepository workflowRepository,
+        ICurrentClientService clients, IClientSettingsService settings, InboundEventIngestor ingestor,
+        IConfiguration configuration, ILogger<WebhooksController> logger)
     {
         _workflowEngine = workflowEngine;
         _workflowRepository = workflowRepository;
+        _clients = clients;
+        _settings = settings;
+        _ingestor = ingestor;
+        _configuration = configuration;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Generic webhook entry point. clientCode + workflowId identify which automation to run;
-    /// the raw JSON body becomes the TriggerContext payload.
-    /// e.g. POST /api/webhooks/generic/{clientCode}/{workflowId}
-    /// </summary>
-    [HttpPost("generic/{clientCode}/{workflowId:guid}")]
-    public async Task<IActionResult> Generic(string clientCode, Guid workflowId, [FromBody] object rawPayload, CancellationToken cancellationToken)
+    // =====================================================================
+    // LINE
+    // =====================================================================
+
+    [HttpPost("line/{clientCode}")]
+    public Task<IActionResult> Line(string clientCode, CancellationToken cancellationToken) =>
+        ReceiveLineAsync(clientCode, null, cancellationToken);
+
+    [HttpPost("line/{clientCode}/{workflowId:guid}")]
+    public Task<IActionResult> LineForWorkflow(string clientCode, Guid workflowId, CancellationToken cancellationToken) =>
+        ReceiveLineAsync(clientCode, workflowId, cancellationToken);
+
+    private async Task<IActionResult> ReceiveLineAsync(string clientCode, Guid? workflowId, CancellationToken cancellationToken)
     {
-        var workflow = await _workflowRepository.GetByIdAsync(workflowId, cancellationToken);
-        if (workflow is null)
+        var body = await ReadBodyAsync(cancellationToken);
+
+        var (client, notFound) = await ResolveClientAsync(clientCode, workflowId, cancellationToken);
+        if (client is null) return notFound!;
+
+        // LINE signs every call with the channel secret. Without the secret we cannot tell a real
+        // LINE call from a fake one, so by default the call is refused (Webhooks:RequireLineSignature).
+        var settings = await _settings.GetAsync(client.Id, cancellationToken);
+        var signature = Request.Headers["X-Line-Signature"].ToString();
+
+        if (settings.HasLineSecret)
         {
-            return NotFound($"Workflow {workflowId} not found.");
+            if (!LineSignature.IsValid(settings.LineChannelSecret, body, signature))
+            {
+                _logger.LogWarning("LINE webhook for {ClientCode}: invalid X-Line-Signature - rejected", client.ClientCode);
+                return Unauthorized(new { error = "Invalid signature." });
+            }
+        }
+        else if (_configuration.GetValue("Webhooks:RequireLineSignature", true))
+        {
+            _logger.LogWarning("LINE webhook for {ClientCode} rejected: no LINE channel secret saved for this client. " +
+                               "Add it in Admin -> client -> Edit -> LINE.", client.ClientCode);
+            return Unauthorized(new { error = "LINE channel secret is not configured for this client." });
         }
 
-        var context = new TriggerContext
-        {
-            ClientConfigId = workflow.ClientConfigId,
-            WorkflowDefinitionId = workflow.Id,
-            TriggerType = TriggerType.Webhook,
-            PayloadJson = System.Text.Json.JsonSerializer.Serialize(rawPayload)
-        };
+        var parsed = ChannelPayloadParser.ParseLine(Encoding.UTF8.GetString(body));
+        if (parsed.Error is not null) return BadRequest(new { error = parsed.Error });
 
-        var success = await _workflowEngine.RunAsync(context, cancellationToken);
-        return success ? Ok(new { status = "processed" }) : StatusCode(500, new { status = "failed" });
+        var result = await _ingestor.IngestAsync(client, Channels.Line, workflowId, parsed, cancellationToken);
+        return Ok(new { received = result.Stored, duplicates = result.Duplicates, ignored = result.Ignored });
     }
 
+    // =====================================================================
+    // WhatsApp / Messenger (Meta) - signature check (X-Hub-Signature-256) comes in Phase 4
+    // =====================================================================
+
     /// <summary>
-    /// WhatsApp Business API webhook. Meta requires a GET verification challenge and a POST
-    /// for actual message delivery - both are handled here.
+    /// Meta's "Verify and save" check. Meta calls the SAME URL you register, so this answers on
+    /// every WhatsApp / Messenger route shape.
     /// </summary>
     [HttpGet("whatsapp")]
+    [HttpGet("whatsapp/{clientCode}")]
+    [HttpGet("whatsapp/{clientCode}/{workflowId:guid}")]
     public IActionResult VerifyWhatsAppWebhook(
-        [FromQuery(Name = "hub.mode")] string mode,
-        [FromQuery(Name = "hub.verify_token")] string verifyToken,
-        [FromQuery(Name = "hub.challenge")] string challenge,
-        [FromServices] IConfiguration configuration)
+        [FromQuery(Name = "hub.mode")] string? mode,
+        [FromQuery(Name = "hub.verify_token")] string? verifyToken,
+        [FromQuery(Name = "hub.challenge")] string? challenge) =>
+        VerifyMeta(mode, verifyToken, challenge, _configuration["Connectors:WhatsApp:VerifyToken"]);
+
+    [HttpGet("messenger")]
+    [HttpGet("messenger/{clientCode}")]
+    [HttpGet("messenger/{clientCode}/{workflowId:guid}")]
+    public IActionResult VerifyMessengerWebhook(
+        [FromQuery(Name = "hub.mode")] string? mode,
+        [FromQuery(Name = "hub.verify_token")] string? verifyToken,
+        [FromQuery(Name = "hub.challenge")] string? challenge) =>
+        VerifyMeta(mode, verifyToken, challenge, _configuration["Connectors:Messenger:VerifyToken"]);
+
+    private static IActionResult VerifyMeta(string? mode, string? verifyToken, string? challenge, string? expectedToken)
     {
-        var expectedToken = configuration["Connectors:WhatsApp:VerifyToken"];
-        if (mode == "subscribe" && verifyToken == expectedToken)
-        {
-            return Ok(challenge);
-        }
-        return Forbid();
+        var configured = !string.IsNullOrWhiteSpace(expectedToken) && !expectedToken.StartsWith("SET_", StringComparison.OrdinalIgnoreCase);
+        if (configured && mode == "subscribe" && verifyToken == expectedToken && !string.IsNullOrEmpty(challenge))
+            return new ContentResult { Content = challenge, ContentType = "text/plain", StatusCode = 200 };
+
+        // Plain 403 - Forbid() needs an authentication scheme and used to crash with a 500.
+        return new StatusCodeResult(StatusCodes.Status403Forbidden);
     }
 
+    [HttpPost("whatsapp/{clientCode}")]
+    public Task<IActionResult> WhatsApp(string clientCode, CancellationToken cancellationToken) =>
+        ReceiveMetaAsync(Channels.WhatsApp, clientCode, null, cancellationToken);
+
     [HttpPost("whatsapp/{clientCode}/{workflowId:guid}")]
-    public async Task<IActionResult> WhatsApp(string clientCode, Guid workflowId, [FromBody] System.Text.Json.JsonElement payload, CancellationToken cancellationToken)
+    public Task<IActionResult> WhatsAppForWorkflow(string clientCode, Guid workflowId, CancellationToken cancellationToken) =>
+        ReceiveMetaAsync(Channels.WhatsApp, clientCode, workflowId, cancellationToken);
+
+    [HttpPost("messenger/{clientCode}")]
+    public Task<IActionResult> Messenger(string clientCode, CancellationToken cancellationToken) =>
+        ReceiveMetaAsync(Channels.Messenger, clientCode, null, cancellationToken);
+
+    [HttpPost("messenger/{clientCode}/{workflowId:guid}")]
+    public Task<IActionResult> MessengerForWorkflow(string clientCode, Guid workflowId, CancellationToken cancellationToken) =>
+        ReceiveMetaAsync(Channels.Messenger, clientCode, workflowId, cancellationToken);
+
+    private async Task<IActionResult> ReceiveMetaAsync(string channel, string clientCode, Guid? workflowId, CancellationToken cancellationToken)
     {
-        var workflow = await _workflowRepository.GetByIdAsync(workflowId, cancellationToken);
-        if (workflow is null) return NotFound();
+        var body = await ReadBodyAsync(cancellationToken);
 
-        // Meta's payload: entry[0].changes[0].value.messages[0].{from, text.body}
-        // Non-message webhooks (delivery/read receipts) won't have a "messages" array - ignore those.
-        string? messageText = null;
-        string? fromNumber = null;
+        var (client, notFound) = await ResolveClientAsync(clientCode, workflowId, cancellationToken);
+        if (client is null) return notFound!;
 
-        if (payload.TryGetProperty("entry", out var entries) && entries.GetArrayLength() > 0)
-        {
-            var change = entries[0].GetProperty("changes")[0].GetProperty("value");
-            if (change.TryGetProperty("messages", out var messages) && messages.GetArrayLength() > 0)
-            {
-                var msg = messages[0];
-                fromNumber = msg.GetProperty("from").GetString();
-                if (msg.TryGetProperty("text", out var textEl))
-                {
-                    messageText = textEl.GetProperty("body").GetString();
-                }
-            }
-        }
+        var parsed = ChannelPayloadParser.Parse(channel, Encoding.UTF8.GetString(body));
+        if (parsed.Error is not null) return BadRequest(new { error = parsed.Error });
 
-        if (messageText is null || fromNumber is null)
-        {
-            return Ok(); // not a text message event (e.g. a status update) - nothing to process
-        }
+        var result = await _ingestor.IngestAsync(client, channel, workflowId, parsed, cancellationToken);
+        return Ok(new { received = result.Stored, duplicates = result.Duplicates, ignored = result.Ignored });
+    }
 
-        var simplifiedPayload = System.Text.Json.JsonSerializer.Serialize(new { message = messageText, from = fromNumber });
+    // =====================================================================
+    // Generic (synchronous) - lead forms, POS events, etc.
+    // =====================================================================
+
+    [HttpPost("generic/{clientCode}/{workflowId:guid}")]
+    public async Task<IActionResult> Generic(string clientCode, Guid workflowId, [FromBody] JsonElement rawPayload, CancellationToken cancellationToken)
+    {
+        var (client, notFound) = await ResolveClientAsync(clientCode, workflowId, cancellationToken);
+        if (client is null) return notFound!;
 
         var context = new TriggerContext
         {
-            ClientConfigId = workflow.ClientConfigId,
-            WorkflowDefinitionId = workflow.Id,
-            TriggerType = TriggerType.MessageReceived,
-            PayloadJson = simplifiedPayload
+            ClientConfigId = client.Id,
+            WorkflowDefinitionId = workflowId,
+            TriggerType = TriggerType.Webhook,
+            PayloadJson = rawPayload.GetRawText()
         };
 
-        var success = await _workflowEngine.RunAsync(context, cancellationToken);
-        return success ? Ok() : StatusCode(500);
+        var outcome = await _workflowEngine.RunAsync(context, cancellationToken);
+        if (outcome.ExecutionLogId is null) return NotFound(new { status = "not-run", reason = outcome.Message });
+
+        return outcome.Succeeded || outcome.Status == ExecutionStatus.Skipped
+            ? Ok(new { status = outcome.Status.ToString(), executionLogId = outcome.ExecutionLogId })
+            : StatusCode(500, new { status = outcome.Status.ToString(), executionLogId = outcome.ExecutionLogId, error = outcome.Message });
+    }
+
+    // =====================================================================
+    // helpers
+    // =====================================================================
+
+    private async Task<byte[]> ReadBodyAsync(CancellationToken cancellationToken)
+    {
+        using var ms = new MemoryStream();
+        await Request.Body.CopyToAsync(ms, cancellationToken);
+        return ms.ToArray();
     }
 
     /// <summary>
-    /// LINE Messaging API webhook. LINE's payload shape: events[0].message.text / events[0].source.userId.
-    /// Unlike Meta, LINE has no GET verification challenge - only signature verification via the
-    /// x-line-signature header, which is skipped here for now (same simplification as the WhatsApp
-    /// route currently has - add signature checks before this touches real client data).
+    /// Finds the client by code. When the URL also names a workflow, that workflow must exist and
+    /// belong to the same client - a mismatched code/workflow pair is treated as not found.
     /// </summary>
-    [HttpPost("line/{clientCode}/{workflowId:guid}")]
-    public async Task<IActionResult> Line(string clientCode, Guid workflowId, [FromBody] System.Text.Json.JsonElement payload, CancellationToken cancellationToken)
+    private async Task<(ClientConfig? client, IActionResult? notFound)> ResolveClientAsync(
+        string clientCode, Guid? workflowId, CancellationToken cancellationToken)
     {
-        var workflow = await _workflowRepository.GetByIdAsync(workflowId, cancellationToken);
-        if (workflow is null) return NotFound();
-
-        string? messageText = null;
-        string? fromUserId = null;
-
-        if (payload.TryGetProperty("events", out var events) && events.GetArrayLength() > 0)
+        var client = await _clients.GetByCodeAsync(clientCode, cancellationToken);
+        if (client is null)
         {
-            var evt = events[0];
-            if (evt.TryGetProperty("type", out var typeEl) && typeEl.GetString() == "message"
-                && evt.TryGetProperty("message", out var msgEl)
-                && msgEl.TryGetProperty("type", out var msgTypeEl) && msgTypeEl.GetString() == "text")
+            _logger.LogWarning("Webhook for unknown client code '{ClientCode}'", clientCode);
+            return (null, NotFound(new { error = $"Unknown client '{clientCode}'." }));
+        }
+
+        if (workflowId is not null)
+        {
+            var workflow = await _workflowRepository.GetByIdAsync(workflowId.Value, cancellationToken);
+            if (workflow is null || workflow.ClientConfigId != client.Id)
             {
-                messageText = msgEl.GetProperty("text").GetString();
-                if (evt.TryGetProperty("source", out var sourceEl) && sourceEl.TryGetProperty("userId", out var userIdEl))
-                {
-                    fromUserId = userIdEl.GetString();
-                }
+                _logger.LogWarning("Webhook for {ClientCode}: workflow {WorkflowId} not found for this client", clientCode, workflowId);
+                return (null, NotFound(new { error = "Workflow not found for this client." }));
             }
         }
 
-        if (messageText is null || fromUserId is null)
-        {
-            return Ok(); // not a text message event - nothing to process
-        }
-
-        var simplifiedPayload = System.Text.Json.JsonSerializer.Serialize(new { message = messageText, from = fromUserId });
-
-        var context = new TriggerContext
-        {
-            ClientConfigId = workflow.ClientConfigId,
-            WorkflowDefinitionId = workflow.Id,
-            TriggerType = TriggerType.MessageReceived,
-            PayloadJson = simplifiedPayload
-        };
-
-        var success = await _workflowEngine.RunAsync(context, cancellationToken);
-        return success ? Ok() : StatusCode(500);
+        return (client, null);
     }
 }

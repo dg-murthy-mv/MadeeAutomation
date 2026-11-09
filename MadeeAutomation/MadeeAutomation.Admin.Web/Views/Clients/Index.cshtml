@@ -1,18 +1,16 @@
-@model List<ClientConfig>
+@model PagedResult<ClientConfig>
 @{
     ViewData["Title"] = "Clients";
     string? search = ViewBag.Search;
-    int currentPage = ViewBag.Page;
-    int totalPages = ViewBag.TotalPages;
-    int totalCount = ViewBag.TotalCount;
+    int pageSize = ViewBag.PageSize;
 }
 
 <div class="mv-page-header">
     <div>
         <h2>Clients</h2>
-        <div class="mv-subtle">@totalCount client@(totalCount == 1 ? "" : "s")</div>
+        <div class="mv-subtle">@Model.TotalCount client@(Model.TotalCount == 1 ? "" : "s")</div>
     </div>
-    <a class="btn btn-primary" asp-action="Create">+ New Client</a>
+    <a class="btn btn-primary" asp-action="Create" data-testid="new-client">+ New Client</a>
 </div>
 
 <div class="mv-card">
@@ -20,10 +18,10 @@
         <form method="get" asp-action="Index">
             <input type="text" name="search" class="form-control" placeholder="Search by name or code..." value="@search" />
             <select name="pageSize" class="form-select" style="max-width:140px;" onchange="this.form.submit()">
-                <option value="5" selected="@(ViewBag.PageSize == 5)">5 / page</option>
-                <option value="10" selected="@(ViewBag.PageSize == 10)">10 / page</option>
-                <option value="25" selected="@(ViewBag.PageSize == 25)">25 / page</option>
-                <option value="50" selected="@(ViewBag.PageSize == 50)">50 / page</option>
+                @foreach (var size in new[] { 5, 10, 25, 50 })
+                {
+                    <option value="@size" selected="@(pageSize == size)">@size / page</option>
+                }
             </select>
             <button type="submit" class="btn btn-outline-secondary">Search</button>
             @if (!string.IsNullOrWhiteSpace(search))
@@ -33,10 +31,10 @@
         </form>
     </div>
 
-    @if (Model.Any())
+    @if (Model.Items.Any())
     {
         <div class="table-responsive">
-            <table class="table mv-table align-middle">
+            <table class="table mv-table align-middle" data-testid="clients-table">
                 <thead>
                     <tr>
                         <th>Client</th>
@@ -49,25 +47,14 @@
                     </tr>
                 </thead>
                 <tbody>
-                @foreach (var client in Model)
+                @foreach (var client in Model.Items)
                 {
-                    <tr>
+                    <tr data-testid="client-row-@client.ClientCode">
                         <td data-label="Client">@client.ClientName</td>
                         <td data-label="Code"><code>@client.ClientCode</code></td>
                         <td data-label="Country">@client.Country</td>
                         <td data-label="Vertical"><span class="badge badge-vertical">@client.Vertical</span></td>
-                        <td data-label="Status">
-                            @{
-                                var badgeClass = client.Status switch
-                                {
-                                    ClientStatus.Active => "bg-success",
-                                    ClientStatus.Trial => "bg-info",
-                                    ClientStatus.Paused => "bg-warning text-dark",
-                                    _ => "bg-danger"
-                                };
-                            }
-                            <span class="badge @badgeClass">@client.Status</span>
-                        </td>
+                        <td data-label="Status"><partial name="_StatusBadge" model="client.Status" /></td>
                         <td data-label="Workflows">@client.Workflows.Count</td>
                         <td data-label=""><a class="btn btn-sm btn-outline-primary" asp-action="Details" asp-route-id="@client.Id">Manage</a></td>
                     </tr>
@@ -77,22 +64,22 @@
         </div>
 
         <div class="mv-pagination">
-            <span class="mv-subtle">Page @currentPage of @totalPages</span>
-            @if (totalPages > 1)
+            <span class="mv-subtle">Page @Model.Page of @Model.TotalPages</span>
+            @if (Model.TotalPages > 1)
             {
                 <nav>
                     <ul class="pagination pagination-sm mb-0">
-                        <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
-                            <a class="page-link" asp-action="Index" asp-route-page="@(currentPage - 1)" asp-route-search="@search" asp-route-pageSize="@ViewBag.PageSize">Previous</a>
+                        <li class="page-item @(!Model.HasPrevious ? "disabled" : "")">
+                            <a class="page-link" asp-action="Index" asp-route-page="@(Model.Page - 1)" asp-route-search="@search" asp-route-pageSize="@pageSize">Previous</a>
                         </li>
-                        @for (int p = 1; p <= totalPages; p++)
+                        @for (int p = 1; p <= Model.TotalPages; p++)
                         {
-                            <li class="page-item @(p == currentPage ? "active" : "")">
-                                <a class="page-link" asp-action="Index" asp-route-page="@p" asp-route-search="@search" asp-route-pageSize="@ViewBag.PageSize">@p</a>
+                            <li class="page-item @(p == Model.Page ? "active" : "")">
+                                <a class="page-link" asp-action="Index" asp-route-page="@p" asp-route-search="@search" asp-route-pageSize="@pageSize">@p</a>
                             </li>
                         }
-                        <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
-                            <a class="page-link" asp-action="Index" asp-route-page="@(currentPage + 1)" asp-route-search="@search" asp-route-pageSize="@ViewBag.PageSize">Next</a>
+                        <li class="page-item @(!Model.HasNext ? "disabled" : "")">
+                            <a class="page-link" asp-action="Index" asp-route-page="@(Model.Page + 1)" asp-route-search="@search" asp-route-pageSize="@pageSize">Next</a>
                         </li>
                     </ul>
                 </nav>

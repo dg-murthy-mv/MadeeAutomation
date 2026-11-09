@@ -4,8 +4,7 @@ namespace MadeeAutomation.Domain.Entities;
 
 /// <summary>
 /// A configured automation for a specific client: one Trigger -> one or more Actions,
-/// executed by a Handler that contains the business logic (e.g. WhatsAppOrderParserHandler).
-/// This is the "vertical pack instance" once it's wired up for a real client.
+/// executed by a Handler that contains the business logic (e.g. CustomerMessageHandler).
 /// </summary>
 public class WorkflowDefinition
 {
@@ -14,12 +13,20 @@ public class WorkflowDefinition
     public Guid ClientConfigId { get; set; }
     public ClientConfig ClientConfig { get; set; } = null!;
 
-    public string Name { get; set; } = string.Empty;           // e.g. "WhatsApp Order Intake"
-    public string HandlerKey { get; set; } = string.Empty;     // resolves to an IHandler via DI, e.g. "whatsapp-order-parser"
+    public string Name { get; set; } = string.Empty;           // e.g. "LINE customer messages"
+    public string HandlerKey { get; set; } = string.Empty;     // resolves to an IHandler, e.g. "customer-message"
     public VerticalPack Vertical { get; set; }
 
     public TriggerType TriggerType { get; set; }
-    public string TriggerConfigJson { get; set; } = "{}";      // e.g. cron expression, webhook path, message channel
+
+    /// <summary>
+    /// For MessageReceived workflows: which channel this workflow answers ("line", "whatsapp",
+    /// "messenger"), or null for every channel. A client can have only ONE enabled message
+    /// workflow per channel - the per-client webhook URL routes each message to it.
+    /// </summary>
+    public string? Channel { get; set; }
+
+    public string TriggerConfigJson { get; set; } = "{}";      // e.g. cron expression for Scheduled
 
     public bool IsEnabled { get; set; } = true;
 

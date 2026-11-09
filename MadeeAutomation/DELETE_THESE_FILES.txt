@@ -1,0 +1,7 @@
+MadeeAutomation.Admin.Web\Views\Clients\Create.cshtml
+MadeeAutomation.Admin.Web\Views\Clients\CreateWorkflow.cshtml
+MadeeAutomation.Application\VerticalPacks\FnB\LineOrderParserHandler.cs
+MadeeAutomation.Application\VerticalPacks\FnB\MessengerOrderParserHandler.cs
+MadeeAutomation.Application\VerticalPacks\FnB\WhatsAppOrderParserHandler.cs
+MadeeAutomation.Application\VerticalPacks\Support\FaqResponderHandler.cs
+MadeeAutomation.Infrastructure\Persistence\Repositories.cs

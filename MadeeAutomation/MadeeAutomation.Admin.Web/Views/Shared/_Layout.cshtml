@@ -44,6 +44,14 @@
     </nav>
 
     <div class="mv-page">
+        @if (TempData["Success"] is string successMessage)
+        {
+            <div class="alert alert-success" role="alert" data-testid="alert-success">@successMessage</div>
+        }
+        @if (TempData["Error"] is string errorMessage)
+        {
+            <div class="alert alert-danger" role="alert" data-testid="alert-error">@errorMessage</div>
+        }
         @RenderBody()
     </div>
 

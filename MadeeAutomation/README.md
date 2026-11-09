@@ -1,115 +1,89 @@
 # MadeeAutomation
 
-Standalone AI automation engine for MadeeAutomation services — separate from Merkai CRM
-and POSFirst, integrating with them only over HTTP via `MadeeAutomation.Connectors`.
+Standalone AI automation engine for MadeeAutomation services, separate from Merkai CRM
+and POSFirst. It talks to them only over HTTP, through `MadeeAutomation.Connectors`.
 
 ## Architecture
 
 ```
 MadeeAutomation.sln
-├── MadeeAutomation.Domain          Entities: ClientConfig, WorkflowDefinition, ExecutionLog
-├── MadeeAutomation.Application     ITrigger / IHandler / IAction, WorkflowEngine, vertical packs
+├── MadeeAutomation.Domain          Entities: ClientConfig, WorkflowDefinition, ExecutionLog, InboundEvent
+│                                   SettingsCipher (AES-GCM), ClientIntegrationSettings
+├── MadeeAutomation.Application     IHandler / IAction, WorkflowEngine, Inbound pipeline, vertical packs
+│   ├── Inbound/        ChannelPayloadParser, LineSignature, InboundEventIngestor, InboundEventProcessor
 │   └── VerticalPacks/
-│       ├── FnB/          WhatsAppOrderParserHandler, LowStockAlertHandler
-│       ├── CRM/          LeadScoringHandler
-│       ├── Finance/      InvoiceExtractionHandler
-│       └── Support/      FaqResponderHandler
-├── MadeeAutomation.Infrastructure  EF Core (AutomationDbContext), repositories
-├── MadeeAutomation.Connectors      MerkaiApiConnector, PosFirstApiConnector, MessagingConnector
-├── MadeeAutomation.AI              ClaudeService (wraps api.anthropic.com/v1/messages)
-├── MadeeAutomation.WebApi          Webhook ingestion (WhatsApp, LINE, generic, scheduled)
-└── MadeeAutomation.Admin.Web       Internal MVC dashboard: clients, workflows, execution logs
+│       ├── Messaging/  customer-message, order-parser, faq-responder (+ MessageAssistant)
+│       ├── FnB/        low-stock-alert
+│       ├── CRM/        lead-scoring
+│       └── Finance/    invoice-extraction
+├── MadeeAutomation.Infrastructure  EF Core (AutomationDbContext), repositories, ClientSettingsService
+├── MadeeAutomation.Connectors      MessagingConnector (LINE/WhatsApp/Messenger), PosFirst, Merkai
+├── MadeeAutomation.AI              ClaudeService (Anthropic Messages API, timeouts + retries)
+├── MadeeAutomation.WebApi          Webhooks + InboundEventWorker (runs customer messages)
+├── MadeeAutomation.Admin.Web       Internal dashboard: clients, credentials, workflows, logs
+├── database/                       SQL scripts (no EF migrations) - @Commit = 0 dry run first
+└── tests/MadeeAutomation.E2E       Playwright + NUnit end-to-end tests
 ```
 
-This mirrors the five-project clean architecture pattern used in Merkai CRM
-(Domain / Application / Infrastructure / Web / WebApi), extended with `Connectors` and `AI`.
+## How a customer message flows
 
-## How it fits together
+1. LINE (or WhatsApp / Messenger) calls `POST /api/webhooks/line/{clientCode}`.
+2. WebApi checks the `X-Line-Signature` with the client's channel secret, stores every text
+   message as an `InboundEvent`, and answers **200 at once**. A re-delivered event is ignored
+   (unique index on client + channel + event id).
+3. `InboundEventWorker` picks the event up and finds the client's **one enabled message workflow
+   for that channel**.
+4. `WorkflowEngine` runs the handler. `customer-message` makes one Claude call that decides
+   whether the message is an order, a question or something for staff. It only uses the
+   client's **knowledge base** and **menu**, and it replies in the customer's language.
+5. Actions run: a POSFirst order is created when the message really is an order, and the reply
+   goes back on the **same channel**. On LINE the reply token is used first (free), with a push
+   message as fallback.
+6. Everything is recorded in `ExecutionLog`, including every action and its result. Admin shows
+   it under the client's **View Execution Logs**. If a required action fails (for example, the
+   reply could not be delivered), the run is marked **Failed**.
 
-1. An event happens (WhatsApp message, POS webhook, scheduled tick).
-2. `MadeeAutomation.WebApi` receives it and wraps it into a `TriggerContext`.
-3. `WorkflowEngine` (in `Application/Common`) looks up the `WorkflowDefinition`, resolves the
-   matching `IHandler` by `HandlerKey`, and runs it.
-4. The handler does the actual work (often calling `IClaudeService` for extraction/reasoning),
-   and returns a list of `ActionRequest`s.
-5. `WorkflowEngine` executes each `IAction` (send message, write to DB, call external API, notify staff).
-6. Every run is recorded in `ExecutionLog` — visible in the Admin dashboard under a client's
-   "View Execution Logs" — so you can prove ROI and debug fast instead of "launch and leave."
+## Webhook URLs (shown on each client's page in Admin)
 
-## Adding a new automation for a client
+| Channel | URL |
+|---|---|
+| LINE | `POST /api/webhooks/line/{clientCode}` |
+| WhatsApp | `GET+POST /api/webhooks/whatsapp/{clientCode}` |
+| Messenger | `GET+POST /api/webhooks/messenger/{clientCode}` |
+| Generic (forms, POS events) | `POST /api/webhooks/generic/{clientCode}/{workflowId}` (runs synchronously) |
 
-No code changes needed for most cases:
-1. Open `MadeeAutomation.Admin.Web` → Clients → select client → **+ New Workflow**.
-2. Pick a `HandlerKey` from the dropdown (one of the pre-built vertical pack handlers).
-3. Pick the `TriggerType` and fill in `TriggerConfigJson` (e.g. webhook path or cron schedule).
-4. Save — the workflow is now live.
+The old `.../{clientCode}/{workflowId}` URLs still work for LINE, WhatsApp and Messenger.
 
-Adding a genuinely new automation type = add a new `IHandler` implementation under
-`VerticalPacks/<Vertical>/`, following the pattern in the existing handlers. Scrutor
-auto-registers it — no manual DI wiring required.
+## Adding an automation for a client
+
+1. Admin → Clients → client → **Edit client & credentials**. Paste the LINE channel secret and
+   access token, the POSFirst URL and key, the knowledge base and the menu.
+2. **+ New Workflow** → *Customer messages* → Channel *LINE* → Save.
+3. Copy the LINE webhook URL from the client page into the LINE Developers Console.
+
+A new kind of automation means a new `IHandler` under `VerticalPacks/<Vertical>/`, plus one
+line in `Application/Common/HandlerCatalog.cs` so Admin lists it. Scrutor registers the handler
+automatically.
 
 ## First-time setup
 
-### 1. Prerequisites
-- .NET 8 SDK
-- SQL Server (LocalDB is fine for development)
+See `SETUP.md` for the current round. In short:
 
-### 2. Restore & build
-```bash
-cd MadeeAutomation
-dotnet restore
-dotnet build
-```
+1. Run `database/001_Baseline_and_Round001.sql` in SSMS (first with `@Commit = 0`, then `1`).
+2. Generate one encryption key and set it in **both** WebApi and Admin.Web:
+   ```powershell
+   $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
+   cd MadeeAutomation.WebApi;    dotnet user-secrets set "Security:SettingsEncryptionKey" "<key>"
+   cd ..\MadeeAutomation.Admin.Web; dotnet user-secrets set "Security:SettingsEncryptionKey" "<key>"
+   ```
+3. Set the Claude key in WebApi only: `dotnet user-secrets set "Anthropic:ApiKey" "sk-ant-..."`.
+   Admin.Web no longer needs Claude or connector secrets.
+4. Optional, for internal staff alerts: `Connectors:WhatsApp:PhoneNumberId`, `AccessToken` and
+   `InternalNotifyTo` in WebApi. Without them, alerts only go to the log.
 
-### 3. Configure secrets (do NOT put real keys in appsettings.json)
-For each of `MadeeAutomation.WebApi` and `MadeeAutomation.Admin.Web`:
-```bash
-cd MadeeAutomation.WebApi
-dotnet user-secrets set "Anthropic:ApiKey" "sk-ant-..."
-dotnet user-secrets set "Connectors:Merkai:ApiKey" "..."
-dotnet user-secrets set "Connectors:PosFirst:ApiKey" "..."
-dotnet user-secrets set "Connectors:WhatsApp:AccessToken" "..."
-dotnet user-secrets set "Connectors:Line:ChannelAccessToken" "..."
-```
-Repeat for `MadeeAutomation.Admin.Web` (it also talks to Claude/connectors directly for now;
-you can later move all trigger/action execution behind WebApi only and make Admin.Web
-purely a management UI over the database).
+## Still to build
 
-### 4. Create the database
-From `MadeeAutomation.Infrastructure` (with `MadeeAutomation.WebApi` as startup project):
-```bash
-dotnet tool install --global dotnet-ef   # if not already installed
-dotnet ef migrations add InitialCreate --startup-project ../MadeeAutomation.WebApi
-dotnet ef database update --startup-project ../MadeeAutomation.WebApi
-```
-
-### 5. Run
-```bash
-# Terminal 1 - webhook ingestion API
-cd MadeeAutomation.WebApi
-dotnet run
-
-# Terminal 2 - internal admin dashboard
-cd MadeeAutomation.Admin.Web
-dotnet run
-```
-
-Open the Admin.Web URL shown in the console, add your first client (e.g. MadeeBakers),
-add a workflow using `whatsapp-order-parser`, and point your WhatsApp Business API
-webhook at:
-```
-POST https://<your-webapi-host>/api/webhooks/whatsapp/{clientCode}/{workflowId}
-```
-
-## Notes / things to decide next
-- `WriteToDatabaseAction` is currently a stub — decide on typed tables per vertical
-  (e.g. `ExtractedInvoices`, `ReconciledPayments`) rather than a generic dynamic write.
-- Scheduled triggers currently need an external caller hitting
-  `POST /api/scheduled-triggers/run/{clientConfigId}` (e.g. a simple cron job or
-  Windows/Linux scheduled task hitting that URL, or a `BackgroundService` you add later).
-- `IntegrationSettingsJson` on `ClientConfig` should be encrypted at rest before production use —
-  it will hold each client's WhatsApp number, Merkai/POSFirst API keys, etc.
-- Authentication/authorization has intentionally been left out of `Admin.Web` and the
-  webhook endpoints in this starter — add ASP.NET Core Identity (or Azure AD) on
-  `Admin.Web` and signature verification (e.g. Meta's `X-Hub-Signature-256`) on
-  `WebhooksController` before this touches real client data.
+- Admin login, plus protection on `/api/scheduled-triggers` (Phase 2)
+- A scheduler that reads the cron in `TriggerConfigJson`, and retries with backoff (Phase 3)
+- Meta `X-Hub-Signature-256` checks on WhatsApp / Messenger (Phase 4)
+- Typed tables for `WriteToDatabaseAction`, invoice image/PDF upload, multi-turn orders (Phase 5)

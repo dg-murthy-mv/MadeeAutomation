@@ -1,0 +1,9 @@
+{
+  "SqlServer": "Server=DG_MURTHY;Database=master;Trusted_Connection=True;TrustServerCertificate=True;",
+  "DatabaseName": "MadeeAutomation_E2E",
+  "WebApiPort": 58801,
+  "AdminPort": 58802,
+  "FakeServerPort": 58803,
+  "Configuration": "Debug",
+  "StartupTimeoutSeconds": 60
+}

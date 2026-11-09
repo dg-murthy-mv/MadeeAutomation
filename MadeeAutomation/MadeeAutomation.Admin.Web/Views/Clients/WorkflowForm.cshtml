@@ -1,0 +1,99 @@
+@model WorkflowFormModel
+@{
+    ViewData["Title"] = Model.IsEdit ? "Edit Workflow" : "New Workflow";
+    var action = Model.IsEdit ? "EditWorkflow" : "CreateWorkflow";
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>@(Model.IsEdit ? "Edit Workflow" : "New Workflow")</h2>
+        <div class="mv-subtle">@Model.ClientName</div>
+    </div>
+    <a asp-action="Details" asp-route-id="@Model.ClientConfigId" class="btn btn-outline-secondary">&larr; Back to client</a>
+</div>
+
+<div class="mv-card mv-card-body" style="max-width: 760px;">
+<form asp-action="@action" asp-route-id="@Model.Id" method="post" data-testid="workflow-form">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="ClientConfigId" />
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+
+    <div class="mb-3">
+        <label asp-for="Name" class="form-label"></label>
+        <input asp-for="Name" class="form-control" placeholder="e.g. LINE customer messages" />
+        <span asp-validation-for="Name" class="text-danger small"></span>
+    </div>
+
+    <div class="mb-3">
+        <label asp-for="HandlerKey" class="form-label"></label>
+        <select asp-for="HandlerKey" class="form-select" id="HandlerKey">
+            @foreach (var h in HandlerCatalog.All)
+            {
+                <option value="@h.Key" data-message="@(h.IsMessageHandler ? "1" : "0")" data-trigger="@((int)h.DefaultTrigger)" data-desc="@h.Description">@h.Name (@h.Key)</option>
+            }
+        </select>
+        <div class="form-text" id="handlerDescription"></div>
+        <span asp-validation-for="HandlerKey" class="text-danger small"></span>
+    </div>
+
+    <div class="mb-3" id="channelGroup">
+        <label asp-for="Channel" class="form-label">Channel</label>
+        <select asp-for="Channel" class="form-select">
+            <option value="line">LINE</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="messenger">Messenger</option>
+            <option value="">Any channel</option>
+        </select>
+        <div class="form-text">Messages arriving on this channel's webhook URL are answered by this workflow. One enabled message workflow per channel.</div>
+        <span asp-validation-for="Channel" class="text-danger small" data-testid="error-Channel"></span>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6 mb-3" id="triggerGroup">
+            <label asp-for="TriggerType" class="form-label"></label>
+            <select asp-for="TriggerType" class="form-select" asp-items="Html.GetEnumSelectList<TriggerType>()"></select>
+            <span asp-validation-for="TriggerType" class="text-danger small"></span>
+        </div>
+        <div class="col-md-6 mb-3">
+            <label asp-for="Vertical" class="form-label">Vertical pack</label>
+            <select asp-for="Vertical" class="form-select" asp-items="Html.GetEnumSelectList<VerticalPack>()"></select>
+        </div>
+    </div>
+
+    <div class="mb-3">
+        <label asp-for="TriggerConfigJson" class="form-label"></label>
+        <textarea asp-for="TriggerConfigJson" class="form-control font-monospace" rows="3" placeholder='{ "cron": "0 7 * * *" }'></textarea>
+        <span asp-validation-for="TriggerConfigJson" class="text-danger small" data-testid="error-TriggerConfigJson"></span>
+    </div>
+
+    <div class="form-check mb-3">
+        <input asp-for="IsEnabled" class="form-check-input" />
+        <label asp-for="IsEnabled" class="form-check-label"></label>
+    </div>
+
+    <button type="submit" class="btn btn-primary" data-testid="save-workflow">@(Model.IsEdit ? "Save workflow" : "Create workflow")</button>
+    <a asp-action="Details" asp-route-id="@Model.ClientConfigId" class="btn btn-link">Cancel</a>
+</form>
+</div>
+
+@section Scripts {
+<script>
+    (function () {
+        const handler = document.getElementById('HandlerKey');
+        const channelGroup = document.getElementById('channelGroup');
+        const triggerGroup = document.getElementById('triggerGroup');
+        const trigger = document.getElementById('TriggerType');
+        const desc = document.getElementById('handlerDescription');
+        function sync(changed) {
+            const opt = handler.options[handler.selectedIndex];
+            const isMessage = opt.dataset.message === '1';
+            channelGroup.style.display = isMessage ? '' : 'none';
+            triggerGroup.style.display = isMessage ? 'none' : '';
+            desc.textContent = opt.dataset.desc || '';
+            if (changed || isMessage) trigger.value = opt.dataset.trigger;
+        }
+        handler.addEventListener('change', () => sync(true));
+        sync(false);
+    })();
+</script>
+}

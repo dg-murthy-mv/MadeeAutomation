@@ -1,0 +1,174 @@
+@model ClientFormModel
+@{
+    ViewData["Title"] = Model.IsEdit ? $"Edit {Model.ClientName}" : "New Client";
+    var action = Model.IsEdit ? "Edit" : "Create";
+
+    void SecretField(string field, string label, string help)
+    {
+        var hint = Model.SavedSecretHints.GetValueOrDefault(field);
+        <div class="mb-3">
+            <label class="form-label" for="@field">@label</label>
+            <input type="password" class="form-control" id="@field" name="@field" autocomplete="new-password"
+                   placeholder="@(hint is null ? "Not set" : "Saved " + hint + " - leave blank to keep")" />
+            <div class="form-text">
+                @if (hint is not null)
+                {
+                    <span class="badge bg-success-subtle text-success-emphasis me-2" data-testid="saved-@field">Saved @hint</span>
+                    <label class="form-check-label me-2">
+                        <input type="checkbox" class="form-check-input" name="ClearSecrets" value="@field" data-testid="clear-@field" /> Remove
+                    </label>
+                }
+                else
+                {
+                    <span class="badge bg-secondary-subtle text-secondary-emphasis me-2" data-testid="missing-@field">Not set</span>
+                }
+                @help
+            </div>
+        </div>
+    }
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>@(Model.IsEdit ? Model.ClientName : "New Client")</h2>
+        @if (Model.IsEdit)
+        {
+            <div class="mv-subtle">Code <code>@Model.ClientCode</code> &middot; the code is part of the webhook URLs and can't be changed.</div>
+        }
+    </div>
+    @if (Model.IsEdit)
+    {
+        <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-outline-secondary">&larr; Back to client</a>
+    }
+</div>
+
+<form asp-action="@action" asp-route-id="@Model.Id" method="post" data-testid="client-form">
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger" data-testid="form-errors"></div>
+
+    <div class="mv-card mv-card-body mb-4">
+        <h5 class="mv-section-title">Basics</h5>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label asp-for="ClientName" class="form-label"></label>
+                <input asp-for="ClientName" class="form-control" placeholder="e.g. MadeeBakers" />
+                <span asp-validation-for="ClientName" class="text-danger small"></span>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label asp-for="ClientCode" class="form-label"></label>
+                @if (Model.IsEdit)
+                {
+                    <input asp-for="ClientCode" class="form-control" readonly />
+                }
+                else
+                {
+                    <input asp-for="ClientCode" class="form-control" placeholder="e.g. madeebakers" />
+                }
+                <span asp-validation-for="ClientCode" class="text-danger small" data-testid="error-ClientCode"></span>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <label asp-for="Country" class="form-label"></label>
+                <select asp-for="Country" class="form-select">
+                    @foreach (var c in ClientFormModel.Countries)
+                    {
+                        <option value="@c.Value">@c.Label</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label asp-for="TimeZoneId" class="form-label"></label>
+                <select asp-for="TimeZoneId" class="form-select">
+                    @foreach (var tz in ClientFormModel.TimeZones)
+                    {
+                        <option value="@tz">@tz</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2 mb-3">
+                <label asp-for="Currency" class="form-label"></label>
+                <input asp-for="Currency" class="form-control" maxlength="3" />
+                <span asp-validation-for="Currency" class="text-danger small"></span>
+            </div>
+            <div class="col-md-2 mb-3">
+                <label asp-for="Vertical" class="form-label"></label>
+                <select asp-for="Vertical" class="form-select" asp-items="Html.GetEnumSelectList<VerticalPack>()"></select>
+            </div>
+            <div class="col-md-2 mb-3">
+                <label asp-for="Status" class="form-label"></label>
+                <select asp-for="Status" class="form-select" asp-items="Html.GetEnumSelectList<ClientStatus>()"></select>
+            </div>
+        </div>
+
+        <div class="form-check mb-2">
+            <input asp-for="MerkaiIntegrationEnabled" class="form-check-input" />
+            <label asp-for="MerkaiIntegrationEnabled" class="form-check-label"></label>
+        </div>
+        <div class="form-check">
+            <input asp-for="PosFirstIntegrationEnabled" class="form-check-input" />
+            <label asp-for="PosFirstIntegrationEnabled" class="form-check-label"></label>
+        </div>
+        <div class="form-text mt-2">Paused and Cancelled clients never run workflows - their messages are logged as Skipped.</div>
+    </div>
+
+    <div class="mv-card mv-card-body mb-4">
+        <h5 class="mv-section-title">What the AI may use</h5>
+        <div class="mb-3">
+            <label asp-for="KnowledgeBaseText" class="form-label"></label>
+            <textarea asp-for="KnowledgeBaseText" class="form-control" rows="6"
+                      placeholder="Opening hours: 7am-6pm every day&#10;Delivery: Ban Chang only, free over 300 THB&#10;Payment: PromptPay or cash"></textarea>
+            <div class="form-text">The bot answers questions ONLY from this text. Anything not covered goes to staff.</div>
+        </div>
+        <div class="mb-0">
+            <label asp-for="MenuText" class="form-label"></label>
+            <textarea asp-for="MenuText" class="form-control" rows="6"
+                      placeholder="Croissant - 45 THB&#10;Sourdough loaf - 180 THB&#10;Chocolate cake (1 lb) - 450 THB"></textarea>
+            <div class="form-text">Order items are matched to these names.</div>
+        </div>
+    </div>
+
+    @if (Model.IsEdit)
+    {
+        <div class="mv-card mv-card-body mb-4" data-testid="credentials">
+            <h5 class="mv-section-title">Credentials</h5>
+            <p class="mv-subtle">Stored encrypted. Saved secrets are never shown again - type a new value to replace one, leave blank to keep it.
+                A channel without credentials runs in <strong>mock</strong> mode (replies are only written to the log).</p>
+
+            <h6 class="mt-3">LINE Official Account</h6>
+            <div class="form-text mb-2">LINE Official Account Manager &rarr; Settings &rarr; Messaging API (channel secret) and LINE Developers Console &rarr; Messaging API tab (channel access token).</div>
+            @{ SecretField(nameof(Model.LineChannelSecret), "Channel secret", "Needed to check that webhook calls really come from LINE."); }
+            @{ SecretField(nameof(Model.LineChannelAccessToken), "Channel access token (long-lived)", "Needed to send replies."); }
+
+            <h6 class="mt-4">WhatsApp Business</h6>
+            <div class="mb-3">
+                <label asp-for="WhatsAppPhoneNumberId" class="form-label"></label>
+                <input asp-for="WhatsAppPhoneNumberId" class="form-control" />
+            </div>
+            @{ SecretField(nameof(Model.WhatsAppAccessToken), "WhatsApp access token", ""); }
+
+            <h6 class="mt-4">Facebook Messenger</h6>
+            @{ SecretField(nameof(Model.MessengerPageAccessToken), "Page access token", ""); }
+
+            <h6 class="mt-4">POSFirst</h6>
+            <div class="mb-3">
+                <label asp-for="PosFirstBaseUrl" class="form-label"></label>
+                <input asp-for="PosFirstBaseUrl" class="form-control" placeholder="https://pos.client.com" />
+                <span asp-validation-for="PosFirstBaseUrl" class="text-danger small"></span>
+            </div>
+            @{ SecretField(nameof(Model.PosFirstApiKey), "POSFirst API key", ""); }
+
+            <h6 class="mt-4">Merkai CRM</h6>
+            <div class="mb-3">
+                <label asp-for="MerkaiBaseUrl" class="form-label"></label>
+                <input asp-for="MerkaiBaseUrl" class="form-control" placeholder="https://crm.client.com" />
+                <span asp-validation-for="MerkaiBaseUrl" class="text-danger small"></span>
+            </div>
+            @{ SecretField(nameof(Model.MerkaiApiKey), "Merkai API key", ""); }
+        </div>
+    }
+
+    <button type="submit" class="btn btn-primary" data-testid="save-client">@(Model.IsEdit ? "Save client" : "Create client")</button>
+    <a asp-action="@(Model.IsEdit ? "Details" : "Index")" asp-route-id="@Model.Id" class="btn btn-link">Cancel</a>
+</form>

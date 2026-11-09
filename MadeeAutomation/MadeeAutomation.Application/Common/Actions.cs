@@ -4,8 +4,11 @@ using Microsoft.Extensions.Logging;
 
 namespace MadeeAutomation.Application.Common;
 
-/// <summary>Sends an outbound message via WhatsApp/LINE - used by every vertical pack.
-/// Uses the CLIENT's own credentials (looked up via clientConfigId), never a shared account.</summary>
+/// <summary>
+/// Sends an outbound customer message on the channel the handler names (normally the channel
+/// the customer wrote on). Uses the CLIENT's own credentials, never a shared account.
+/// Parameters: channel, to, message, replyToken (optional, LINE).
+/// </summary>
 public class SendMessageAction : IAction
 {
     public ActionType Type => ActionType.SendMessage;
@@ -19,28 +22,36 @@ public class SendMessageAction : IAction
 
     public async Task<ActionResult> ExecuteAsync(ActionRequest request, CancellationToken cancellationToken = default)
     {
-        var channel = request.Parameters.GetValueOrDefault("channel", "whatsapp");
+        var channel = request.Parameters.GetValueOrDefault("channel", "");
         var to = request.Parameters.GetValueOrDefault("to", "");
         var message = request.Parameters.GetValueOrDefault("message", "");
-        var clientConfigIdRaw = request.Parameters.GetValueOrDefault("clientConfigId", "");
+        var replyToken = request.Parameters.GetValueOrDefault("replyToken");
 
-        if (string.IsNullOrWhiteSpace(to))
+        if (Channels.Normalize(channel) is null)
+            return ActionResult.Fail($"Unknown or missing channel '{channel}' for SendMessage.");
+        if (string.IsNullOrWhiteSpace(to) && string.IsNullOrWhiteSpace(replyToken))
+            return ActionResult.Fail("Missing 'to' address for SendMessage.");
+        if (string.IsNullOrWhiteSpace(message))
+            return ActionResult.Fail("Message text is empty.");
+        if (!Guid.TryParse(request.Parameters.GetValueOrDefault("clientConfigId", ""), out var clientConfigId))
+            return ActionResult.Fail("Missing or invalid clientConfigId for SendMessage.");
+
+        var result = await _messaging.SendAsync(new OutboundMessage
         {
-            return new ActionResult { Success = false, ErrorMessage = "Missing 'to' address for SendMessageAction." };
-        }
+            ClientConfigId = clientConfigId,
+            Channel = Channels.Normalize(channel)!,
+            To = to,
+            Text = message,
+            ReplyToken = string.IsNullOrWhiteSpace(replyToken) ? null : replyToken
+        }, cancellationToken);
 
-        if (!Guid.TryParse(clientConfigIdRaw, out var clientConfigId))
-        {
-            return new ActionResult { Success = false, ErrorMessage = "Missing or invalid clientConfigId for SendMessageAction." };
-        }
-
-        await _messaging.SendTextMessageAsync(channel, to, message, clientConfigId, cancellationToken);
-        return new ActionResult { Success = true, ResultData = $"Message sent to {to} via {channel}" };
+        return result.Success
+            ? ActionResult.Ok($"Sent via {channel} ({result.Mode})")
+            : ActionResult.Fail($"{channel} {result.Mode} failed: {result.Error}");
     }
 }
 
-/// <summary>Notifies MadeeAutomation / client ops staff internally (e.g. via an internal Slack/email/WhatsApp group).
-/// Always uses MadeeAutomation's own internal channel, not any particular client's credentials.</summary>
+/// <summary>Notifies MadeeAutomation / client ops staff on MadeeAutomation's own internal channel.</summary>
 public class NotifyInternalAction : IAction
 {
     public ActionType Type => ActionType.NotifyInternal;
@@ -57,17 +68,17 @@ public class NotifyInternalAction : IAction
     public async Task<ActionResult> ExecuteAsync(ActionRequest request, CancellationToken cancellationToken = default)
     {
         var message = request.Parameters.GetValueOrDefault("message", "");
-
         _logger.LogInformation("Internal notification: {Message}", message);
-        await _messaging.SendInternalNotificationAsync(message, cancellationToken);
 
-        return new ActionResult { Success = true, ResultData = "Internal notification sent." };
+        var result = await _messaging.SendInternalNotificationAsync(message, cancellationToken);
+        return result.Success
+            ? ActionResult.Ok($"Internal notification sent ({result.Mode}).")
+            : ActionResult.Fail($"Internal notification failed: {result.Error}");
     }
 }
 
 /// <summary>Writes handler output to a database table - used for extracted invoice data, reconciliation, etc.
-/// This is a placeholder; wire it up to your actual EF Core DbContext in Infrastructure if you need
-/// generic dynamic writes, or prefer a dedicated typed handler + repository per data shape.</summary>
+/// Still a placeholder (Phase 5: typed tables per vertical such as ExtractedInvoices).</summary>
 public class WriteToDatabaseAction : IAction
 {
     public ActionType Type => ActionType.WriteToDatabase;
@@ -82,12 +93,10 @@ public class WriteToDatabaseAction : IAction
     public Task<ActionResult> ExecuteAsync(ActionRequest request, CancellationToken cancellationToken = default)
     {
         var table = request.Parameters.GetValueOrDefault("table", "Unknown");
-        _logger.LogInformation("WriteToDatabaseAction -> table {Table}, payload {Payload}",
+        _logger.LogInformation("WriteToDatabaseAction (not stored yet) -> table {Table}, payload {Payload}",
             table, request.Parameters.GetValueOrDefault("dataJson", ""));
 
-        // TODO: replace with a real EF Core write once you decide on typed tables per vertical
-        // (e.g. ExtractedInvoices, ReconciledPayments) in MadeeAutomation.Infrastructure.
-        return Task.FromResult(new ActionResult { Success = true, ResultData = $"Recorded to {table}" });
+        return Task.FromResult(ActionResult.Ok($"Logged only - {table} table not built yet"));
     }
 }
 
@@ -111,9 +120,7 @@ public class CallExternalApiAction : IAction
         var body = request.Parameters.GetValueOrDefault("body", "");
 
         if (string.IsNullOrWhiteSpace(url))
-        {
-            return new ActionResult { Success = false, ErrorMessage = "Missing 'url' for CallExternalApiAction." };
-        }
+            return ActionResult.Fail("Missing 'url' for CallExternalApiAction.");
 
         try
         {
@@ -122,12 +129,14 @@ public class CallExternalApiAction : IAction
                 new StringContent(body, System.Text.Encoding.UTF8, "application/json"), cancellationToken);
 
             var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            return new ActionResult { Success = response.IsSuccessStatusCode, ResultData = responseBody };
+            return response.IsSuccessStatusCode
+                ? ActionResult.Ok(responseBody)
+                : ActionResult.Fail($"HTTP {(int)response.StatusCode}: {responseBody}");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "CallExternalApiAction failed for {Url}", url);
-            return new ActionResult { Success = false, ErrorMessage = ex.Message };
+            return ActionResult.Fail(ex.Message);
         }
     }
 }

@@ -42,13 +42,14 @@
     <div class="mv-toolbar">
         <form method="get" asp-action="Index">
             <input type="hidden" name="clientConfigId" value="@clientConfigId" />
-            <input type="text" name="search" class="form-control" placeholder="Search summary or error..." value="@search" />
+            <input type="text" name="search" class="form-control" placeholder="Search summary, error or customer id..." value="@search" />
             <select name="status" class="form-select">
                 <option value="">All statuses</option>
                 <option value="Succeeded" selected="@(status == "Succeeded")">Succeeded</option>
                 <option value="Failed" selected="@(status == "Failed")">Failed</option>
                 <option value="Running" selected="@(status == "Running")">Running</option>
                 <option value="Pending" selected="@(status == "Pending")">Pending</option>
+                <option value="Skipped" selected="@(status == "Skipped")">Skipped</option>
             </select>
             <select name="pageSize" class="form-select" style="max-width:140px;" onchange="this.form.submit()">
                 <option value="5" selected="@(ViewBag.PageSize == 5)">5 / page</option>
@@ -72,6 +73,8 @@
                     <tr>
                         <th>Started (@clientTimeZoneId)</th>
                         <th>Status</th>
+                        <th>Workflow</th>
+                        <th>Channel</th>
                         <th>Summary</th>
                         <th>Error</th>
                         <th>Duration (ms)</th>
@@ -82,9 +85,11 @@
                 {
                     var rowClass = log.Status == ExecutionStatus.Failed ? "table-danger"
                         : log.Status == ExecutionStatus.Succeeded ? "table-success" : "";
-                    <tr class="@rowClass">
-                        <td data-label="Started">@ToClientLocal(log.StartedAtUtc).ToString("yyyy-MM-dd HH:mm:ss")</td>
-                        <td data-label="Status">@log.Status</td>
+                    <tr class="@rowClass" data-testid="log-row">
+                        <td data-label="Started"><a asp-action="Details" asp-route-id="@log.Id" data-testid="log-link">@ToClientLocal(log.StartedAtUtc).ToString("yyyy-MM-dd HH:mm:ss")</a></td>
+                        <td data-label="Status" data-testid="log-row-status">@log.Status</td>
+                        <td data-label="Workflow">@log.WorkflowDefinition?.Name</td>
+                        <td data-label="Channel">@(log.Channel is null ? "-" : Channels.DisplayName(log.Channel))</td>
                         <td data-label="Summary">@log.ResultSummary</td>
                         <td data-label="Error" class="text-danger">@log.ErrorMessage</td>
                         <td data-label="Duration">@log.DurationMs</td>

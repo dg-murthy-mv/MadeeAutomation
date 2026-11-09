@@ -1,5 +1,7 @@
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Application.Common;
+using MadeeAutomation.Application.Inbound;
+using MadeeAutomation.Application.VerticalPacks.Messaging;
 using Microsoft.Extensions.DependencyInjection;
 using Scrutor;
 
@@ -9,8 +11,9 @@ public static class DependencyInjection
 {
     /// <summary>
     /// Auto-registers every IHandler and IAction implementation in this assembly,
-    /// the same Scrutor scan-and-register pattern already used in Merkai CRM.
-    /// Adding a new vertical pack handler = drop the class in, no manual DI wiring.
+    /// the same Scrutor scan-and-register pattern used in Merkai CRM.
+    /// Adding a new vertical pack handler = drop the class in (and add it to HandlerCatalog).
+    /// Used by WebApi only - Admin.Web does not run workflows.
     /// </summary>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
@@ -24,6 +27,12 @@ public static class DependencyInjection
                 .WithScopedLifetime());
 
         services.AddScoped<WorkflowEngine>();
+        services.AddScoped<MessageAssistant>();
+
+        // Webhook -> InboundEvents -> background worker pipeline
+        services.AddSingleton<InboundSignal>();
+        services.AddScoped<InboundEventIngestor>();
+        services.AddScoped<InboundEventProcessor>();
 
         return services;
     }

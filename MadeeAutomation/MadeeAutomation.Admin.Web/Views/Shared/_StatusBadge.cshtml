@@ -1,0 +1,11 @@
+@model ClientStatus
+@{
+    var badgeClass = Model switch
+    {
+        ClientStatus.Active => "bg-success",
+        ClientStatus.Trial => "bg-info",
+        ClientStatus.Paused => "bg-warning text-dark",
+        _ => "bg-danger"
+    };
+}
+<span class="badge @badgeClass" data-testid="client-status">@Model</span>

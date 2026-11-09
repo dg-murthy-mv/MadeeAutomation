@@ -14,32 +14,20 @@ namespace MadeeAutomation.Connectors;
 public class MerkaiApiConnector : IMerkaiConnector
 {
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ICurrentClientService _currentClientService;
+    private readonly IClientSettingsService _settings;
     private readonly ILogger<MerkaiApiConnector> _logger;
 
-    public MerkaiApiConnector(IHttpClientFactory httpClientFactory, ICurrentClientService currentClientService, ILogger<MerkaiApiConnector> logger)
+    public MerkaiApiConnector(IHttpClientFactory httpClientFactory, IClientSettingsService settings, ILogger<MerkaiApiConnector> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _currentClientService = currentClientService;
+        _settings = settings;
         _logger = logger;
     }
 
     private async Task<(string? baseUrl, string? apiKey)> GetSettingsAsync(Guid clientConfigId, CancellationToken cancellationToken)
     {
-        var client = await _currentClientService.GetClientAsync(clientConfigId, cancellationToken);
-        if (client is null) return (null, null);
-
-        try
-        {
-            using var doc = JsonDocument.Parse(client.IntegrationSettingsJson);
-            var baseUrl = doc.RootElement.TryGetProperty("merkaiBaseUrl", out var b) ? b.GetString() : null;
-            var apiKey = doc.RootElement.TryGetProperty("merkaiApiKey", out var k) ? k.GetString() : null;
-            return (baseUrl, apiKey);
-        }
-        catch (JsonException)
-        {
-            return (null, null);
-        }
+        var settings = await _settings.GetAsync(clientConfigId, cancellationToken);
+        return (settings.MerkaiBaseUrl, settings.MerkaiApiKey);
     }
 
     public async Task<string> CreateOrUpdateLeadAsync(Guid clientConfigId, object leadPayload, CancellationToken cancellationToken = default)

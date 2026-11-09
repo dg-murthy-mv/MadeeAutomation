@@ -1,43 +1,126 @@
-@model ClientConfig
+@model ClientDetailsModel
 @{
-    ViewData["Title"] = Model.ClientName;
+    var client = Model.Client;
+    ViewData["Title"] = client.ClientName;
+    var s = Model.Settings;
+
+    void Status(bool ok, string okText, string missingText, string testId)
+    {
+        if (ok)
+        {
+            <span class="badge bg-success" data-testid="@testId">@okText</span>
+        }
+        else
+        {
+            <span class="badge bg-warning text-dark" data-testid="@testId">@missingText</span>
+        }
+    }
+
+    void UrlRow(string label, string url, string testId)
+    {
+        <div class="mv-url-row">
+            <span class="mv-url-label">@label</span>
+            <code class="mv-url" data-testid="@testId">@url</code>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="navigator.clipboard.writeText('@url'); this.textContent='Copied';">Copy</button>
+        </div>
+    }
 }
 
 <div class="mv-page-header">
     <div>
-        <h2>@Model.ClientName</h2>
-        <div class="mv-subtle">@Model.Country &middot; @Model.Vertical &middot; @Model.Status</div>
+        <h2>@client.ClientName</h2>
+        <div class="mv-subtle"><code>@client.ClientCode</code> &middot; @client.Country &middot; @client.Vertical &middot; <partial name="_StatusBadge" model="client.Status" /></div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-        <a class="btn btn-outline-secondary" asp-controller="ExecutionLogs" asp-action="Index" asp-route-clientConfigId="@Model.Id">View Execution Logs</a>
-        <a class="btn btn-primary" asp-action="CreateWorkflow" asp-route-clientConfigId="@Model.Id">+ New Workflow</a>
+        <a class="btn btn-outline-secondary" asp-action="Edit" asp-route-id="@client.Id" data-testid="edit-client">Edit client &amp; credentials</a>
+        <a class="btn btn-outline-secondary" asp-controller="ExecutionLogs" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="view-logs">View Execution Logs</a>
+        <a class="btn btn-primary" asp-action="CreateWorkflow" asp-route-clientConfigId="@client.Id" data-testid="new-workflow">+ New Workflow</a>
+    </div>
+</div>
+
+@if (Model.SettingsError is not null)
+{
+    <div class="alert alert-danger" data-testid="settings-error">@Model.SettingsError</div>
+}
+
+<div class="mv-card mv-card-body mb-4" data-testid="channels-card">
+    <h5 class="mv-section-title">Channels &amp; webhook URLs</h5>
+
+    <div class="mv-channel">
+        <div class="mv-channel-head">
+            <strong>LINE</strong>
+            @{ Status(s?.HasLineSecret == true, "Channel secret saved", "Channel secret missing - LINE calls are refused", "line-secret-status"); }
+            @{ Status(s?.HasLineToken == true, "Access token saved", "No access token - replies are mock only", "line-token-status"); }
+        </div>
+        @{ UrlRow("Webhook URL", Model.LineWebhookUrl, "line-webhook-url"); }
+        <div class="form-text">Paste into LINE Developers Console &rarr; Messaging API &rarr; Webhook URL, turn "Use webhook" on, and turn Chat OFF in LINE Official Account Manager &rarr; Response settings.</div>
+    </div>
+
+    <div class="mv-channel">
+        <div class="mv-channel-head">
+            <strong>WhatsApp</strong>
+            @{ Status(s?.HasWhatsApp == true, "Credentials saved", "Not set - mock", "whatsapp-status"); }
+        </div>
+        @{ UrlRow("Callback URL", Model.WhatsAppWebhookUrl, "whatsapp-webhook-url"); }
+    </div>
+
+    <div class="mv-channel">
+        <div class="mv-channel-head">
+            <strong>Messenger</strong>
+            @{ Status(s?.HasMessenger == true, "Credentials saved", "Not set - mock", "messenger-status"); }
+        </div>
+        @{ UrlRow("Callback URL", Model.MessengerWebhookUrl, "messenger-webhook-url"); }
+    </div>
+
+    <div class="mv-channel mb-0">
+        <div class="mv-channel-head">
+            <strong>POSFirst</strong>
+            @{ Status(s?.HasPosFirst == true, "Connected", "Not set - orders are mock (MOCK-...)", "posfirst-status"); }
+        </div>
     </div>
 </div>
 
 <div class="mv-card">
-    @if (Model.Workflows.Any())
+    <div class="mv-card-body pb-0"><h5 class="mv-section-title">Workflows</h5></div>
+    @if (client.Workflows.Any())
     {
         <div class="table-responsive">
-            <table class="table mv-table align-middle">
+            <table class="table mv-table align-middle" data-testid="workflows-table">
                 <thead>
                     <tr>
                         <th>Workflow</th>
-                        <th>Handler Key</th>
+                        <th>Handler</th>
                         <th>Trigger</th>
-                        <th>Vertical</th>
+                        <th>Channel</th>
                         <th>Enabled</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
-                @foreach (var workflow in Model.Workflows)
+                @foreach (var workflow in client.Workflows.OrderBy(w => w.CreatedAtUtc))
                 {
-                    <tr>
-                        <td data-label="Workflow">@workflow.Name</td>
+                    <tr data-testid="workflow-row" data-workflow-id="@workflow.Id">
+                        <td data-label="Workflow">
+                            <span data-testid="workflow-name">@workflow.Name</span>
+                            @if (workflow.TriggerType == TriggerType.Webhook)
+                            {
+                                <div class="small mv-subtle text-break">@Model.GenericWebhookUrl(workflow.Id)</div>
+                            }
+                        </td>
                         <td data-label="Handler"><code>@workflow.HandlerKey</code></td>
                         <td data-label="Trigger">@workflow.TriggerType</td>
-                        <td data-label="Vertical">@workflow.Vertical</td>
+                        <td data-label="Channel">@(workflow.TriggerType == TriggerType.MessageReceived ? Channels.DisplayName(workflow.Channel) : "-")</td>
                         <td data-label="Enabled">
-                            <span class="badge @(workflow.IsEnabled ? "bg-success" : "bg-secondary")">@(workflow.IsEnabled ? "Yes" : "No")</span>
+                            <span class="badge @(workflow.IsEnabled ? "bg-success" : "bg-secondary")" data-testid="workflow-enabled">@(workflow.IsEnabled ? "Yes" : "No")</span>
+                        </td>
+                        <td data-label="" class="text-nowrap">
+                            <a class="btn btn-sm btn-outline-primary" asp-action="EditWorkflow" asp-route-id="@workflow.Id" data-testid="edit-workflow">Edit</a>
+                            <form asp-action="ToggleWorkflow" asp-route-id="@workflow.Id" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-sm @(workflow.IsEnabled ? "btn-outline-warning" : "btn-outline-success")" data-testid="toggle-workflow">
+                                    @(workflow.IsEnabled ? "Disable" : "Enable")
+                                </button>
+                            </form>
                         </td>
                     </tr>
                 }
@@ -48,7 +131,7 @@
     else
     {
         <div class="mv-empty">
-            <p>No workflows configured yet for this client.</p>
+            <p>No workflows yet. Add a <strong>Customer messages</strong> workflow for LINE to start answering customers.</p>
         </div>
     }
 </div>

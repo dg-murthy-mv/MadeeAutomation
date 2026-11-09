@@ -6,10 +6,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace MadeeAutomation.WebApi.Controllers;
 
 /// <summary>
-/// Endpoint that a scheduler (e.g. a simple hosted background service, Azure Function Timer,
-/// or even a cron job hitting this URL) calls to fire scheduled workflows such as
-/// LowStockAlertHandler. Keeping this as an HTTP-triggerable endpoint (rather than only
-/// an in-process timer) makes it easy to run outside of the WebApi process later if needed.
+/// Runs a client's scheduled workflows (e.g. LowStockAlertHandler) when called.
+/// A real scheduler that reads the cron in TriggerConfigJson, and protection on this endpoint,
+/// come in Phase 2/3 - until then call it from a scheduled task you trust.
 /// </summary>
 [ApiController]
 [Route("api/scheduled-triggers")]
@@ -41,8 +40,8 @@ public class ScheduledTriggersController : ControllerBase
                 PayloadJson = "{}"
             };
 
-            var success = await _workflowEngine.RunAsync(context, cancellationToken);
-            results.Add(new { workflow.Id, workflow.Name, success });
+            var outcome = await _workflowEngine.RunAsync(context, cancellationToken);
+            results.Add(new { workflow.Id, workflow.Name, status = outcome.Status.ToString(), outcome.ExecutionLogId, outcome.Message });
         }
 
         return Ok(results);

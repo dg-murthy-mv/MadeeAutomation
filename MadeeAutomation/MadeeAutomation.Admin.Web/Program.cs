@@ -1,6 +1,3 @@
-using MadeeAutomation.AI;
-using MadeeAutomation.Application;
-using MadeeAutomation.Connectors;
 using MadeeAutomation.Infrastructure;
 using Serilog;
 
@@ -25,10 +22,10 @@ try
 
     builder.Services.AddControllersWithViews();
 
+    // Admin.Web only manages data (clients, credentials, workflows, logs). It does not run
+    // workflows, so it needs no Claude key and no connector secrets - only the database
+    // and Security:SettingsEncryptionKey (the same key WebApi uses).
     builder.Services.AddInfrastructure(builder.Configuration);
-    builder.Services.AddApplication();
-    builder.Services.AddConnectors();
-    builder.Services.AddClaudeAI();
 
     var app = builder.Build();
 
@@ -49,9 +46,11 @@ try
         name: "default",
         pattern: "{controller=Home}/{action=Index}/{id?}");
 
+    app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
     app.Run();
 }
-catch (Exception ex)
+catch (Exception ex) when (ex is not HostAbortedException)
 {
     Log.Fatal(ex, "MadeeAutomation.Admin.Web terminated unexpectedly");
 }

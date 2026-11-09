@@ -14,32 +14,20 @@ namespace MadeeAutomation.Connectors;
 public class PosFirstApiConnector : IPosFirstConnector
 {
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ICurrentClientService _currentClientService;
+    private readonly IClientSettingsService _settings;
     private readonly ILogger<PosFirstApiConnector> _logger;
 
-    public PosFirstApiConnector(IHttpClientFactory httpClientFactory, ICurrentClientService currentClientService, ILogger<PosFirstApiConnector> logger)
+    public PosFirstApiConnector(IHttpClientFactory httpClientFactory, IClientSettingsService settings, ILogger<PosFirstApiConnector> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _currentClientService = currentClientService;
+        _settings = settings;
         _logger = logger;
     }
 
     private async Task<(string? baseUrl, string? apiKey)> GetSettingsAsync(Guid clientConfigId, CancellationToken cancellationToken)
     {
-        var client = await _currentClientService.GetClientAsync(clientConfigId, cancellationToken);
-        if (client is null) return (null, null);
-
-        try
-        {
-            using var doc = JsonDocument.Parse(client.IntegrationSettingsJson);
-            var baseUrl = doc.RootElement.TryGetProperty("posFirstBaseUrl", out var b) ? b.GetString() : null;
-            var apiKey = doc.RootElement.TryGetProperty("posFirstApiKey", out var k) ? k.GetString() : null;
-            return (baseUrl, apiKey);
-        }
-        catch (JsonException)
-        {
-            return (null, null);
-        }
+        var settings = await _settings.GetAsync(clientConfigId, cancellationToken);
+        return (settings.PosFirstBaseUrl, settings.PosFirstApiKey);
     }
 
     private static bool IsConfigured(string? baseUrl) => !string.IsNullOrWhiteSpace(baseUrl);
