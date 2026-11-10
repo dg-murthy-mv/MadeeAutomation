@@ -1,0 +1,30 @@
+@model BusinessInfoModel
+@{ ViewData["Title"] = "Business information"; }
+
+<div class="mv-page-header">
+    <div>
+        <h2>Business information</h2>
+        <div class="mv-subtle"><a asp-action="Index">@Model.ClientName</a> &middot; what the chat assistant may tell your customers</div>
+    </div>
+</div>
+
+<form asp-action="BusinessInfo" method="post" class="mv-card mv-card-body" style="max-width: 820px" autocomplete="off">
+    <div asp-validation-summary="ModelOnly" class="text-danger small"></div>
+    <div class="mb-3">
+        <label asp-for="KnowledgeBaseText" class="form-label"></label>
+        <textarea asp-for="KnowledgeBaseText" class="form-control" rows="12" dir="auto" data-testid="business-info-text"
+                  placeholder="Delivery: Ban Chang only, free over 300 THB&#10;Payment: cash or PromptPay&#10;Parking: in front of the shop"></textarea>
+        <span asp-validation-for="KnowledgeBaseText" class="text-danger small"></span>
+        <div class="form-text">
+            Write short, clear lines - one fact per line works best. The assistant answers only from this text, your menu and your opening hours;
+            other questions are passed to you. Opening hours and prices have their own pages, so you don't need to repeat them here.
+        </div>
+    </div>
+    <div class="mb-3">
+        <label asp-for="StaffAlertEmail" class="form-label"></label>
+        <input asp-for="StaffAlertEmail" class="form-control" type="email" data-testid="business-info-email" style="max-width: 420px" />
+        <span asp-validation-for="StaffAlertEmail" class="text-danger small" data-testid="business-info-email-error"></span>
+        <div class="form-text">Every new order, and every message the assistant could not answer, is emailed here.</div>
+    </div>
+    <button type="submit" class="btn btn-primary" data-testid="save-business-info">Save</button>
+</form>

@@ -71,6 +71,8 @@ public class AdminAuthService
             new(TimeZoneClaim, string.IsNullOrWhiteSpace(user.TimeZoneId) ? "Asia/Bangkok" : user.TimeZoneId)
         };
         if (user.MustChangePassword) claims.Add(new Claim(MustChangeClaim, "1"));
+        // A client's portal user: every page they open is limited to this one client.
+        if (user.ClientConfigId is { } clientId) claims.Add(new Claim(Security.ClientAccess.ClientClaim, clientId.ToString()));
 
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
         await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, new AuthenticationProperties

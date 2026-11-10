@@ -1,5 +1,6 @@
 using System.Globalization;
 using MadeeAutomation.Admin.Web.Models;
+using MadeeAutomation.Admin.Web.Security;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Domain.Entities;
 using MadeeAutomation.Domain.Regional;
@@ -7,8 +8,11 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MadeeAutomation.Admin.Web.Controllers;
 
-/// <summary>A client's weekly opening hours (in the client's time zone) and closed dates.</summary>
-public class HoursController : Controller
+/// <summary>
+/// A client's weekly opening hours (in the client's time zone) and closed dates.
+/// Used by staff (any client) and by a client's portal user (their own business only).
+/// </summary>
+public class HoursController : ClientScopedController
 {
     private static readonly DayOfWeek[] MondayFirst =
     {
@@ -27,7 +31,7 @@ public class HoursController : Controller
 
     public async Task<IActionResult> Index(Guid clientConfigId)
     {
-        var client = await _clients.GetWithWorkflowsAsync(clientConfigId);
+        var client = await _clients.GetWithWorkflowsAsync(Scope(clientConfigId));
         if (client is null) return NotFound();
 
         var hours = await _profile.GetHoursAsync(client.Id);
@@ -52,7 +56,7 @@ public class HoursController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Save(Guid clientConfigId, List<DayHoursModel> days)
     {
-        var client = await _clients.GetWithWorkflowsAsync(clientConfigId);
+        var client = await _clients.GetWithWorkflowsAsync(Scope(clientConfigId));
         if (client is null) return NotFound();
 
         var rows = new List<OpeningHours>();
@@ -103,7 +107,7 @@ public class HoursController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AddClosedDate(Guid clientConfigId, string? date, string? reason)
     {
-        var client = await _clients.GetWithWorkflowsAsync(clientConfigId);
+        var client = await _clients.GetWithWorkflowsAsync(Scope(clientConfigId));
         if (client is null) return NotFound();
 
         var today = DateOnly.FromDateTime(LocalTime.ToLocal(DateTime.UtcNow, client.TimeZoneId));
@@ -128,7 +132,8 @@ public class HoursController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteClosedDate(Guid clientConfigId, Guid id)
     {
-        await _profile.DeleteClosedDateAsync(id);
+        clientConfigId = Scope(clientConfigId);
+        await _profile.DeleteClosedDateAsync(clientConfigId, id);   // only removes a date of THIS client
         TempData["Success"] = "Closed date removed.";
         return RedirectToAction(nameof(Index), new { clientConfigId });
     }

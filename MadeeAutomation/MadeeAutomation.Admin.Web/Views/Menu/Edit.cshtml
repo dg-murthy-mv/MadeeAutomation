@@ -34,6 +34,12 @@
         <input asp-for="Aliases" class="form-control" dir="auto" data-testid="item-aliases" />
         <div class="form-text">Comma-separated. Other ways customers write it, in any language.</div>
     </div>
+    <div class="mb-3">
+        <label asp-for="DailyLimit" class="form-label"></label>
+        <input asp-for="DailyLimit" class="form-control" type="number" step="1" min="1" inputmode="numeric" data-testid="item-daily-limit" placeholder="No limit" style="max-width: 12rem" />
+        <span asp-validation-for="DailyLimit" class="text-danger small" data-testid="item-daily-limit-error"></span>
+        <div class="form-text">The most the bot may take orders for in one day. Leave blank for no limit.</div>
+    </div>
     <div class="row g-2 mb-3 align-items-end">
         <div class="col-6">
             <label asp-for="SortOrder" class="form-label"></label>

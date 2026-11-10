@@ -4,7 +4,8 @@ using System.Text.RegularExpressions;
 namespace MadeeAutomation.Domain.Regional;
 
 /// <summary>A menu entry the order logic works with - from the structured menu or parsed from old free text.</summary>
-public record MenuLine(string Name, decimal? Price, IReadOnlyList<string>? Aliases = null, bool IsAvailable = true, string? Category = null);
+public record MenuLine(string Name, decimal? Price, IReadOnlyList<string>? Aliases = null, bool IsAvailable = true, string? Category = null,
+    Guid? Id = null, int? DailyLimit = null);
 
 /// <summary>
 /// Turns the client's menu into MenuLines: the structured menu (MenuItems) when there is one,
@@ -44,7 +45,7 @@ public static class MenuCatalog
     public static List<MenuLine> Build(IReadOnlyCollection<Entities.MenuItem>? items, string? legacyMenuText) =>
         items is { Count: > 0 }
             ? items.OrderBy(i => i.Category ?? "").ThenBy(i => i.SortOrder).ThenBy(i => i.Name)
-                .Select(i => new MenuLine(i.Name, i.Price, i.AliasList.ToList(), i.IsAvailable, i.Category)).ToList()
+                .Select(i => new MenuLine(i.Name, i.Price, i.AliasList.ToList(), i.IsAvailable, i.Category, i.Id, i.DailyLimit)).ToList()
             : Parse(legacyMenuText);
 
     /// <summary>

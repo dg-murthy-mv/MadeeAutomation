@@ -148,6 +148,7 @@ public class MessageAssistant
         sb.AppendLine("- If a question is not covered by BUSINESS INFORMATION, set canAnswer to false and needsHuman to true, and reply that a staff member will get back to them soon.");
         sb.AppendLine("- Set needsHuman to true for complaints, refunds, or anything you cannot handle.");
         sb.AppendLine("- For orders, use the MENU names exactly when an item clearly matches. You may tell a customer the price of an item exactly as written in the MENU, but never calculate a total - the system adds the correct total.");
+        sb.AppendLine("- Some MENU items have a daily limit. Never take an order for more than what is left for today; tell the customer how many are left instead.");
         sb.AppendLine("- requestedDeliveryTime: when the customer gives a delivery/pick-up time, resolve it against the BUSINESS CLOCK to local \"yyyy-MM-ddTHH:mm\" (e.g. \"tomorrow 9am\" -> next day 09:00). Use null if no time was given. Put the customer's own words in requestedDeliveryText.");
         sb.AppendLine($"- When intent is \"order\" and there is at least one item, the reply must confirm the items and include the exact text {OrderRefPlaceholder} where the order reference goes.");
         sb.AppendLine("- A greeting like \"hello\" is NOT an order.");
@@ -182,7 +183,13 @@ public class MessageAssistant
                 {
                     var aliases = m.Aliases is { Count: > 0 } ? $" (customers may also say: {string.Join(", ", m.Aliases)})" : "";
                     var price = m.Price is { } p ? ": " + Money.Format(p, currency) : "";
-                    sb.AppendLine($"- {m.Name}{price}{aliases}");
+                    var limit = profile.LeftToday(m) switch
+                    {
+                        null => "",
+                        0 => $" [daily limit {m.DailyLimit} - NONE left for today; can still be ordered for another day]",
+                        var left => $" [daily limit {m.DailyLimit} - {left} left for today]"
+                    };
+                    sb.AppendLine($"- {m.Name}{price}{aliases}{limit}");
                 }
             }
             if (soldOut.Count > 0)

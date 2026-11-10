@@ -28,12 +28,16 @@ public class ClientsController : Controller
     private readonly IApiService _api;
     private readonly ILogger<ClientsController> _logger;
     private readonly IBusinessProfileRepository _profile;
+    private readonly IOrderRepository _orders;
+    private readonly IAdminUserRepository _users;
 
     public ClientsController(IClientRepository clients, IWorkflowRepository workflows, IClientSettingsService settings,
         IConfiguration configuration, LineCredentialChecker lineChecker, IApiService api, ILogger<ClientsController> logger,
-        IBusinessProfileRepository profile)
+        IBusinessProfileRepository profile, IOrderRepository orders, IAdminUserRepository users)
     {
         _profile = profile;
+        _orders = orders;
+        _users = users;
         _clients = clients;
         _workflows = workflows;
         _settings = settings;
@@ -105,6 +109,8 @@ public class ClientsController : Controller
         model.MenuItemCount = menu.Count;
         model.SoldOutCount = menu.Count(m => !m.IsAvailable);
         model.HoursStatus = hoursStatus;
+        model.NewOrderCount = await _orders.CountAsync(client.Id, OrderStatus.New);
+        model.PortalUsers = await _users.ListForClientAsync(client.Id);
         try
         {
             model.Settings = _settings.Read(client.IntegrationSettingsJson);

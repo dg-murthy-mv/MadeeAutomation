@@ -11,6 +11,8 @@
             <input asp-for="DisplayName" class="form-control" />
             <span asp-validation-for="DisplayName" class="text-danger small"></span>
         </div>
+        @if (!ClientAccess.IsClientUser(User))
+        {
         <div class="mb-3">
             <label asp-for="TimeZoneId" class="form-label"></label>
             <select asp-for="TimeZoneId" class="form-select">
@@ -22,6 +24,11 @@
             <div class="form-text">Used on admin-only pages such as Admin users. Client pages (logs, inbound events) always use the client's own time zone.</div>
             <span asp-validation-for="TimeZoneId" class="text-danger small"></span>
         </div>
+        }
+        else
+        {
+            <div class="form-text mb-3">Times are shown in your business's time zone.</div>
+        }
         <button type="submit" class="btn btn-primary w-100" data-testid="save-my-account">Save</button>
     </form>
 

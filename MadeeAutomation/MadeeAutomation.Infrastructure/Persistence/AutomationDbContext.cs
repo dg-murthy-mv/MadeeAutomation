@@ -21,6 +21,8 @@ public class AutomationDbContext : DbContext
     public DbSet<MenuItem> MenuItems => Set<MenuItem>();
     public DbSet<OpeningHours> OpeningHours => Set<OpeningHours>();
     public DbSet<ClosedDate> ClosedDates => Set<ClosedDate>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -48,6 +50,36 @@ public class AutomationDbContext : DbContext
             entity.Property(u => u.PasswordHash).HasMaxLength(500).IsRequired();
             entity.Property(u => u.SecurityStamp).HasMaxLength(64).IsRequired();
             entity.Property(u => u.TimeZoneId).HasMaxLength(64).IsRequired();
+            entity.HasIndex(u => u.ClientConfigId);
+            entity.Ignore(u => u.IsClientUser);
+        });
+
+        modelBuilder.Entity<Order>(entity =>
+        {
+            entity.ToTable("Orders");
+            entity.HasIndex(o => new { o.ClientConfigId, o.OrderNumber }).IsUnique();
+            entity.HasIndex(o => new { o.ClientConfigId, o.OrderDate });
+            entity.HasIndex(o => new { o.ClientConfigId, o.CreatedAtUtc });
+            entity.Property(o => o.Reference).HasMaxLength(100).IsRequired();
+            entity.Property(o => o.PosOrderId).HasMaxLength(100);
+            entity.Property(o => o.Channel).HasMaxLength(20).IsRequired();
+            entity.Property(o => o.CustomerId).HasMaxLength(200);
+            entity.Property(o => o.CustomerName).HasMaxLength(200);
+            entity.Property(o => o.Currency).HasMaxLength(3);
+            entity.Property(o => o.Total).HasPrecision(18, 2);
+            entity.Property(o => o.RequestedForText).HasMaxLength(200);
+            entity.Property(o => o.CustomerNote).HasMaxLength(1000);
+            entity.Property(o => o.StatusChangedBy).HasMaxLength(200);
+            entity.HasMany(o => o.Items).WithOne().HasForeignKey(i => i.OrderId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OrderItem>(entity =>
+        {
+            entity.ToTable("OrderItems");
+            entity.HasIndex(i => i.MenuItemId);
+            entity.Property(i => i.Name).HasMaxLength(200).IsRequired();
+            entity.Property(i => i.UnitPrice).HasPrecision(18, 2);
+            entity.Property(i => i.LineTotal).HasPrecision(18, 2);
         });
 
         modelBuilder.Entity<MenuItem>(entity =>

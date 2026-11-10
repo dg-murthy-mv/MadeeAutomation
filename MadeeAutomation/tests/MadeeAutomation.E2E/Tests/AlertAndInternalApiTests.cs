@@ -40,8 +40,10 @@ public class AlertAndInternalApiTests
         Assert.That(log["ResultSummary"], Is.EqualTo("Fallback reply sent; staff alerted."));
         Assert.That(GlobalSetup.Fakes.OrdersFor(user), Is.Empty);
 
-        var mail = await Mailbox.WaitForAsync("owner@bakery.test");
-        var alert = mail.Last(m => m.Body.Contains(user));
+        // The bakery owner also gets "New order" emails from other tests - wait for THIS customer's alert.
+        var mail = await Eventually.GetAsync(() => Mailbox.To("owner@bakery.test").Where(m => m.Body.Contains(user)).ToList(),
+            m => m.Count > 0, 15000, "alert email for t42");
+        var alert = mail.Last();
         Assert.That(alert.Subject, Does.Contain("E2E Bakery needs attention"));
         Assert.That(alert.Body, Does.Contain("please follow up"));
     }

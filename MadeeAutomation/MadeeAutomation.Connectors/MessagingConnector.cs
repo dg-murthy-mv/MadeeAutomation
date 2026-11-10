@@ -174,6 +174,38 @@ public class MessagingConnector : IMessagingConnector
         return MessageSendResult.Fail("send", $"{(int)response.StatusCode} {body}");
     }
 
+    // ---------------- Customer display name ----------------
+
+    public async Task<string?> GetCustomerNameAsync(Guid clientConfigId, string channel, string customerId, CancellationToken cancellationToken = default)
+    {
+        // LINE only for now: WhatsApp sends the name inside the webhook, Messenger needs an extra permission.
+        if (channel != Channels.Line || string.IsNullOrWhiteSpace(customerId)) return null;
+
+        try
+        {
+            var settings = await _settings.GetAsync(clientConfigId, cancellationToken);
+            if (!settings.HasLineToken) return null;
+
+            var client = _httpClientFactory.CreateClient("LineApi");
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(LineBase, $"v2/bot/profile/{Uri.EscapeDataString(customerId)}"));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.LineChannelAccessToken);
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+            using var response = await client.SendAsync(request, timeout.Token);
+            if (!response.IsSuccessStatusCode) return null;
+
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(timeout.Token));
+            var name = doc.RootElement.TryGetProperty("displayName", out var n) ? n.GetString() : null;
+            return string.IsNullOrWhiteSpace(name) ? null : (name.Length > 200 ? name[..200] : name).Trim();
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Could not read the LINE display name of {CustomerId} for client {ClientConfigId}", customerId, clientConfigId);
+            return null;
+        }
+    }
+
     // ---------------- Internal ops notifications (MadeeAutomation's own WhatsApp number) ----------------
 
     public async Task<MessageSendResult> SendInternalNotificationAsync(string message, CancellationToken cancellationToken = default)

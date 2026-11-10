@@ -24,7 +24,10 @@ public class AdminUserRepository : IAdminUserRepository
     }
 
     public Task<List<AdminUser>> ListAsync(CancellationToken cancellationToken = default) =>
-        _db.AdminUsers.AsNoTracking().OrderBy(u => u.DisplayName).ToListAsync(cancellationToken);
+        _db.AdminUsers.AsNoTracking().Where(u => u.ClientConfigId == null).OrderBy(u => u.DisplayName).ToListAsync(cancellationToken);
+
+    public Task<List<AdminUser>> ListForClientAsync(Guid clientConfigId, CancellationToken cancellationToken = default) =>
+        _db.AdminUsers.AsNoTracking().Where(u => u.ClientConfigId == clientConfigId).OrderBy(u => u.DisplayName).ToListAsync(cancellationToken);
 
     public async Task AddAsync(AdminUser user, CancellationToken cancellationToken = default)
     {

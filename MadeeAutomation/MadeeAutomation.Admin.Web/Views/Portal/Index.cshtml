@@ -1,0 +1,66 @@
+@model PortalHomeModel
+@{
+    var client = Model.Client;
+    ViewData["Title"] = client.ClientName;
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2 data-testid="portal-client-name">@client.ClientName</h2>
+        <div class="mv-subtle">Your chat assistant &middot; @client.TimeZoneId (now @Model.LocalNowText)</div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-12 col-md-4">
+        <div class="mv-card mv-card-body h-100" data-testid="portal-orders-card">
+            <h5 class="mv-section-title">Orders</h5>
+            <div class="display-6 fw-semibold" data-testid="portal-new-orders">@Model.NewOrderCount</div>
+            <div class="mv-subtle">new order(s) waiting for you</div>
+            <a class="btn btn-primary mt-3" asp-controller="Orders" asp-action="Index" data-testid="portal-open-orders">Open orders</a>
+        </div>
+    </div>
+    <div class="col-12 col-md-4">
+        <div class="mv-card mv-card-body h-100" data-testid="portal-hours-card">
+            <h5 class="mv-section-title">Opening hours</h5>
+            <div data-testid="portal-hours-status">@Model.Hours.StatusText</div>
+            @if (!Model.Hours.HoursConfigured) { <div class="small mv-subtle">Set your hours so the assistant can tell customers when you are open.</div> }
+            <a class="btn btn-outline-primary mt-3" asp-controller="Hours" asp-action="Index" data-testid="portal-open-hours">Hours &amp; closed dates</a>
+        </div>
+    </div>
+    <div class="col-12 col-md-4">
+        <div class="mv-card mv-card-body h-100" data-testid="portal-menu-card">
+            <h5 class="mv-section-title">Menu</h5>
+            <div><span data-testid="portal-menu-count">@Model.MenuItemCount</span> item(s)
+                @if (Model.SoldOutCount > 0) { <span class="badge bg-warning text-dark ms-1" data-testid="portal-sold-out">@Model.SoldOutCount sold out</span> }
+            </div>
+            <div class="small mv-subtle">Prices, sold-out items and daily limits.</div>
+            <a class="btn btn-outline-primary mt-3" asp-controller="Menu" asp-action="Index" data-testid="portal-open-menu">Menu</a>
+        </div>
+    </div>
+</div>
+
+<div class="mv-card mv-card-body mb-4">
+    <h5 class="mv-section-title">New orders</h5>
+    @if (Model.LatestNewOrders.Count == 0)
+    {
+        <div class="mv-subtle" data-testid="portal-no-new-orders">No new orders right now.</div>
+    }
+    else
+    {
+        @foreach (var order in Model.LatestNewOrders)
+        {
+            <partial name="_OrderCard" model='(order, client, "open", true)' />
+        }
+        @if (Model.NewOrderCount > Model.LatestNewOrders.Count)
+        {
+            <a asp-controller="Orders" asp-action="Index" asp-route-show="new">See all @Model.NewOrderCount new orders</a>
+        }
+    }
+</div>
+
+<div class="mv-card mv-card-body">
+    <h5 class="mv-section-title">Business information</h5>
+    <div class="mv-subtle">Delivery areas, payment, parking and other things customers ask. The assistant answers only from what you write here, your menu and your opening hours. Anything else is passed to you.</div>
+    <a class="btn btn-outline-primary mt-3" asp-action="BusinessInfo" data-testid="portal-open-business-info">Edit business information</a>
+</div>

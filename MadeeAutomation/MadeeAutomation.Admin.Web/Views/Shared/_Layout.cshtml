@@ -13,7 +13,7 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark mv-navbar sticky-top">
         <div class="container-fluid px-3 px-md-4" style="max-width:1200px; margin:0 auto;">
-            <a class="navbar-brand d-flex align-items-center gap-2" asp-controller="Clients" asp-action="Index">
+            <a class="navbar-brand d-flex align-items-center gap-2" asp-controller="Home" asp-action="Index">
                 <svg width="26" height="26" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                     <defs>
                         <linearGradient id="mvLogoGrad" x1="0" y1="0" x2="1" y2="1">
@@ -40,8 +40,20 @@
             {
                 <div class="collapse navbar-collapse" id="mvNav">
                     <div class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
-                        <a class="nav-link" asp-controller="Clients" asp-action="Index">Clients</a>
-                        <a class="nav-link" asp-controller="AdminUsers" asp-action="Index" data-testid="nav-admins">Admin users</a>
+                        @if (ClientAccess.IsClientUser(User))
+                        {
+                            @* A client's own user: only their own business. *@
+                            <a class="nav-link" asp-controller="Portal" asp-action="Index" data-testid="nav-portal-home">Home</a>
+                            <a class="nav-link" asp-controller="Orders" asp-action="Index" data-testid="nav-orders">Orders</a>
+                            <a class="nav-link" asp-controller="Menu" asp-action="Index" data-testid="nav-menu">Menu</a>
+                            <a class="nav-link" asp-controller="Hours" asp-action="Index" data-testid="nav-hours">Opening hours</a>
+                            <a class="nav-link" asp-controller="Portal" asp-action="BusinessInfo" data-testid="nav-business-info">Business info</a>
+                        }
+                        else
+                        {
+                            <a class="nav-link" asp-controller="Clients" asp-action="Index">Clients</a>
+                            <a class="nav-link" asp-controller="AdminUsers" asp-action="Index" data-testid="nav-admins">Admin users</a>
+                        }
                         <a class="nav-link mv-nav-user" asp-controller="Account" asp-action="MyAccount" data-testid="nav-user">@User.Identity.Name</a>
                         <a class="nav-link" asp-controller="Account" asp-action="ChangePassword" data-testid="nav-change-password">Change password</a>
                         <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">

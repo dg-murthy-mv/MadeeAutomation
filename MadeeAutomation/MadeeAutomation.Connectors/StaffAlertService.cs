@@ -56,6 +56,7 @@ public class StaffAlertService : IStaffAlertService
                 }
                 else
                 {
+                    failed.Add("email: the Email settings are missing in WebApi");
                     _logger.LogWarning("Staff alert email for {ClientCode} skipped - Email:* is not configured in WebApi", client.ClientCode);
                 }
             }
@@ -65,10 +66,51 @@ public class StaffAlertService : IStaffAlertService
         if (internalResult.Mode != "mock")
             (internalResult.Success ? delivered : failed).Add(internalResult.Success ? "internal WhatsApp" : $"internal WhatsApp: {internalResult.Error}");
 
-        if (delivered.Count > 0) return MessageSendResult.Ok(string.Join(", ", delivered));
+        if (delivered.Count > 0) return MessageSendResult.Ok(string.Join(", ", delivered) + (failed.Count > 0 ? " - NOT sent: " + string.Join("; ", failed) : ""));
         if (failed.Count > 0) return MessageSendResult.Fail("alert", string.Join("; ", failed));
 
         _logger.LogWarning("Staff alert (no alert channel set up - set a staff LINE user id or email on the client): {Message}", message);
         return MessageSendResult.Ok("log only - no staff alert channel set up");
+    }
+
+    public async Task<MessageSendResult> SendNewOrderAsync(Guid clientConfigId, string subject, string message, CancellationToken cancellationToken = default)
+    {
+        var client = await _clients.GetClientAsync(clientConfigId, cancellationToken);
+        if (client is null) return MessageSendResult.Fail("order message", "Client not found.");
+
+        var delivered = new List<string>();
+        var failed = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(client.StaffAlertLineUserId))
+        {
+            var r = await _messaging.SendAsync(new OutboundMessage
+            {
+                ClientConfigId = client.Id,
+                Channel = Channels.Line,
+                To = client.StaffAlertLineUserId.Trim(),
+                Text = "🛒 " + message
+            }, cancellationToken);
+            (r.Success ? delivered : failed).Add(r.Success ? $"LINE {r.Mode}" : $"LINE: {r.Error}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(client.StaffAlertEmail))
+        {
+            if (_email.IsConfigured)
+            {
+                var r = await _email.SendAsync(client.StaffAlertEmail.Trim(), subject, message, cancellationToken);
+                (r.Success ? delivered : failed).Add(r.Success ? $"email {r.Mode}" : $"email: {r.Error}");
+            }
+            else
+            {
+                failed.Add("email: the Email settings are missing in WebApi");
+                _logger.LogWarning("New-order email for {ClientCode} skipped - Email:* is not configured in WebApi", client.ClientCode);
+            }
+        }
+
+        if (delivered.Count > 0) return MessageSendResult.Ok(string.Join(", ", delivered) + (failed.Count > 0 ? " - NOT sent: " + string.Join("; ", failed) : ""));
+        if (failed.Count > 0) return MessageSendResult.Fail("order message", string.Join("; ", failed));
+
+        _logger.LogWarning("New order for {ClientCode} was not sent to staff - no staff LINE user id or email is set. It is on the Orders page only.", client.ClientCode);
+        return MessageSendResult.Ok("Orders page only - no staff LINE user id or email set");
     }
 }

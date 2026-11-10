@@ -1,0 +1,30 @@
+@model ClientUserFormModel
+@{ ViewData["Title"] = "Add portal user"; }
+
+<div class="mv-page-header">
+    <div>
+        <h2>Add portal user</h2>
+        <div class="mv-subtle">
+            For <strong>@Model.ClientName</strong>. They get a temporary password and must choose their own at first sign-in.
+            They can only see and change @Model.ClientName - never another client, credentials, workflows or logs.
+        </div>
+    </div>
+    <a asp-controller="Clients" asp-action="Details" asp-route-id="@Model.ClientConfigId" class="btn btn-outline-secondary">&larr; Back</a>
+</div>
+
+<div class="mv-card mv-card-body" style="max-width: 560px;">
+    <form asp-action="Create" method="post" data-testid="portal-user-form" autocomplete="off">
+        <input type="hidden" asp-for="ClientConfigId" />
+        <div class="mb-3">
+            <label asp-for="DisplayName" class="form-label"></label>
+            <input asp-for="DisplayName" class="form-control" />
+            <span asp-validation-for="DisplayName" class="text-danger small"></span>
+        </div>
+        <div class="mb-3">
+            <label asp-for="Email" class="form-label"></label>
+            <input asp-for="Email" class="form-control" autocomplete="off" />
+            <span asp-validation-for="Email" class="text-danger small" data-testid="error-Email"></span>
+        </div>
+        <button type="submit" class="btn btn-primary" data-testid="save-portal-user">Add portal user</button>
+    </form>
+</div>

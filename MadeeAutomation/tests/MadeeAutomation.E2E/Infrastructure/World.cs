@@ -24,6 +24,10 @@ public record SeededClient(Guid Id, string Code, string LineSecret, Guid? Workfl
 ///             hours Mon-Sat 07:00-14:00 + 16:00-22:00, Sunday closed, closed date in 10 days ("Diwali")
 ///   menuedit  Thailand, old text menu only -> menu page CRUD + import
 ///   hoursedit UAE / AED / Asia/Dubai, no hours -> hours page UI
+///   cakeshop  Thailand, NO POS, staff LINE user + staff email -> "New order" messages, own ORD- references,
+///             daily limit (Birthday cake: 3 a day)
+///   portalcafe Thailand, NO POS and no staff channel; has client portal users (password World.PortalPassword):
+///             owner@portalcafe.test, second@portalcafe.test (deactivation test)
 ///
 /// Admin accounts (password for all: World.AdminPassword)
 ///   admin@e2e.test          used by every Admin UI test
@@ -44,6 +48,13 @@ public static class World
     public static SeededClient SpiceCafe { get; private set; } = null!;
     public static SeededClient MenuEdit { get; private set; } = null!;
     public static SeededClient HoursEdit { get; private set; } = null!;
+    public static SeededClient CakeShop { get; private set; } = null!;
+    public static SeededClient PortalCafe { get; private set; } = null!;
+
+    public const string PortalEmail = "owner@portalcafe.test";
+    public const string PortalSecondEmail = "second@portalcafe.test";
+    public const string PortalPassword = "E2ePortal2026x";
+    public static readonly string CakeShopStaffLineId = "U" + new string('c', 32);
 
     public const string AdminEmail = "admin@e2e.test";
     public const string AdminPassword = "E2eAdmin2026x";
@@ -139,6 +150,21 @@ public static class World
             Encrypted(Line("hoursedit-secret", "hoursedit-token")), "hoursedit-secret", withWorkflow: true,
             country: "AE", currency: "AED", timeZone: "Asia/Dubai");
 
+        CakeShop = await AddClientAsync(db, "cakeshop", "E2E Cake Shop", ClientStatus.Active,
+            Encrypted(Line("cakeshop-secret", "cakeshop-token")), "cakeshop-secret", withWorkflow: true,
+            kb: "Delivery: Ban Chang only.", staffEmail: "owner@cakeshop.test", staffLine: CakeShopStaffLineId);
+        await AddMenuItemAsync(db, CakeShop.Id, "Birthday cake", "Cakes", 500m, null, true, 0, dailyLimit: 3);
+        await AddMenuItemAsync(db, CakeShop.Id, "Thai tea", "Drinks", 55m, "tea", true, 1);
+        await AddMenuItemAsync(db, CakeShop.Id, "Samosa", "Snacks", 25m, null, true, 2);
+
+        PortalCafe = await AddClientAsync(db, "portalcafe", "E2E Portal Cafe", ClientStatus.Active,
+            Encrypted(Line("portalcafe-secret", "portalcafe-token")), "portalcafe-secret", withWorkflow: true,
+            kb: "Delivery: Ban Chang only.");
+        await AddMenuItemAsync(db, PortalCafe.Id, "Thai tea", "Drinks", 55m, "tea", true, 0);
+        await AddMenuItemAsync(db, PortalCafe.Id, "Samosa", "Snacks", 25m, null, true, 1);
+        await AddAdminAsync(db, PortalEmail, "Portal Owner", PortalPassword, PortalCafe.Id);
+        await AddAdminAsync(db, PortalSecondEmail, "Second User", PortalPassword, PortalCafe.Id);
+
         // Old rows hold plain JSON - the app must still read them (and encrypt on the next save).
         Legacy = await AddClientAsync(db, "legacy", "E2E Legacy", ClientStatus.Active,
             Line("legacy-secret", "legacy-token").ToJson(), "legacy-secret", withWorkflow: true);
@@ -146,13 +172,14 @@ public static class World
 
     private static async Task<SeededClient> AddClientAsync(TestDatabase db, string code, string name, ClientStatus status,
         string settingsValue, string secret, bool withWorkflow, string? kb = null, string? menu = null, string? staffEmail = null,
-        string country = "TH", string currency = "THB", string timeZone = "Asia/Bangkok")
+        string country = "TH", string currency = "THB", string timeZone = "Asia/Bangkok", string? staffLine = null)
     {
         var id = Guid.NewGuid();
         await db.ExecAsync(@"
             INSERT INTO dbo.ClientConfigs (Id, ClientName, ClientCode, Country, TimeZoneId, Currency, Vertical, Status,
-                IntegrationSettingsJson, MerkaiIntegrationEnabled, PosFirstIntegrationEnabled, CreatedAtUtc, KnowledgeBaseText, MenuText, StaffAlertEmail)
-            VALUES (@id, @name, @code, @country, @tz, @currency, 1, @status, @settings, 0, 1, SYSUTCDATETIME(), @kb, @menu, @staff);",
+                IntegrationSettingsJson, MerkaiIntegrationEnabled, PosFirstIntegrationEnabled, CreatedAtUtc, KnowledgeBaseText, MenuText, StaffAlertEmail, StaffAlertLineUserId)
+            VALUES (@id, @name, @code, @country, @tz, @currency, 1, @status, @settings, 0, 1, SYSUTCDATETIME(), @kb, @menu, @staff, @staffLine);",
+            ("@staffLine", staffLine),
             ("@id", id), ("@name", name), ("@code", code), ("@status", (int)status), ("@settings", settingsValue),
             ("@kb", kb), ("@menu", menu), ("@staff", staffEmail), ("@country", country), ("@tz", timeZone), ("@currency", currency));
 
@@ -171,10 +198,11 @@ public static class World
     }
 
     private static Task AddMenuItemAsync(TestDatabase db, Guid clientId, string name, string category, decimal price,
-        string? aliases, bool available, int sort) =>
+        string? aliases, bool available, int sort, int? dailyLimit = null) =>
         db.ExecAsync(@"
-            INSERT INTO dbo.MenuItems (Id, ClientConfigId, Name, Category, Price, Aliases, IsAvailable, SortOrder, CreatedAtUtc)
-            VALUES (NEWID(), @c, @name, @cat, @price, @aliases, @avail, @sort, SYSUTCDATETIME());",
+            INSERT INTO dbo.MenuItems (Id, ClientConfigId, Name, Category, Price, Aliases, IsAvailable, SortOrder, CreatedAtUtc, DailyLimit)
+            VALUES (NEWID(), @c, @name, @cat, @price, @aliases, @avail, @sort, SYSUTCDATETIME(), @limit);",
+            ("@limit", dailyLimit),
             ("@c", clientId), ("@name", name), ("@cat", category), ("@price", price), ("@aliases", aliases),
             ("@avail", available), ("@sort", sort));
 
@@ -182,14 +210,15 @@ public static class World
         db.ExecAsync("INSERT INTO dbo.OpeningHours (Id, ClientConfigId, DayOfWeek, OpenTime, CloseTime) VALUES (NEWID(), @c, @d, @o, @cl);",
             ("@c", clientId), ("@d", dayOfWeek), ("@o", TimeSpan.Parse(open)), ("@cl", TimeSpan.Parse(close)));
 
-    private static async Task AddAdminAsync(TestDatabase db, string email, string name, string password)
+    private static async Task AddAdminAsync(TestDatabase db, string email, string name, string password, Guid? clientConfigId = null)
     {
         var user = new AdminUser { Email = email, DisplayName = name };
         var hash = new Microsoft.AspNetCore.Identity.PasswordHasher<AdminUser>().HashPassword(user, password);
         await db.ExecAsync(@"
             INSERT INTO dbo.AdminUsers (Id, Email, DisplayName, PasswordHash, SecurityStamp, IsActive, MustChangePassword,
-                FailedLoginCount, CreatedAtUtc)
-            VALUES (@id, @email, @name, @hash, @stamp, 1, 0, 0, SYSUTCDATETIME());",
+                FailedLoginCount, CreatedAtUtc, ClientConfigId)
+            VALUES (@id, @email, @name, @hash, @stamp, 1, 0, 0, SYSUTCDATETIME(), @client);",
+            ("@client", clientConfigId),
             ("@id", user.Id), ("@email", email), ("@name", name), ("@hash", hash), ("@stamp", user.SecurityStamp));
     }
 }

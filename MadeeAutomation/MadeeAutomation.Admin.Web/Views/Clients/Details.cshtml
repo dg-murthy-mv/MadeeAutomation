@@ -83,7 +83,7 @@
     <div class="mv-channel mb-0">
         <div class="mv-channel-head">
             <strong>POSFirst</strong>
-            @{ Status(s?.HasPosFirst == true, "Connected", "Not set - orders are mock (MOCK-...)", "posfirst-status"); }
+            @{ Status(s?.HasPosFirst == true, "Connected", "No POS - orders stay on the Orders page (ORD-...)", "posfirst-status"); }
         </div>
     </div>
 </div>
@@ -107,6 +107,63 @@
             <a class="btn btn-sm btn-outline-primary mt-2" asp-controller="Hours" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-hours">Opening hours</a>
         </div>
     </div>
+</div>
+
+<div class="mv-card mv-card-body mb-4" data-testid="orders-card">
+    <h5 class="mv-section-title">Orders</h5>
+    <div>
+        <strong data-testid="new-order-count">@Model.NewOrderCount</strong> new order(s) waiting for staff.
+        Every order the bot takes is saved here@(s?.HasPosFirst == true ? " and sent to POSFirst" : "").
+    </div>
+    @if (Model.OrdersOnlyOnPage)
+    {
+        <div class="alert alert-warning mt-2 mb-0" data-testid="orders-only-warning">
+            This client has <strong>no POS</strong> and <strong>no staff LINE user id or staff email</strong>.
+            Nobody is told when an order comes in - it only appears on the Orders page. Set one under <em>Edit client &amp; credentials</em>.
+        </div>
+    }
+    <a class="btn btn-sm btn-outline-primary mt-2" asp-controller="Orders" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-orders">Orders</a>
+</div>
+
+<div class="mv-card mv-card-body mb-4" data-testid="portal-users-card">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+        <div>
+            <h5 class="mv-section-title mb-1">Client portal users</h5>
+            <div class="small mv-subtle">
+                People at @client.ClientName who can sign in and change their own menu, sold-out items, opening hours, closed dates and business information, and see their orders.
+                They sign in at <code>@($"{Context.Request.Scheme}://{Context.Request.Host}")</code> and can never see another client.
+            </div>
+        </div>
+        <a class="btn btn-sm btn-primary" asp-controller="ClientUsers" asp-action="Create" asp-route-clientConfigId="@client.Id" data-testid="new-portal-user">+ Add portal user</a>
+    </div>
+    @if (Model.PortalUsers.Count == 0)
+    {
+        <div class="mv-subtle mt-2" data-testid="no-portal-users">No portal users yet - we make the changes for this client.</div>
+    }
+    else
+    {
+        <ul class="list-group mt-3" data-testid="portal-users">
+            @foreach (var u in Model.PortalUsers)
+            {
+                <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2" data-testid="portal-user-row" data-email="@u.Email">
+                    <span>
+                        @u.DisplayName <span class="mv-subtle">&middot; @u.Email</span>
+                        @if (!u.IsActive) { <span class="badge bg-secondary ms-1" data-testid="portal-user-status">Deactivated</span> }
+                        else if (u.MustChangePassword) { <span class="badge bg-warning text-dark ms-1" data-testid="portal-user-status">Must change password</span> }
+                        else { <span class="badge bg-success ms-1" data-testid="portal-user-status">Active</span> }
+                    </span>
+                    <span class="d-flex flex-wrap gap-1">
+                        <form asp-controller="ClientUsers" asp-action="ResetPassword" asp-route-id="@u.Id" method="post">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary" data-testid="reset-portal-user">New temporary password</button>
+                        </form>
+                        <form asp-controller="ClientUsers" asp-action="ToggleActive" asp-route-id="@u.Id" method="post">
+                            <button type="submit" class="btn btn-sm @(u.IsActive ? "btn-outline-warning" : "btn-outline-success")" data-testid="toggle-portal-user">@(u.IsActive ? "Deactivate" : "Activate")</button>
+                        </form>
+                    </span>
+                </li>
+            }
+        </ul>
+    }
 </div>
 
 <div class="mv-card">

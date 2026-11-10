@@ -68,10 +68,23 @@ public class NotifyInternalAction : IAction
         _alerts = alerts;
     }
 
+    /// <summary>Parameter "kind" = this value: a "New order" message for the client's own staff (not an alert).</summary>
+    public const string OrderKind = "order";
+
     public async Task<ActionResult> ExecuteAsync(ActionRequest request, CancellationToken cancellationToken = default)
     {
         var message = request.Parameters.GetValueOrDefault("message", "");
         Guid? clientConfigId = Guid.TryParse(request.Parameters.GetValueOrDefault("clientConfigId", ""), out var id) ? id : null;
+
+        if (request.Parameters.GetValueOrDefault("kind") == OrderKind && clientConfigId is { } orderClientId)
+        {
+            _logger.LogInformation("New order message for staff: {Message}", message);
+            var sent = await _alerts.SendNewOrderAsync(orderClientId, request.Parameters.GetValueOrDefault("subject", "New order"), message, cancellationToken);
+            return sent.Success
+                ? ActionResult.Ok($"Staff told about the order ({sent.Mode}).")
+                : ActionResult.Fail($"Order message to staff failed: {sent.Error}");
+        }
+
         _logger.LogInformation("Staff alert: {Message}", message);
 
         var result = await _alerts.SendAsync(clientConfigId, message, cancellationToken);

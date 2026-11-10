@@ -1,7 +1,10 @@
 namespace MadeeAutomation.Domain.Entities;
 
 /// <summary>
-/// A person who can sign in to Admin.Web (MadeeAutomation staff - there are no client logins).
+/// A person who can sign in to Admin.Web. Two kinds, in one table so sign-in, lockout and password
+/// reset work the same for both:
+///   - MadeeAutomation staff (ClientConfigId = null): can open everything.
+///   - A client's own user (ClientConfigId set): the client portal only, and only that one business.
 /// Passwords are stored as ASP.NET Core Identity password hashes (PBKDF2), never in plain text.
 /// </summary>
 public class AdminUser
@@ -16,6 +19,11 @@ public class AdminUser
     public string SecurityStamp { get; set; } = Guid.NewGuid().ToString("N");
 
     public bool IsActive { get; set; } = true;
+
+    /// <summary>Null = MadeeAutomation staff. Set = a client's portal user, limited to this client.</summary>
+    public Guid? ClientConfigId { get; set; }
+
+    public bool IsClientUser => ClientConfigId.HasValue;
 
     /// <summary>Times on admin-only pages (e.g. last sign-in) are shown in this zone. Client pages use the client's zone.</summary>
     public string TimeZoneId { get; set; } = "Asia/Bangkok";

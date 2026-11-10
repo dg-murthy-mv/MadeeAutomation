@@ -9,7 +9,8 @@
     <div>
         <h2>Menu</h2>
         <div class="mv-subtle">
-            <a asp-controller="Clients" asp-action="Details" asp-route-id="@client.Id">@client.ClientName</a>
+            @if (ClientAccess.IsClientUser(User)) { <a asp-controller="Portal" asp-action="Index">@client.ClientName</a> }
+            else { <a asp-controller="Clients" asp-action="Details" asp-route-id="@client.Id">@client.ClientName</a> }
             &middot; prices in <strong>@client.Currency</strong> &middot; <span data-testid="menu-total">@Model.Items.Count item(s)</span>
         </div>
     </div>
@@ -57,6 +58,14 @@
                 <input asp-for="NewItem.Aliases" class="form-control" dir="auto" data-testid="item-aliases" placeholder="latte yen, ลาเต้เย็น" />
                 <div class="form-text">Comma-separated. Other ways customers write it, in any language.</div>
             </div>
+            <div class="col-6 col-md-2">
+                <label asp-for="NewItem.DailyLimit" class="form-label"></label>
+                <input asp-for="NewItem.DailyLimit" class="form-control" type="number" step="1" min="1" inputmode="numeric" data-testid="item-daily-limit" placeholder="No limit" />
+                <span asp-validation-for="NewItem.DailyLimit" class="text-danger small"></span>
+            </div>
+            <div class="col-12 col-md-10 d-flex align-items-end">
+                <div class="form-text mb-md-2">Daily limit: the most the bot may take orders for in one day (for example 15 birthday cakes). Leave blank for no limit.</div>
+            </div>
         </div>
         <button type="submit" class="btn btn-primary mt-3" data-testid="add-item">Add item</button>
     </form>
@@ -90,6 +99,11 @@
                             <td data-label="Status">
                                 @if (item.IsAvailable) { <span class="badge bg-success" data-testid="menu-item-status">Available</span> }
                                 else { <span class="badge bg-warning text-dark" data-testid="menu-item-status">Sold out</span> }
+                                @if (item.DailyLimit is int limit)
+                                {
+                                    var ordered = Model.OrderedToday.GetValueOrDefault(item.Id);
+                                    <div class="small @(ordered >= limit ? "text-danger fw-semibold" : "mv-subtle")" data-testid="menu-item-limit">@ordered of @limit ordered today</div>
+                                }
                             </td>
                             <td class="text-nowrap">
                                 <form asp-action="ToggleAvailable" asp-route-id="@item.Id" method="post" class="d-inline">
@@ -108,4 +122,4 @@
         </div>
     }
 </div>
-<div class="form-text mt-2">The bot quotes these prices and works out order totals from them. "Sold out" items are refused until you switch them back.</div>
+<div class="form-text mt-2">The bot quotes these prices and works out order totals from them. "Sold out" items are refused until you switch them back. An item with a daily limit is refused for a day once that day's limit is reached; cancelled orders don't count.</div>

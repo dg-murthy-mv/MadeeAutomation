@@ -80,6 +80,15 @@ public sealed class FakeServer : IAsyncDisposable
                 : Results.Json(new { sentMessages = new[] { new { id = "2" } } });
         });
 
+        // The customer's LINE profile (used for the name on orders). Users starting "Unoname" have no readable profile.
+        app.MapGet("/v2/bot/profile/{userId}", (string userId, HttpContext ctx) =>
+        {
+            var auth = ctx.Request.Headers.Authorization.ToString();
+            return auth.EndsWith("fail-token") || !auth.StartsWith("Bearer ") || userId.StartsWith("Unoname")
+                ? Results.Json(new { message = "Not found" }, statusCode: 404)
+                : Results.Json(new { userId, displayName = CustomerNameFor(userId) });
+        });
+
         app.MapGet("/v2/bot/info", (HttpContext ctx) =>
         {
             var auth = ctx.Request.Headers.Authorization.ToString();
@@ -128,6 +137,9 @@ public sealed class FakeServer : IAsyncDisposable
         _app = app;
     }
 
+    /// <summary>The display name the fake LINE gives a customer.</summary>
+    public static string CustomerNameFor(string userId) => "Khun " + userId[^Math.Min(6, userId.Length)..];
+
     /// <summary>The fake "AI": decides the reply from the customer's text, like the real prompt asks.</summary>
     public static string ClaudeReplyFor(string system, string user)
     {
@@ -169,16 +181,42 @@ public sealed class FakeServer : IAsyncDisposable
 
         // Round 004: structured-menu items. The fake AI passes the customer's own words through
         // (e.g. "tea"), so our alias matching and sold-out checks are what's being tested.
-        var cafeItems = Regex.Matches(text, @"(\d+)\s*(?:x\s*)?(chai|tea|samosa|paneer roll)\b");
+        var cafeItems = Regex.Matches(text, @"(\d+)\s*(?:x\s*)?(chai|tea|samosa|paneer roll|cake)\b");
         if (cafeItems.Count > 0)
         {
             var items = cafeItems.Select(x => new { name = x.Groups[2].Value, quantity = int.Parse(x.Groups[1].Value) }).ToArray();
+
+            string? delivery = null;
+            var localDate = Regex.Match(system, @"Local date: (\d{4}-\d{2}-\d{2})");
+            if (text.Contains("tomorrow 9am") && localDate.Success)
+                delivery = DateTime.ParseExact(localDate.Groups[1].Value, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                    .AddDays(1).ToString("yyyy-MM-dd") + "T09:00";
+
             return Json(new
             {
                 intent = "order", language = "en",
                 reply = "Order confirmed: " + string.Join(", ", items.Select(i => $"{i.quantity} x {i.name}")) + ". Your ref is {ORDER_REF}.",
                 canAnswer = false, needsHuman = false,
-                order = new { items, requestedDeliveryTime = (string?)null, requestedDeliveryText = (string?)null, customerNote = (string?)null }
+                order = new
+                {
+                    items,
+                    requestedDeliveryTime = delivery,
+                    requestedDeliveryText = delivery is null ? null : "tomorrow 9am",
+                    customerNote = text.Contains("less sugar") ? "less sugar" : null
+                }
+            });
+        }
+
+        // Answered only when the client's business information mentions parking (Round 005 portal test).
+        if (text.Contains("parking"))
+        {
+            var line = Regex.Match(system, @"^.*parking.*$", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            var known = line.Success && system.IndexOf("BUSINESS INFORMATION:", StringComparison.Ordinal) < line.Index;
+            return Json(new
+            {
+                intent = "question", language = "en",
+                reply = known ? line.Value.Trim() : "A staff member will get back to you soon.",
+                canAnswer = known, needsHuman = !known, order = (object?)null
             });
         }
 

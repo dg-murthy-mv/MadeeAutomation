@@ -28,10 +28,12 @@ try
     var builder = WebApplication.CreateBuilder(args);
     builder.Host.UseSerilog();
 
-    // Every page needs a signed-in admin unless it says [AllowAnonymous] (login, forgot/reset password, setup, errors).
+    // Every page needs a signed-in user unless it says [AllowAnonymous] (login, forgot/reset password, setup, errors).
     builder.Services.AddControllersWithViews(options =>
     {
         options.Filters.Add(new AuthorizeFilter());
+        // A client's portal user can only open pages marked [ClientPortal] - everything else answers "Not allowed".
+        options.Filters.Add<MadeeAutomation.Admin.Web.Security.ClientUserAccessFilter>();
         options.Filters.Add<MustChangePasswordFilter>();
     });
 
@@ -58,7 +60,9 @@ try
                 var users = context.HttpContext.RequestServices.GetRequiredService<IAdminUserRepository>();
                 var user = Guid.TryParse(idText, out var id) ? await users.GetByIdAsync(id) : null;
 
-                if (user is null || !user.IsActive || user.SecurityStamp != stamp)
+                // The cookie must still describe the account: same password stamp, and the same client (or none).
+                var cookieClient = MadeeAutomation.Admin.Web.Security.ClientAccess.ClientId(principal!);
+                if (user is null || !user.IsActive || user.SecurityStamp != stamp || user.ClientConfigId != cookieClient)
                 {
                     context.RejectPrincipal();
                     await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);

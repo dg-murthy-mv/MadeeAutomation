@@ -15,6 +15,7 @@ public class ErrorViewModel
 
 /// <summary>Friendly pages for 404 / 403 / 500 instead of browser or framework error screens.</summary>
 [AllowAnonymous]
+[MadeeAutomation.Admin.Web.Security.ClientPortal]
 [ApiExplorerSettings(IgnoreApi = true)]
 public class ErrorController : Controller
 {

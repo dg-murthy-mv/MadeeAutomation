@@ -120,7 +120,34 @@ public interface IBusinessProfileRepository
 
     /// <summary>False when that date is already listed.</summary>
     Task<bool> AddClosedDateAsync(ClosedDate closedDate, CancellationToken cancellationToken = default);
-    Task DeleteClosedDateAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Only deletes when the date belongs to THIS client (a client user can never remove another client's date).</summary>
+    Task DeleteClosedDateAsync(Guid clientConfigId, Guid id, CancellationToken cancellationToken = default);
+}
+
+/// <summary>Orders the bot took (saved for every client, with or without a POS).</summary>
+public interface IOrderRepository
+{
+    /// <summary>
+    /// Saves the order and gives it the client's next OrderNumber. When Reference is empty
+    /// (no POS order id) it becomes our own "ORD-0001".
+    /// </summary>
+    Task AddAsync(Order order, CancellationToken cancellationToken = default);
+
+    /// <summary>Includes Items. Null when the order does not belong to this client.</summary>
+    Task<Order?> GetAsync(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken = default);
+
+    /// <summary>Newest first, with Items. statuses = null means all.</summary>
+    Task<PagedResult<Order>> GetPagedAsync(Guid clientConfigId, IReadOnlyCollection<OrderStatus>? statuses, int page, int pageSize,
+        CancellationToken cancellationToken = default);
+
+    Task<int> CountAsync(Guid clientConfigId, OrderStatus status, CancellationToken cancellationToken = default);
+
+    /// <summary>How many of each menu item are already ordered for that day (cancelled orders don't count). Key = MenuItemId.</summary>
+    Task<Dictionary<Guid, int>> GetOrderedQuantitiesAsync(Guid clientConfigId, DateOnly orderDate, CancellationToken cancellationToken = default);
+
+    /// <summary>False when the order does not belong to this client.</summary>
+    Task<bool> SetStatusAsync(Guid clientConfigId, Guid orderId, OrderStatus status, string changedBy, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Admin.Web sign-in accounts and their password-reset links.</summary>
@@ -129,7 +156,11 @@ public interface IAdminUserRepository
     Task<int> CountAsync(CancellationToken cancellationToken = default);
     Task<AdminUser?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<AdminUser?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
+    /// <summary>MadeeAutomation staff only (not client portal users).</summary>
     Task<List<AdminUser>> ListAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>One client's portal users.</summary>
+    Task<List<AdminUser>> ListForClientAsync(Guid clientConfigId, CancellationToken cancellationToken = default);
     Task AddAsync(AdminUser user, CancellationToken cancellationToken = default);
     Task UpdateAsync(AdminUser user, CancellationToken cancellationToken = default);
 
@@ -162,6 +193,12 @@ public interface IEmailSender
 public interface IStaffAlertService
 {
     Task<MessageSendResult> SendAsync(Guid? clientConfigId, string message, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// "New order" message to the CLIENT's staff only (their LINE user and/or email) - it does not go to
+    /// MadeeAutomation's internal number. subject is used for the email.
+    /// </summary>
+    Task<MessageSendResult> SendNewOrderAsync(Guid clientConfigId, string subject, string message, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Thin wrapper over the Anthropic Messages API - see MadeeAutomation.AI project.</summary>
@@ -183,6 +220,9 @@ public interface IMerkaiConnector
 /// <summary>Connector back into POSFirst - used by F&B/Retail vertical pack handlers.</summary>
 public interface IPosFirstConnector
 {
+    /// <summary>False when the client has no POS connected - the order then lives only in our own Orders list.</summary>
+    Task<bool> IsConfiguredAsync(Guid clientConfigId, CancellationToken cancellationToken = default);
+
     Task<string> CreateOrderAsync(Guid clientConfigId, object orderPayload, CancellationToken cancellationToken = default);
     Task<List<string>> GetLowStockItemsAsync(Guid clientConfigId, CancellationToken cancellationToken = default);
 }
@@ -216,6 +256,12 @@ public interface IMessagingConnector
 {
     /// <summary>Sends a message to a client's own customer, using that client's own credentials.</summary>
     Task<MessageSendResult> SendAsync(OutboundMessage message, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The customer's display name on that channel (LINE profile), or null when it can't be read.
+    /// Never throws - a missing name must not stop an order.
+    /// </summary>
+    Task<string?> GetCustomerNameAsync(Guid clientConfigId, string channel, string customerId, CancellationToken cancellationToken = default);
 
     /// <summary>Sends an internal notification to MadeeAutomation's own ops channel - not client-specific.</summary>
     Task<MessageSendResult> SendInternalNotificationAsync(string message, CancellationToken cancellationToken = default);

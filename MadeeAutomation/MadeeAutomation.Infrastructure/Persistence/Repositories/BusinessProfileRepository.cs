@@ -79,6 +79,6 @@ public class BusinessProfileRepository : IBusinessProfileRepository
         return true;
     }
 
-    public async Task DeleteClosedDateAsync(Guid id, CancellationToken cancellationToken = default) =>
-        await _db.ClosedDates.Where(c => c.Id == id).ExecuteDeleteAsync(cancellationToken);
+    public async Task DeleteClosedDateAsync(Guid clientConfigId, Guid id, CancellationToken cancellationToken = default) =>
+        await _db.ClosedDates.Where(c => c.Id == id && c.ClientConfigId == clientConfigId).ExecuteDeleteAsync(cancellationToken);
 }

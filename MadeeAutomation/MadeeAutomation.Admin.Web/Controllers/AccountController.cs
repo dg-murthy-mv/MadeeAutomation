@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using MadeeAutomation.Admin.Web.Models;
+using MadeeAutomation.Admin.Web.Security;
 using MadeeAutomation.Admin.Web.Services;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Domain.Entities;
@@ -10,7 +11,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MadeeAutomation.Admin.Web.Controllers;
 
-/// <summary>Sign in / out, first-admin setup, change password, forgot / reset password.</summary>
+/// <summary>Sign in / out, first-admin setup, change password, forgot / reset password. Used by staff and by clients' portal users.</summary>
+[ClientPortal]
 public class AccountController : Controller
 {
     private const string GenericLoginError = "Invalid email or password.";
@@ -139,7 +141,7 @@ public class AccountController : Controller
         _logger.LogInformation("First admin account created: {Email}", user.Email);
         await _auth.SignInAsync(HttpContext, user, rememberMe: false);
         TempData["Success"] = "Your admin account is ready.";
-        return RedirectToAction("Index", "Clients");
+        return RedirectToAction("Index", "Home");
     }
 
     // ================= Change password =================
@@ -173,7 +175,7 @@ public class AccountController : Controller
         await _auth.SignInAsync(HttpContext, user, rememberMe: false);
         _logger.LogInformation("{Email} changed their password", user.Email);
         TempData["Success"] = "Password changed. Other browsers signed in to your account have been signed out.";
-        return RedirectToAction("Index", "Clients");
+        return RedirectToAction("Index", "Home");
     }
 
     // ================= My account =================
@@ -193,7 +195,13 @@ public class AccountController : Controller
         if (user is null) return RedirectToAction(nameof(Login));
         model.Email = user.Email;
 
-        if (!MadeeAutomation.Domain.Regional.Markets.TimeZoneIds.Contains(model.TimeZoneId))
+        // A client's portal user has no time zone choice: their pages use the business's own zone.
+        if (user.IsClientUser)
+        {
+            ModelState.Remove(nameof(model.TimeZoneId));
+            model.TimeZoneId = user.TimeZoneId;
+        }
+        else if (!MadeeAutomation.Domain.Regional.Markets.TimeZoneIds.Contains(model.TimeZoneId))
             ModelState.AddModelError(nameof(model.TimeZoneId), "Choose one of the listed time zones.");
         if (!ModelState.IsValid) return View(model);
 
@@ -225,7 +233,7 @@ public class AccountController : Controller
         if (!ModelState.IsValid) return View(model);
 
         // Same answer whether or not the account exists, so this page can't be used to find admin emails.
-        TempData["Success"] = "If that email belongs to an admin account, a reset link is on its way. The link works for 1 hour.";
+        TempData["Success"] = "If that email belongs to an account, a reset link is on its way. The link works for 1 hour.";
 
         var user = await _users.GetByEmailAsync(model.Email);
         if (user is null || !user.IsActive)
@@ -246,11 +254,11 @@ public class AccountController : Controller
         var link = Url.Action(nameof(ResetPassword), "Account", new { email = user.Email, token }, Request.Scheme)!;
         var body =
             $"Hello {user.DisplayName},\n\n" +
-            "Someone (hopefully you) asked to reset your MadeeAutomation Admin password.\n" +
+            "Someone (hopefully you) asked to reset your MadeeAutomation password.\n" +
             $"Open this link within 1 hour to choose a new password:\n\n{link}\n\n" +
             "If you didn't ask for this, ignore this email - your password stays the same.\n";
 
-        var result = await _email.SendAsync(user.Email, "Reset your MadeeAutomation Admin password", body);
+        var result = await _email.SendAsync(user.Email, "Reset your MadeeAutomation password", body);
         if (!result.Success)
         {
             _logger.LogError("Reset email to {Email} not sent: {Error}", user.Email, result.Error);
@@ -319,5 +327,5 @@ public class AccountController : Controller
     private IActionResult LocalRedirectOrHome(string? returnUrl) =>
         !string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl)
             ? LocalRedirect(returnUrl)
-            : RedirectToAction("Index", "Clients");
+            : RedirectToAction("Index", "Home");
 }

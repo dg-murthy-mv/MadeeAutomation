@@ -33,7 +33,7 @@ public class AdminUsersController : Controller
     public async Task<IActionResult> Create(AdminUserFormModel model)
     {
         if (ModelState.IsValid && await _users.GetByEmailAsync(model.Email) is not null)
-            ModelState.AddModelError(nameof(model.Email), "There is already an admin with this email.");
+            ModelState.AddModelError(nameof(model.Email), "There is already an account with this email.");
         if (!ModelState.IsValid) return View(model);
 
         var temporaryPassword = AdminAuthService.GenerateTemporaryPassword();
@@ -64,7 +64,7 @@ public class AdminUsersController : Controller
         }
 
         var user = await _users.GetByIdAsync(id);
-        if (user is null) return NotFound();
+        if (user is null || user.IsClientUser) return NotFound();   // portal users are managed on their client's page
 
         user.IsActive = !user.IsActive;
         if (!user.IsActive) user.RotateSecurityStamp();   // signs them out everywhere
@@ -87,7 +87,7 @@ public class AdminUsersController : Controller
         }
 
         var user = await _users.GetByIdAsync(id);
-        if (user is null) return NotFound();
+        if (user is null || user.IsClientUser) return NotFound();   // portal users are managed on their client's page
 
         var temporaryPassword = AdminAuthService.GenerateTemporaryPassword();
         user.PasswordHash = _auth.HashPassword(user, temporaryPassword);

@@ -1,0 +1,73 @@
+@model (Order order, ClientConfig client, string show, bool actions)
+@{
+    var o = Model.order;
+    var client = Model.client;
+    var culture = System.Globalization.CultureInfo.InvariantCulture;
+    string Local(DateTime utc) => LocalTime.ToLocal(utc, client.TimeZoneId).ToString("ddd d MMM yyyy, HH:mm", culture);
+    var badge = o.Status switch
+    {
+        OrderStatus.New => "bg-primary",
+        OrderStatus.Accepted => "bg-info text-dark",
+        OrderStatus.Completed => "bg-success",
+        _ => "bg-secondary"
+    };
+}
+<div class="mv-order border rounded p-3 mb-3" data-testid="order-card" data-order-ref="@o.Reference" data-order-status="@o.Status">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+        <div>
+            <strong data-testid="order-ref">@o.Reference</strong>
+            <span class="badge @badge ms-1" data-testid="order-status">@o.Status</span>
+            <div class="small mv-subtle">Received @Local(o.CreatedAtUtc) &middot; @Channels.DisplayName(o.Channel)</div>
+        </div>
+        <div class="text-end">
+            <div class="fw-semibold" data-testid="order-total">@(o.Total is decimal t ? Money.Format(t, o.Currency) : "No total")</div>
+        </div>
+    </div>
+
+    <ul class="list-unstyled mt-2 mb-2" data-testid="order-items">
+        @foreach (var item in o.Items)
+        {
+            <li>
+                <span dir="auto">@item.Quantity x @item.Name</span>
+                @if (item.LineTotal is decimal lt) { <span class="mv-subtle">&middot; @Money.Format(lt, o.Currency)</span> }
+                else if (item.MenuItemId is null) { <span class="badge bg-warning text-dark">not on the menu</span> }
+            </li>
+        }
+    </ul>
+
+    <div class="small">
+        <div data-testid="order-for">
+            <strong>For:</strong>
+            @if (o.RequestedForUtc is DateTime forUtc) { <span>@Local(forUtc)</span> }
+            else { <span>no time given</span> }
+            @if (!string.IsNullOrWhiteSpace(o.RequestedForText)) { <span class="mv-subtle" dir="auto">(customer said "@o.RequestedForText")</span> }
+        </div>
+        <div data-testid="order-customer"><strong>Customer:</strong> <span dir="auto">@(string.IsNullOrWhiteSpace(o.CustomerName) ? o.CustomerId : o.CustomerName)</span></div>
+        @if (!string.IsNullOrWhiteSpace(o.CustomerNote)) { <div><strong>Note:</strong> <span dir="auto">@o.CustomerNote</span></div> }
+        @if (!string.IsNullOrWhiteSpace(o.CustomerMessage)) { <div class="mv-subtle text-break"><strong>Customer wrote:</strong> <span dir="auto">"@o.CustomerMessage"</span></div> }
+        @if (o.PosOrderId is not null) { <div class="mv-subtle">Also in the POS as @o.PosOrderId</div> }
+        @if (o.StatusChangedAtUtc is DateTime changed) { <div class="mv-subtle">@o.Status by @o.StatusChangedBy, @Local(changed)</div> }
+    </div>
+
+    @if (Model.actions && o.Status is OrderStatus.New or OrderStatus.Accepted)
+    {
+        <div class="d-flex flex-wrap gap-2 mt-3">
+            @if (o.Status == OrderStatus.New)
+            {
+                <form asp-controller="Orders" asp-action="SetStatus" asp-route-clientConfigId="@client.Id" asp-route-id="@o.Id" asp-route-status="Accepted" asp-route-show="@Model.show" method="post">
+                    <button type="submit" class="btn btn-sm btn-primary" data-testid="order-accept">Accept</button>
+                </form>
+            }
+            else
+            {
+                <form asp-controller="Orders" asp-action="SetStatus" asp-route-clientConfigId="@client.Id" asp-route-id="@o.Id" asp-route-status="Completed" asp-route-show="@Model.show" method="post">
+                    <button type="submit" class="btn btn-sm btn-success" data-testid="order-complete">Completed</button>
+                </form>
+            }
+            <form asp-controller="Orders" asp-action="SetStatus" asp-route-clientConfigId="@client.Id" asp-route-id="@o.Id" asp-route-status="Cancelled" asp-route-show="@Model.show" method="post"
+                  onsubmit="return confirm(this.dataset.confirm)" data-confirm="Cancel order @o.Reference? Remember to tell the customer.">
+                <button type="submit" class="btn btn-sm btn-outline-danger" data-testid="order-cancel">Cancel order</button>
+            </form>
+        </div>
+    }
+</div>

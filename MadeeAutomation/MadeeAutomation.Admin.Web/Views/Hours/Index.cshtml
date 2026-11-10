@@ -8,7 +8,8 @@
     <div>
         <h2>Opening hours</h2>
         <div class="mv-subtle">
-            <a asp-controller="Clients" asp-action="Details" asp-route-id="@client.Id">@client.ClientName</a>
+            @if (ClientAccess.IsClientUser(User)) { <a asp-controller="Portal" asp-action="Index">@client.ClientName</a> }
+            else { <a asp-controller="Clients" asp-action="Details" asp-route-id="@client.Id">@client.ClientName</a> }
             &middot; times are in <strong>@client.TimeZoneId</strong> (now @Model.LocalNowText)
         </div>
     </div>

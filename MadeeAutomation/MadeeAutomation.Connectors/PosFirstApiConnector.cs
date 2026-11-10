@@ -32,6 +32,9 @@ public class PosFirstApiConnector : IPosFirstConnector
 
     private static bool IsConfigured(string? baseUrl) => !string.IsNullOrWhiteSpace(baseUrl);
 
+    public async Task<bool> IsConfiguredAsync(Guid clientConfigId, CancellationToken cancellationToken = default) =>
+        IsConfigured((await GetSettingsAsync(clientConfigId, cancellationToken)).baseUrl);
+
     public async Task<string> CreateOrderAsync(Guid clientConfigId, object orderPayload, CancellationToken cancellationToken = default)
     {
         var (baseUrl, apiKey) = await GetSettingsAsync(clientConfigId, cancellationToken);

@@ -1,4 +1,5 @@
 using MadeeAutomation.Admin.Web.Models;
+using MadeeAutomation.Admin.Web.Security;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Domain.Entities;
 using MadeeAutomation.Domain.Regional;
@@ -6,21 +7,26 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MadeeAutomation.Admin.Web.Controllers;
 
-/// <summary>A client's structured menu: add, edit, delete, sold-out switch, import from the old free text.</summary>
-public class MenuController : Controller
+/// <summary>
+/// A client's structured menu: add, edit, delete, sold-out switch, daily limit, import from the old free text.
+/// Used by staff (any client) and by a client's portal user (their own menu only - see ClientScopedController).
+/// </summary>
+public class MenuController : ClientScopedController
 {
     private readonly IBusinessProfileRepository _profile;
     private readonly IClientRepository _clients;
+    private readonly IOrderRepository _orders;
 
-    public MenuController(IBusinessProfileRepository profile, IClientRepository clients)
+    public MenuController(IBusinessProfileRepository profile, IClientRepository clients, IOrderRepository orders)
     {
         _profile = profile;
         _clients = clients;
+        _orders = orders;
     }
 
     public async Task<IActionResult> Index(Guid clientConfigId)
     {
-        var client = await _clients.GetWithWorkflowsAsync(clientConfigId);
+        var client = await _clients.GetWithWorkflowsAsync(Scope(clientConfigId));
         if (client is null) return NotFound();
         return View(await PageAsync(client, new MenuItemFormModel { ClientConfigId = client.Id }));
     }
@@ -29,7 +35,8 @@ public class MenuController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Add([Bind(Prefix = "NewItem")] MenuItemFormModel model)
     {
-        var client = await _clients.GetWithWorkflowsAsync(model.ClientConfigId);
+        var client = await _clients.GetWithWorkflowsAsync(Scope(model.ClientConfigId));
+        model.ClientConfigId = client?.Id ?? Guid.Empty;
         if (client is null) return NotFound();
 
         model.Name = (model.Name ?? "").Trim();
@@ -47,6 +54,7 @@ public class MenuController : Controller
                 Category = Clean(model.Category),
                 Price = model.Price,
                 Aliases = CleanAliases(model.Aliases),
+                DailyLimit = model.DailyLimit,
                 IsAvailable = true,
                 SortOrder = items.Count == 0 ? 0 : items.Max(i => i.SortOrder) + 1
             }
@@ -59,12 +67,13 @@ public class MenuController : Controller
     public async Task<IActionResult> Edit(Guid id)
     {
         var item = await _profile.GetMenuItemAsync(id);
-        if (item is null) return NotFound();
+        if (item is null || !CanAccess(item.ClientConfigId)) return NotFound();
         ViewBag.Client = await _clients.GetWithWorkflowsAsync(item.ClientConfigId);
         return View(new MenuItemFormModel
         {
             Id = item.Id, ClientConfigId = item.ClientConfigId, Name = item.Name, Category = item.Category,
-            Price = item.Price, Aliases = item.Aliases, IsAvailable = item.IsAvailable, SortOrder = item.SortOrder
+            Price = item.Price, Aliases = item.Aliases, IsAvailable = item.IsAvailable, SortOrder = item.SortOrder,
+            DailyLimit = item.DailyLimit
         });
     }
 
@@ -73,7 +82,7 @@ public class MenuController : Controller
     public async Task<IActionResult> Edit(Guid id, MenuItemFormModel model)
     {
         var item = await _profile.GetMenuItemAsync(id);
-        if (item is null) return NotFound();
+        if (item is null || !CanAccess(item.ClientConfigId)) return NotFound();
         model.Id = item.Id;
         model.ClientConfigId = item.ClientConfigId;
         model.Name = (model.Name ?? "").Trim();
@@ -92,6 +101,7 @@ public class MenuController : Controller
         item.Aliases = CleanAliases(model.Aliases);
         item.IsAvailable = model.IsAvailable;
         item.SortOrder = model.SortOrder;
+        item.DailyLimit = model.DailyLimit;
         await _profile.UpdateMenuItemAsync(item);
 
         TempData["Success"] = $"\"{item.Name}\" saved.";
@@ -104,7 +114,7 @@ public class MenuController : Controller
     public async Task<IActionResult> ToggleAvailable(Guid id)
     {
         var item = await _profile.GetMenuItemAsync(id);
-        if (item is null) return NotFound();
+        if (item is null || !CanAccess(item.ClientConfigId)) return NotFound();
         item.IsAvailable = !item.IsAvailable;
         await _profile.UpdateMenuItemAsync(item);
         TempData["Success"] = item.IsAvailable ? $"\"{item.Name}\" is available again." : $"\"{item.Name}\" marked sold out - the bot won't take orders for it.";
@@ -116,7 +126,7 @@ public class MenuController : Controller
     public async Task<IActionResult> Delete(Guid id)
     {
         var item = await _profile.GetMenuItemAsync(id);
-        if (item is null) return NotFound();
+        if (item is null || !CanAccess(item.ClientConfigId)) return NotFound();
         await _profile.DeleteMenuItemAsync(id);
         TempData["Success"] = $"\"{item.Name}\" deleted.";
         return RedirectToAction(nameof(Index), new { clientConfigId = item.ClientConfigId });
@@ -127,7 +137,7 @@ public class MenuController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ImportFromText(Guid clientConfigId)
     {
-        var client = await _clients.GetWithWorkflowsAsync(clientConfigId);
+        var client = await _clients.GetWithWorkflowsAsync(Scope(clientConfigId));
         if (client is null) return NotFound();
 
         var lines = MenuCatalog.Parse(client.MenuText);
@@ -151,12 +161,20 @@ public class MenuController : Controller
         return RedirectToAction(nameof(Index), new { clientConfigId = client.Id });
     }
 
-    private async Task<MenuPageModel> PageAsync(ClientConfig client, MenuItemFormModel newItem) => new()
+    private async Task<MenuPageModel> PageAsync(ClientConfig client, MenuItemFormModel newItem)
     {
-        Client = client,
-        Items = await _profile.GetMenuAsync(client.Id),
-        NewItem = newItem
-    };
+        var items = await _profile.GetMenuAsync(client.Id);
+        var today = DateOnly.FromDateTime(LocalTime.ToLocal(DateTime.UtcNow, client.TimeZoneId));
+        return new MenuPageModel
+        {
+            Client = client,
+            Items = items,
+            NewItem = newItem,
+            OrderedToday = items.Any(i => i.DailyLimit.HasValue)
+                ? await _orders.GetOrderedQuantitiesAsync(client.Id, today)
+                : new Dictionary<Guid, int>()
+        };
+    }
 
     private static string? Clean(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
 

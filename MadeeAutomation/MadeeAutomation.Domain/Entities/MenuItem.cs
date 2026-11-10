@@ -19,6 +19,12 @@ public class MenuItem
     /// <summary>Off = sold out / not available: the bot says so and never orders it.</summary>
     public bool IsAvailable { get; set; } = true;
 
+    /// <summary>
+    /// The most the bot may take orders for in one day (e.g. 15 birthday cakes). Null = no limit.
+    /// Counted from saved orders for that day, in the client's time zone. Cancelled orders don't count.
+    /// </summary>
+    public int? DailyLimit { get; set; }
+
     public int SortOrder { get; set; }
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;

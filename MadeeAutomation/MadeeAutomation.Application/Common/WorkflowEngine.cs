@@ -181,7 +181,8 @@ public class WorkflowEngine
             // ---- The reply could not be delivered: tell a person. ----
             if (firstRequiredError is not null && IsCustomerMessage(context) &&
                 records.Any(r => r.Type == nameof(ActionType.SendMessage) && !r.Success) &&
-                !records.Any(r => r.Type == nameof(ActionType.NotifyInternal)))
+                !records.Any(r => r.Type == nameof(ActionType.NotifyInternal) &&
+                                  r.Parameters.GetValueOrDefault("kind") != NotifyInternalAction.OrderKind))
             {
                 await RunActionsAsync(new List<ActionRequest>
                 {
