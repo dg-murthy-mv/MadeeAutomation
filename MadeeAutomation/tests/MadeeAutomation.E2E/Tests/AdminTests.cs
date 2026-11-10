@@ -68,7 +68,8 @@ public class AdminTests : PageTest
         await CreateClientAsync("UI Bakery One", "UiBakery1");   // upper case is accepted and stored lower case
 
         await Expect(Page).ToHaveURLAsync(new Regex("/Clients/Edit/"));
-        await Page.GotoAsync("/Clients");
+        // Search for it: the list shows 10 clients per page, and the seeded clients alone fill page 1.
+        await Page.GotoAsync("/Clients?search=uibakery1");
         var row = Page.Locator("[data-testid=client-row-uibakery1]");
         await Expect(row).ToBeVisibleAsync();
 

@@ -27,10 +27,13 @@ public class ClientsController : Controller
     private readonly LineCredentialChecker _lineChecker;
     private readonly IApiService _api;
     private readonly ILogger<ClientsController> _logger;
+    private readonly IBusinessProfileRepository _profile;
 
     public ClientsController(IClientRepository clients, IWorkflowRepository workflows, IClientSettingsService settings,
-        IConfiguration configuration, LineCredentialChecker lineChecker, IApiService api, ILogger<ClientsController> logger)
+        IConfiguration configuration, LineCredentialChecker lineChecker, IApiService api, ILogger<ClientsController> logger,
+        IBusinessProfileRepository profile)
     {
+        _profile = profile;
         _clients = clients;
         _workflows = workflows;
         _settings = settings;
@@ -94,6 +97,14 @@ public class ClientsController : Controller
         if (client is null) return NotFound();
 
         var model = new ClientDetailsModel { Client = client, WebApiBaseUrl = WebApiBaseUrl };
+        var menu = await _profile.GetMenuAsync(client.Id);
+        var localToday = DateOnly.FromDateTime(MadeeAutomation.Domain.Regional.LocalTime.ToLocal(DateTime.UtcNow, client.TimeZoneId));
+        var hoursStatus = MadeeAutomation.Domain.Regional.BusinessClock.GetStatus(
+            await _profile.GetHoursAsync(client.Id), await _profile.GetClosedDatesAsync(client.Id, localToday.AddDays(-1)),
+            client.TimeZoneId, DateTime.UtcNow);
+        model.MenuItemCount = menu.Count;
+        model.SoldOutCount = menu.Count(m => !m.IsAvailable);
+        model.HoursStatus = hoursStatus;
         try
         {
             model.Settings = _settings.Read(client.IntegrationSettingsJson);

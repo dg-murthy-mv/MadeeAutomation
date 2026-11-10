@@ -27,6 +27,7 @@ public static class DependencyInjection
 
         services.AddScoped<IClientSettingsService, ClientSettingsService>();
         services.AddScoped<IAdminUserRepository, AdminUserRepository>();
+        services.AddScoped<IBusinessProfileRepository, BusinessProfileRepository>();
         services.AddSingleton<IEmailSender, SmtpEmailSender>();
 
         return services;

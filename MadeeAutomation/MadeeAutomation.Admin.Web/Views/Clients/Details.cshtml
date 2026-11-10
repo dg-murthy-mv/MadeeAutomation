@@ -88,6 +88,27 @@
     </div>
 </div>
 
+<div class="mv-card mv-card-body mb-4" data-testid="business-card">
+    <h5 class="mv-section-title">Menu &amp; opening hours</h5>
+    <div class="row g-3">
+        <div class="col-12 col-md-6">
+            <div><strong>Menu:</strong> <span data-testid="menu-count">@Model.MenuItemCount item(s)</span>
+                @if (Model.SoldOutCount > 0) { <span class="badge bg-warning text-dark ms-1">@Model.SoldOutCount sold out</span> }
+            </div>
+            @if (Model.MenuItemCount == 0 && !string.IsNullOrWhiteSpace(client.MenuText))
+            {
+                <div class="small mv-subtle">Using the old menu text for now. Open Menu to import it.</div>
+            }
+            <a class="btn btn-sm btn-outline-primary mt-2" asp-controller="Menu" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-menu">Menu</a>
+        </div>
+        <div class="col-12 col-md-6">
+            <div><strong>Right now:</strong> <span data-testid="hours-status">@(Model.HoursStatus?.StatusText ?? "Opening hours are not set.")</span></div>
+            <div class="small mv-subtle">@client.TimeZoneId</div>
+            <a class="btn btn-sm btn-outline-primary mt-2" asp-controller="Hours" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-hours">Opening hours</a>
+        </div>
+    </div>
+</div>
+
 <div class="mv-card">
     <div class="mv-card-body pb-0"><h5 class="mv-section-title">Workflows</h5></div>
     @if (client.Workflows.Any())

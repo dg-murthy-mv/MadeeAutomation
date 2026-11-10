@@ -58,10 +58,10 @@ public class MessageAssistant
         _clock = clock;
     }
 
-    public async Task<MessageAnalysis?> AnalyzeAsync(ClientConfig? client, string customerMessage, AssistantMode mode,
+    public async Task<MessageAnalysis?> AnalyzeAsync(ClientConfig? client, BusinessProfile profile, string customerMessage, AssistantMode mode,
         CancellationToken cancellationToken = default)
     {
-        var systemPrompt = BuildSystemPrompt(client, mode, _clock.GetUtcNow().UtcDateTime);
+        var systemPrompt = BuildSystemPrompt(client, mode, _clock.GetUtcNow().UtcDateTime, profile);
         var raw = await _claude.CompleteJsonAsync(systemPrompt, customerMessage, cancellationToken);
 
         var parsed = JsonReply.TryParseObject(raw);
@@ -115,8 +115,9 @@ public class MessageAssistant
             ? DateTime.SpecifyKind(local, DateTimeKind.Unspecified)
             : null;
 
-    public static string BuildSystemPrompt(ClientConfig? client, AssistantMode mode, DateTime utcNow)
+    public static string BuildSystemPrompt(ClientConfig? client, AssistantMode mode, DateTime utcNow, BusinessProfile? profile = null)
     {
+        profile ??= new BusinessProfile { Menu = MenuCatalog.Parse(client?.MenuText) };
         var businessName = string.IsNullOrWhiteSpace(client?.ClientName) ? "the business" : client!.ClientName;
         var timeZoneId = string.IsNullOrWhiteSpace(client?.TimeZoneId) ? "UTC" : client!.TimeZoneId;
         var localNow = LocalTime.ToLocal(utcNow, timeZoneId);
@@ -146,16 +147,48 @@ public class MessageAssistant
         sb.AppendLine("- Answer questions ONLY from BUSINESS INFORMATION below. Never invent opening hours, prices, delivery areas or anything else.");
         sb.AppendLine("- If a question is not covered by BUSINESS INFORMATION, set canAnswer to false and needsHuman to true, and reply that a staff member will get back to them soon.");
         sb.AppendLine("- Set needsHuman to true for complaints, refunds, or anything you cannot handle.");
-        sb.AppendLine("- For orders, use the MENU names exactly when an item clearly matches. Do NOT state prices or a total in the reply - the system adds the correct total.");
+        sb.AppendLine("- For orders, use the MENU names exactly when an item clearly matches. You may tell a customer the price of an item exactly as written in the MENU, but never calculate a total - the system adds the correct total.");
         sb.AppendLine("- requestedDeliveryTime: when the customer gives a delivery/pick-up time, resolve it against the BUSINESS CLOCK to local \"yyyy-MM-ddTHH:mm\" (e.g. \"tomorrow 9am\" -> next day 09:00). Use null if no time was given. Put the customer's own words in requestedDeliveryText.");
         sb.AppendLine($"- When intent is \"order\" and there is at least one item, the reply must confirm the items and include the exact text {OrderRefPlaceholder} where the order reference goes.");
         sb.AppendLine("- A greeting like \"hello\" is NOT an order.");
         sb.AppendLine();
+        if (profile.Hours.HoursConfigured)
+        {
+            sb.AppendLine("OPENING HOURS (exact - use these to answer any question about hours or whether we are open):");
+            sb.AppendLine(profile.Hours.WeekText);
+            if (profile.Hours.ClosedDatesText is not null)
+                sb.AppendLine("Closed on: " + profile.Hours.ClosedDatesText);
+            sb.AppendLine("RIGHT NOW: " + profile.Hours.StatusText);
+            sb.AppendLine("If the customer orders while we are closed, still take the order but tell them when we open again.");
+            sb.AppendLine();
+        }
+
         sb.AppendLine("BUSINESS INFORMATION:");
         sb.AppendLine(string.IsNullOrWhiteSpace(client?.KnowledgeBaseText) ? "(none provided)" : client!.KnowledgeBaseText.Trim());
         sb.AppendLine();
         sb.AppendLine("MENU:");
-        sb.AppendLine(string.IsNullOrWhiteSpace(client?.MenuText) ? "(none provided)" : client!.MenuText.Trim());
+        var available = profile.Menu.Where(m => m.IsAvailable).ToList();
+        var soldOut = profile.Menu.Where(m => !m.IsAvailable).ToList();
+        if (available.Count == 0 && soldOut.Count == 0)
+        {
+            sb.AppendLine("(none provided)");
+        }
+        else
+        {
+            foreach (var group in available.GroupBy(m => m.Category ?? ""))
+            {
+                if (group.Key.Length > 0) sb.AppendLine($"[{group.Key}]");
+                foreach (var m in group)
+                {
+                    var aliases = m.Aliases is { Count: > 0 } ? $" (customers may also say: {string.Join(", ", m.Aliases)})" : "";
+                    var price = m.Price is { } p ? ": " + Money.Format(p, currency) : "";
+                    sb.AppendLine($"- {m.Name}{price}{aliases}");
+                }
+            }
+            if (soldOut.Count > 0)
+                sb.AppendLine("SOLD OUT today (do NOT take orders for these - tell the customer they are not available): " +
+                              string.Join(", ", soldOut.Select(m => m.Name)));
+        }
         sb.AppendLine();
         sb.AppendLine("Respond with ONE JSON object only, in exactly this shape:");
         sb.AppendLine("{ \"intent\": \"order\" | \"question\" | \"greeting\" | \"other\", \"language\": string, \"reply\": string, " +

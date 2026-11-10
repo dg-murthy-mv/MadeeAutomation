@@ -1,0 +1,53 @@
+@model MenuItemFormModel
+@{
+    ClientConfig? client = ViewBag.Client;
+    ViewData["Title"] = $"Edit {Model.Name}";
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Edit menu item</h2>
+        <div class="mv-subtle"><a asp-action="Index" asp-route-clientConfigId="@Model.ClientConfigId">Menu</a>@(client is null ? "" : " · " + client.ClientName)</div>
+    </div>
+</div>
+
+<form asp-action="Edit" asp-route-id="@Model.Id" method="post" autocomplete="off" class="mv-card mv-card-body" style="max-width: 720px">
+    <div asp-validation-summary="ModelOnly" class="text-danger small"></div>
+    <div class="mb-3">
+        <label asp-for="Name" class="form-label"></label>
+        <input asp-for="Name" class="form-control" dir="auto" data-testid="item-name" />
+        <span asp-validation-for="Name" class="text-danger small" data-testid="item-name-error"></span>
+    </div>
+    <div class="row g-2 mb-3">
+        <div class="col-6">
+            <label asp-for="Price" class="form-label">Price (@(client?.Currency ?? ""))</label>
+            <input asp-for="Price" class="form-control" type="number" step="0.01" min="0" inputmode="decimal" data-testid="item-price" />
+            <span asp-validation-for="Price" class="text-danger small"></span>
+        </div>
+        <div class="col-6">
+            <label asp-for="Category" class="form-label"></label>
+            <input asp-for="Category" class="form-control" dir="auto" data-testid="item-category" />
+        </div>
+    </div>
+    <div class="mb-3">
+        <label asp-for="Aliases" class="form-label"></label>
+        <input asp-for="Aliases" class="form-control" dir="auto" data-testid="item-aliases" />
+        <div class="form-text">Comma-separated. Other ways customers write it, in any language.</div>
+    </div>
+    <div class="row g-2 mb-3 align-items-end">
+        <div class="col-6">
+            <label asp-for="SortOrder" class="form-label"></label>
+            <input asp-for="SortOrder" class="form-control" type="number" />
+        </div>
+        <div class="col-6">
+            <div class="form-check">
+                <input asp-for="IsAvailable" class="form-check-input" data-testid="item-available" />
+                <label asp-for="IsAvailable" class="form-check-label">Available (untick = sold out)</label>
+            </div>
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary" data-testid="save-item">Save</button>
+        <a class="btn btn-outline-secondary" asp-action="Index" asp-route-clientConfigId="@Model.ClientConfigId">Cancel</a>
+    </div>
+</form>

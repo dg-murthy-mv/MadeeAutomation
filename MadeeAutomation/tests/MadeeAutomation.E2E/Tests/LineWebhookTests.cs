@@ -142,7 +142,7 @@ public class LineWebhookTests
 
         var prompt = Fakes.ClaudeCalls.Last(c => c.UserMessage == "What time do you open?").System;
         Assert.That(prompt, Does.Contain("Opening hours: 7am-6pm"), "the client's knowledge base is sent to the AI");
-        Assert.That(prompt, Does.Contain("Croissant - 45 THB"), "the client's menu is sent to the AI");
+        Assert.That(prompt, Does.Contain("- Croissant: ฿45.00"), "the client's menu is sent to the AI (with the price in the client's currency)");
     }
 
     [Test]

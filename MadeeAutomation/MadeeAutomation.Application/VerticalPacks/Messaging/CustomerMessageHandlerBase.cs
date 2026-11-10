@@ -18,11 +18,13 @@ public abstract class CustomerMessageHandlerBase : IHandler
 
     private readonly MessageAssistant _assistant;
     private readonly IPosFirstConnector _posFirst;
+    private readonly BusinessProfileLoader _profiles;
 
-    protected CustomerMessageHandlerBase(MessageAssistant assistant, IPosFirstConnector posFirst)
+    protected CustomerMessageHandlerBase(MessageAssistant assistant, IPosFirstConnector posFirst, BusinessProfileLoader profiles)
     {
         _assistant = assistant;
         _posFirst = posFirst;
+        _profiles = profiles;
     }
 
     public async Task<HandlerResult> HandleAsync(TriggerContext context, CancellationToken cancellationToken = default)
@@ -36,7 +38,8 @@ public abstract class CustomerMessageHandlerBase : IHandler
         if (string.IsNullOrWhiteSpace(from) && string.IsNullOrWhiteSpace(context.ReplyToken))
             return HandlerResult.Fail("No customer id on the message - cannot reply.");
 
-        var analysis = await _assistant.AnalyzeAsync(context.Client, text, Mode, cancellationToken);
+        var profile = await _profiles.LoadAsync(context.Client, cancellationToken);
+        var analysis = await _assistant.AnalyzeAsync(context.Client, profile, text, Mode, cancellationToken);
         if (analysis is null)
             return HandlerResult.Fail("The AI reply was not valid JSON (tried twice).");
 
@@ -61,20 +64,30 @@ public abstract class CustomerMessageHandlerBase : IHandler
             var client = context.Client;
             var currency = client?.Currency?.ToUpperInvariant();
             var timeZoneId = client?.TimeZoneId;
-            var menu = MenuCatalog.Parse(client?.MenuText);
+            var menu = profile.Menu;
 
             // Prices come from the client's own menu - never from the AI.
-            var lines = analysis.Items.Select(i =>
+            var matched = analysis.Items.Select(i => (ordered: i, match: MenuCatalog.Match(menu, i.Name))).ToList();
+
+            // Safety net: sold-out items are never ordered, even if the AI tried.
+            var soldOut = matched.Where(m => m.match is { IsAvailable: false }).Select(m => m.match!.Name).Distinct().ToList();
+            matched = matched.Where(m => m.match is not { IsAvailable: false }).ToList();
+            if (matched.Count == 0)
             {
-                var match = MenuCatalog.Match(menu, i.Name);
-                var unitPrice = match?.Price;
+                var sorry = $"Sorry, {string.Join(", ", soldOut)} {(soldOut.Count == 1 ? "is" : "are")} not available today.";
+                return HandlerResult.Ok($"Not ordered - sold out ({string.Join(", ", soldOut)}).", Reply(sorry));
+            }
+
+            var lines = matched.Select(m =>
+            {
+                var unitPrice = m.match?.Price;
                 return new
                 {
-                    name = match?.Name ?? i.Name,
-                    quantity = i.Quantity,
+                    name = m.match?.Name ?? m.ordered.Name,
+                    quantity = m.ordered.Quantity,
                     unitPrice,
-                    lineTotal = unitPrice * i.Quantity,
-                    onMenu = match is not null
+                    lineTotal = unitPrice * m.ordered.Quantity,
+                    onMenu = m.match is not null
                 };
             }).ToList();
 
@@ -110,11 +123,13 @@ public abstract class CustomerMessageHandlerBase : IHandler
             reply = reply.Contains(MessageAssistant.OrderRefPlaceholder)
                 ? reply.Replace(MessageAssistant.OrderRefPlaceholder, orderId)
                 : $"{reply} (ref #{orderId})";
+            if (soldOut.Count > 0)
+                reply += $"\n(Not included - not available today: {string.Join(", ", soldOut)})";
             if (orderTotal is not null)
                 reply += $"\nTotal: {Money.Format(orderTotal.Value, currency)}";
 
             var totalText = orderTotal is null ? "" : $", total {Money.Format(orderTotal.Value, currency)}";
-            return HandlerResult.Ok($"Order {orderId} created ({analysis.Items.Count} item(s){totalText}).", Reply(reply));
+            return HandlerResult.Ok($"Order {orderId} created ({lines.Count} item(s){totalText}).", Reply(reply));
         }
 
         // ---- Hand-over to staff ----
@@ -172,7 +187,7 @@ public abstract class CustomerMessageHandlerBase : IHandler
 /// <summary>Recommended handler for LINE / WhatsApp / Messenger: orders + FAQ + hand-over. HandlerKey "customer-message".</summary>
 public class CustomerMessageHandler : CustomerMessageHandlerBase
 {
-    public CustomerMessageHandler(MessageAssistant assistant, IPosFirstConnector posFirst) : base(assistant, posFirst) { }
+    public CustomerMessageHandler(MessageAssistant assistant, IPosFirstConnector posFirst, BusinessProfileLoader profiles) : base(assistant, posFirst, profiles) { }
     public override string HandlerKey => "customer-message";
     protected override AssistantMode Mode => AssistantMode.Full;
 }
@@ -180,7 +195,7 @@ public class CustomerMessageHandler : CustomerMessageHandlerBase
 /// <summary>Orders only (replaces whatsapp-/line-/messenger-order-parser). HandlerKey "order-parser".</summary>
 public class OrderParserHandler : CustomerMessageHandlerBase
 {
-    public OrderParserHandler(MessageAssistant assistant, IPosFirstConnector posFirst) : base(assistant, posFirst) { }
+    public OrderParserHandler(MessageAssistant assistant, IPosFirstConnector posFirst, BusinessProfileLoader profiles) : base(assistant, posFirst, profiles) { }
     public override string HandlerKey => "order-parser";
     protected override AssistantMode Mode => AssistantMode.OrdersOnly;
 }
@@ -188,7 +203,7 @@ public class OrderParserHandler : CustomerMessageHandlerBase
 /// <summary>FAQ only, from the client's knowledge base. HandlerKey "faq-responder".</summary>
 public class FaqResponderHandler : CustomerMessageHandlerBase
 {
-    public FaqResponderHandler(MessageAssistant assistant, IPosFirstConnector posFirst) : base(assistant, posFirst) { }
+    public FaqResponderHandler(MessageAssistant assistant, IPosFirstConnector posFirst, BusinessProfileLoader profiles) : base(assistant, posFirst, profiles) { }
     public override string HandlerKey => "faq-responder";
     protected override AssistantMode Mode => AssistantMode.FaqOnly;
 }

@@ -36,7 +36,8 @@ public class DeviceTests : PageTest
         {
             "/Clients", $"/Clients/Details/{World.Bakery.Id}", $"/Clients/Edit/{World.Bakery.Id}", "/Clients/Create",
             $"/Clients/TestWorkflow/{World.Bakery.WorkflowId}", $"/ExecutionLogs?clientConfigId={World.Bakery.Id}",
-            $"/InboundEvents?clientConfigId={World.Bakery.Id}", "/AdminUsers", "/Account/MyAccount", "/Account/ChangePassword"
+            $"/InboundEvents?clientConfigId={World.Bakery.Id}", "/AdminUsers", "/Account/MyAccount", "/Account/ChangePassword",
+            $"/Menu?clientConfigId={World.SpiceCafe.Id}", $"/Hours?clientConfigId={World.SpiceCafe.Id}"
         };
 
         var tooWide = new List<string>();

@@ -13,6 +13,10 @@ public class ClientDetailsModel
 
     public string WebApiBaseUrl { get; set; } = string.Empty;
 
+    public int MenuItemCount { get; set; }
+    public int SoldOutCount { get; set; }
+    public MadeeAutomation.Domain.Regional.BusinessStatus? HoursStatus { get; set; }
+
     public string LineWebhookUrl => $"{WebApiBaseUrl}/api/webhooks/line/{Client.ClientCode}";
     public string WhatsAppWebhookUrl => $"{WebApiBaseUrl}/api/webhooks/whatsapp/{Client.ClientCode}";
     public string MessengerWebhookUrl => $"{WebApiBaseUrl}/api/webhooks/messenger/{Client.ClientCode}";

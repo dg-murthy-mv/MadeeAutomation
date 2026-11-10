@@ -134,13 +134,13 @@
             <label asp-for="KnowledgeBaseText" class="form-label"></label>
             <textarea asp-for="KnowledgeBaseText" class="form-control" rows="6" dir="auto"
                       placeholder="Opening hours: 7am-6pm every day&#10;Delivery: Ban Chang only, free over 300 THB&#10;Payment: PromptPay or cash"></textarea>
-            <div class="form-text">The bot answers questions ONLY from this text. Anything not covered goes to staff.</div>
+            <div class="form-text">The bot answers questions ONLY from this text (plus the Menu and Opening hours pages). Anything not covered goes to staff. Opening hours and closed days have their own page now - no need to write them here.</div>
         </div>
         <div class="mb-0">
             <label asp-for="MenuText" class="form-label"></label>
             <textarea asp-for="MenuText" class="form-control" rows="6" dir="auto"
                       placeholder="Croissant - 45&#10;Sourdough loaf - 180&#10;Chocolate cake (1 lb) - 450"></textarea>
-            <div class="form-text">One item per line, as <code>Name - price</code> (price in the client's currency). Order totals are worked out from these prices - the AI never makes up a price.</div>
+            <div class="form-text">Old-style menu: one item per line, as <code>Name - price</code>. It is used only while the client's <strong>Menu</strong> page is empty. Use Menu &rarr; <em>Import from old menu text</em> to move it across.</div>
         </div>
     </div>
 

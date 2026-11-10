@@ -167,8 +167,29 @@ public sealed class FakeServer : IAsyncDisposable
             });
         }
 
+        // Round 004: structured-menu items. The fake AI passes the customer's own words through
+        // (e.g. "tea"), so our alias matching and sold-out checks are what's being tested.
+        var cafeItems = Regex.Matches(text, @"(\d+)\s*(?:x\s*)?(chai|tea|samosa|paneer roll)\b");
+        if (cafeItems.Count > 0)
+        {
+            var items = cafeItems.Select(x => new { name = x.Groups[2].Value, quantity = int.Parse(x.Groups[1].Value) }).ToArray();
+            return Json(new
+            {
+                intent = "order", language = "en",
+                reply = "Order confirmed: " + string.Join(", ", items.Select(i => $"{i.quantity} x {i.name}")) + ". Your ref is {ORDER_REF}.",
+                canAnswer = false, needsHuman = false,
+                order = new { items, requestedDeliveryTime = (string?)null, requestedDeliveryText = (string?)null, customerNote = (string?)null }
+            });
+        }
+
         if (text.Contains("open") || text.Contains("hours"))
         {
+            // Structured hours: answer from the "RIGHT NOW:" line our code puts in the prompt.
+            var now = Regex.Match(system, @"RIGHT NOW: (.+)");
+            if (now.Success && system.Contains("OPENING HOURS"))
+                return Json(new { intent = "question", language = "en", reply = "We are " + now.Groups[1].Value.Trim(),
+                    canAnswer = true, needsHuman = false, order = (object?)null });
+
             var known = system.Contains("Opening hours");
             return Json(new
             {

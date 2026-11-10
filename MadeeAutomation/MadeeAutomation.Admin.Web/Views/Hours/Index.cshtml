@@ -1,0 +1,124 @@
+@model HoursPageModel
+@{
+    var client = Model.Client;
+    ViewData["Title"] = $"Opening hours - {client.ClientName}";
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Opening hours</h2>
+        <div class="mv-subtle">
+            <a asp-controller="Clients" asp-action="Details" asp-route-id="@client.Id">@client.ClientName</a>
+            &middot; times are in <strong>@client.TimeZoneId</strong> (now @Model.LocalNowText)
+        </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-secondary" asp-controller="Menu" asp-action="Index" asp-route-clientConfigId="@client.Id">Menu</a>
+    </div>
+</div>
+
+<div class="alert @(Model.HoursConfigured ? "alert-secondary" : "alert-warning")" data-testid="hours-now">
+    <strong>Right now:</strong> @Model.StatusText
+</div>
+
+<form asp-action="Save" asp-route-clientConfigId="@client.Id" method="post" class="mv-card mv-card-body mb-4" data-testid="hours-form">
+    <h5 class="mv-section-title">Every week</h5>
+    <div asp-validation-summary="All" class="text-danger small" data-testid="hours-errors"></div>
+    <div class="form-text mb-2">A closing time earlier than the opening time means it runs past midnight (e.g. 18:00 - 02:00). Use the second period for a break in the day.</div>
+
+    @for (var i = 0; i < Model.Days.Count; i++)
+    {
+        var d = Model.Days[i];
+        <div class="mv-hours-row border-bottom py-2" data-testid="hours-day" data-day="@d.Day">
+            <input type="hidden" name="days[@i].Day" value="@((int)d.Day)" />
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <strong style="min-width: 6.5rem">@d.Day</strong>
+                <div class="form-check me-2">
+                    <input class="form-check-input mv-closed" type="checkbox" id="closed-@i" name="days[@i].Closed" value="true" @(d.Closed ? "checked" : "") data-testid="day-closed" />
+                    <input type="hidden" name="days[@i].Closed" value="false" />
+                    <label class="form-check-label" for="closed-@i">Closed</label>
+                </div>
+                <div class="d-flex flex-wrap gap-2 mv-periods">
+                    <div class="input-group input-group-sm" style="width: auto">
+                        <input type="time" class="form-control" name="days[@i].Open1" value="@d.Open1" data-testid="open1" aria-label="@d.Day opens" />
+                        <span class="input-group-text">to</span>
+                        <input type="time" class="form-control" name="days[@i].Close1" value="@d.Close1" data-testid="close1" aria-label="@d.Day closes" />
+                    </div>
+                    <div class="input-group input-group-sm" style="width: auto">
+                        <span class="input-group-text">and</span>
+                        <input type="time" class="form-control" name="days[@i].Open2" value="@d.Open2" data-testid="open2" aria-label="@d.Day opens again" />
+                        <span class="input-group-text">to</span>
+                        <input type="time" class="form-control" name="days[@i].Close2" value="@d.Close2" data-testid="close2" aria-label="@d.Day closes again" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="d-flex flex-wrap gap-2 mt-3">
+        <button type="submit" class="btn btn-primary" data-testid="save-hours">Save opening hours</button>
+        <button type="button" class="btn btn-outline-secondary" id="copy-monday" data-testid="copy-monday">Copy Monday to all days</button>
+    </div>
+</form>
+
+<div class="mv-card mv-card-body" data-testid="closed-dates-card">
+    <h5 class="mv-section-title">Closed dates (holidays)</h5>
+    <form asp-action="AddClosedDate" asp-route-clientConfigId="@client.Id" method="post" class="row g-2 align-items-end mb-3" autocomplete="off">
+        <div class="col-12 col-sm-4">
+            <label class="form-label" for="closed-date">Date</label>
+            <input type="date" class="form-control" id="closed-date" name="date" data-testid="closed-date" />
+        </div>
+        <div class="col-12 col-sm-5">
+            <label class="form-label" for="closed-reason">Reason (optional)</label>
+            <input type="text" class="form-control" id="closed-reason" name="reason" maxlength="200" dir="auto" placeholder="Songkran" data-testid="closed-reason" />
+        </div>
+        <div class="col-12 col-sm-3">
+            <button type="submit" class="btn btn-outline-primary w-100" data-testid="add-closed-date">Add closed date</button>
+        </div>
+    </form>
+
+    @if (Model.ClosedDates.Count == 0)
+    {
+        <div class="mv-subtle" data-testid="no-closed-dates">No closed dates coming up.</div>
+    }
+    else
+    {
+        <ul class="list-group" data-testid="closed-dates">
+            @foreach (var c in Model.ClosedDates)
+            {
+                <li class="list-group-item d-flex justify-content-between align-items-center gap-2" data-testid="closed-date-row">
+                    <span>@c.Date.ToString("ddd d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)@(c.Reason is null ? "" : " - ")<span dir="auto">@c.Reason</span></span>
+                    <form asp-action="DeleteClosedDate" asp-route-clientConfigId="@client.Id" asp-route-id="@c.Id" method="post">
+                        <button type="submit" class="btn btn-sm btn-outline-danger" data-testid="delete-closed-date">Remove</button>
+                    </form>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    function sync(row) {
+        var closed = row.querySelector('.mv-closed').checked;
+        row.querySelectorAll('input[type=time]').forEach(function (t) { t.disabled = closed; });
+    }
+    document.querySelectorAll('.mv-hours-row').forEach(function (row) {
+        sync(row);
+        row.querySelector('.mv-closed').addEventListener('change', function () { sync(row); });
+    });
+    document.getElementById('copy-monday').addEventListener('click', function () {
+        var rows = document.querySelectorAll('.mv-hours-row');
+        var src = rows[0].querySelectorAll('input[type=time]');
+        var srcClosed = rows[0].querySelector('.mv-closed').checked;
+        rows.forEach(function (row, i) {
+            if (i === 0) return;
+            row.querySelector('.mv-closed').checked = srcClosed;
+            row.querySelectorAll('input[type=time]').forEach(function (t, j) { t.value = src[j].value; });
+            sync(row);
+        });
+    });
+})();
+</script>
+}

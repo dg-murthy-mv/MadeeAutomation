@@ -20,6 +20,10 @@ public record SeededClient(Guid Id, string Code, string LineSecret, Guid? Workfl
 ///   other     Active, LINE secret+token, workflow                   -> cross-client URL check
 ///   legacy    Active, credentials stored as OLD plain JSON (not encrypted) -> still works
 ///   indiacafe India / INR / Asia/Kolkata, menu "Catering package - 125000" -> lakh formatting + IST times
+///   spicecafe India / INR, STRUCTURED menu (chai with aliases "chai, tea", samosa, paneer roll SOLD OUT),
+///             hours Mon-Sat 07:00-14:00 + 16:00-22:00, Sunday closed, closed date in 10 days ("Diwali")
+///   menuedit  Thailand, old text menu only -> menu page CRUD + import
+///   hoursedit UAE / AED / Asia/Dubai, no hours -> hours page UI
 ///
 /// Admin accounts (password for all: World.AdminPassword)
 ///   admin@e2e.test          used by every Admin UI test
@@ -37,6 +41,9 @@ public static class World
     public static SeededClient Other { get; private set; } = null!;
     public static SeededClient Legacy { get; private set; } = null!;
     public static SeededClient IndiaCafe { get; private set; } = null!;
+    public static SeededClient SpiceCafe { get; private set; } = null!;
+    public static SeededClient MenuEdit { get; private set; } = null!;
+    public static SeededClient HoursEdit { get; private set; } = null!;
 
     public const string AdminEmail = "admin@e2e.test";
     public const string AdminPassword = "E2eAdmin2026x";
@@ -44,6 +51,7 @@ public static class World
     public const string BakeryKnowledgeBase = "Opening hours: 7am-6pm every day\nDelivery: Ban Chang only, free over 300 THB";
     public const string BakeryMenu = "Croissant - 45 THB\nSourdough loaf - 180 THB";
     public const string IndiaMenu = "Catering package - 125000\nMasala chai - 30";
+    public const string MenuEditText = "Croissant - 45\nSourdough loaf - 180\nBirthday cake";
 
     /// <summary>Unique per run, so names never clash with a previous run's leftovers.</summary>
     public static string RunId { get; } = DateTime.UtcNow.ToString("HHmmss");
@@ -105,6 +113,32 @@ public static class World
                 PosFirstApiKey = "pos-key-india"
             }), "india-secret", withWorkflow: true, menu: IndiaMenu, country: "IN", currency: "INR", timeZone: "Asia/Kolkata");
 
+        SpiceCafe = await AddClientAsync(db, "spicecafe", "E2E Spice Cafe", ClientStatus.Active,
+            Encrypted(new ClientIntegrationSettings
+            {
+                LineChannelSecret = "spice-secret",
+                LineChannelAccessToken = "spice-token",
+                PosFirstBaseUrl = settings.FakeServerUrl,
+                PosFirstApiKey = "pos-key-spice"
+            }), "spice-secret", withWorkflow: true, kb: "Delivery: Indiranagar only.", country: "IN", currency: "INR", timeZone: "Asia/Kolkata");
+        await AddMenuItemAsync(db, SpiceCafe.Id, "Masala chai", "Drinks", 60m, "chai, tea", true, 0);
+        await AddMenuItemAsync(db, SpiceCafe.Id, "Samosa", "Snacks", 25m, null, true, 1);
+        await AddMenuItemAsync(db, SpiceCafe.Id, "Paneer roll", "Snacks", 120m, null, false, 2);
+        for (var day = 1; day <= 6; day++) // Mon-Sat; Sunday closed
+        {
+            await AddHoursAsync(db, SpiceCafe.Id, day, "07:00", "14:00");
+            await AddHoursAsync(db, SpiceCafe.Id, day, "16:00", "22:00");
+        }
+        await db.ExecAsync("INSERT INTO dbo.ClosedDates (Id, ClientConfigId, [Date], Reason) VALUES (NEWID(), @c, @d, 'Diwali');",
+            ("@c", SpiceCafe.Id), ("@d", DateTime.UtcNow.Date.AddDays(10)));
+
+        MenuEdit = await AddClientAsync(db, "menuedit", "E2E Menu Edit", ClientStatus.Active,
+            Encrypted(Line("menuedit-secret", "menuedit-token")), "menuedit-secret", withWorkflow: true, menu: MenuEditText);
+
+        HoursEdit = await AddClientAsync(db, "hoursedit", "E2E Hours Edit", ClientStatus.Active,
+            Encrypted(Line("hoursedit-secret", "hoursedit-token")), "hoursedit-secret", withWorkflow: true,
+            country: "AE", currency: "AED", timeZone: "Asia/Dubai");
+
         // Old rows hold plain JSON - the app must still read them (and encrypt on the next save).
         Legacy = await AddClientAsync(db, "legacy", "E2E Legacy", ClientStatus.Active,
             Line("legacy-secret", "legacy-token").ToJson(), "legacy-secret", withWorkflow: true);
@@ -135,6 +169,18 @@ public static class World
 
         return new SeededClient(id, code, secret, workflowId);
     }
+
+    private static Task AddMenuItemAsync(TestDatabase db, Guid clientId, string name, string category, decimal price,
+        string? aliases, bool available, int sort) =>
+        db.ExecAsync(@"
+            INSERT INTO dbo.MenuItems (Id, ClientConfigId, Name, Category, Price, Aliases, IsAvailable, SortOrder, CreatedAtUtc)
+            VALUES (NEWID(), @c, @name, @cat, @price, @aliases, @avail, @sort, SYSUTCDATETIME());",
+            ("@c", clientId), ("@name", name), ("@cat", category), ("@price", price), ("@aliases", aliases),
+            ("@avail", available), ("@sort", sort));
+
+    private static Task AddHoursAsync(TestDatabase db, Guid clientId, int dayOfWeek, string open, string close) =>
+        db.ExecAsync("INSERT INTO dbo.OpeningHours (Id, ClientConfigId, DayOfWeek, OpenTime, CloseTime) VALUES (NEWID(), @c, @d, @o, @cl);",
+            ("@c", clientId), ("@d", dayOfWeek), ("@o", TimeSpan.Parse(open)), ("@cl", TimeSpan.Parse(close)));
 
     private static async Task AddAdminAsync(TestDatabase db, string email, string name, string password)
     {

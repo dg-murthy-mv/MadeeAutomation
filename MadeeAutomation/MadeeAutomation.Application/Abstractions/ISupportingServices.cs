@@ -101,6 +101,28 @@ public interface IInboundEventRepository
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>A client's menu, opening hours and closed dates (what the AI and the order logic use).</summary>
+public interface IBusinessProfileRepository
+{
+    Task<List<MenuItem>> GetMenuAsync(Guid clientConfigId, CancellationToken cancellationToken = default);
+    Task<MenuItem?> GetMenuItemAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<bool> MenuNameExistsAsync(Guid clientConfigId, string name, Guid? exceptId = null, CancellationToken cancellationToken = default);
+    Task AddMenuItemsAsync(IEnumerable<MenuItem> items, CancellationToken cancellationToken = default);
+    Task UpdateMenuItemAsync(MenuItem item, CancellationToken cancellationToken = default);
+    Task DeleteMenuItemAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<List<OpeningHours>> GetHoursAsync(Guid clientConfigId, CancellationToken cancellationToken = default);
+
+    /// <summary>Replaces the whole weekly schedule in one transaction.</summary>
+    Task ReplaceHoursAsync(Guid clientConfigId, IReadOnlyCollection<OpeningHours> hours, CancellationToken cancellationToken = default);
+
+    Task<List<ClosedDate>> GetClosedDatesAsync(Guid clientConfigId, DateOnly fromDate, CancellationToken cancellationToken = default);
+
+    /// <summary>False when that date is already listed.</summary>
+    Task<bool> AddClosedDateAsync(ClosedDate closedDate, CancellationToken cancellationToken = default);
+    Task DeleteClosedDateAsync(Guid id, CancellationToken cancellationToken = default);
+}
+
 /// <summary>Admin.Web sign-in accounts and their password-reset links.</summary>
 public interface IAdminUserRepository
 {

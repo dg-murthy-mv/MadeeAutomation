@@ -1,0 +1,111 @@
+@model MenuPageModel
+@{
+    var client = Model.Client;
+    ViewData["Title"] = $"Menu - {client.ClientName}";
+    var groups = Model.Items.GroupBy(i => string.IsNullOrWhiteSpace(i.Category) ? "" : i.Category!).ToList();
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Menu</h2>
+        <div class="mv-subtle">
+            <a asp-controller="Clients" asp-action="Details" asp-route-id="@client.Id">@client.ClientName</a>
+            &middot; prices in <strong>@client.Currency</strong> &middot; <span data-testid="menu-total">@Model.Items.Count item(s)</span>
+        </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-secondary" asp-controller="Hours" asp-action="Index" asp-route-clientConfigId="@client.Id">Opening hours</a>
+    </div>
+</div>
+
+@if (Model.HasOldMenuText)
+{
+    <div class="alert alert-info d-flex flex-wrap gap-2 align-items-center justify-content-between" data-testid="import-banner">
+        <div>
+            This client still has an <strong>old text menu</strong>.
+            @if (Model.Items.Count == 0) { <span>The bot is using it until you import it.</span> }
+            else { <span>The bot ignores it, because the menu below has items.</span> }
+        </div>
+        <form asp-action="ImportFromText" asp-route-clientConfigId="@client.Id" method="post">
+            <button type="submit" class="btn btn-sm btn-primary" data-testid="import-menu">Import from old menu text</button>
+        </form>
+    </div>
+}
+
+<div class="mv-card mv-card-body mb-4" data-testid="add-item-card">
+    <h5 class="mv-section-title">Add an item</h5>
+    <form asp-action="Add" method="post" autocomplete="off">
+        <input type="hidden" asp-for="NewItem.ClientConfigId" />
+        <div asp-validation-summary="ModelOnly" class="text-danger small"></div>
+        <div class="row g-2">
+            <div class="col-12 col-md-4">
+                <label asp-for="NewItem.Name" class="form-label"></label>
+                <input asp-for="NewItem.Name" class="form-control" dir="auto" data-testid="item-name" placeholder="Iced latte" />
+                <span asp-validation-for="NewItem.Name" class="text-danger small" data-testid="item-name-error"></span>
+            </div>
+            <div class="col-6 col-md-2">
+                <label asp-for="NewItem.Price" class="form-label">Price (@client.Currency)</label>
+                <input asp-for="NewItem.Price" class="form-control" type="number" step="0.01" min="0" inputmode="decimal" data-testid="item-price" />
+                <span asp-validation-for="NewItem.Price" class="text-danger small"></span>
+            </div>
+            <div class="col-6 col-md-2">
+                <label asp-for="NewItem.Category" class="form-label"></label>
+                <input asp-for="NewItem.Category" class="form-control" dir="auto" data-testid="item-category" placeholder="Drinks" />
+            </div>
+            <div class="col-12 col-md-4">
+                <label asp-for="NewItem.Aliases" class="form-label"></label>
+                <input asp-for="NewItem.Aliases" class="form-control" dir="auto" data-testid="item-aliases" placeholder="latte yen, ลาเต้เย็น" />
+                <div class="form-text">Comma-separated. Other ways customers write it, in any language.</div>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary mt-3" data-testid="add-item">Add item</button>
+    </form>
+</div>
+
+<div class="mv-card">
+    @if (Model.Items.Count == 0)
+    {
+        <div class="mv-card-body mv-subtle" data-testid="menu-empty">No menu items yet. Add one above@(Model.HasOldMenuText ? " or import the old menu text" : "").</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table mv-table align-middle mb-0" data-testid="menu-table">
+                <thead>
+                    <tr><th>Item</th><th>Price</th><th>Other names</th><th>Status</th><th></th></tr>
+                </thead>
+                <tbody>
+                @foreach (var group in groups)
+                {
+                    @if (groups.Count > 1 || group.Key != "")
+                    {
+                        <tr class="table-light"><td colspan="5"><strong>@(group.Key == "" ? "Other" : group.Key)</strong></td></tr>
+                    }
+                    @foreach (var item in group)
+                    {
+                        <tr data-testid="menu-row" data-item-name="@item.Name">
+                            <td data-label="Item"><span dir="auto" data-testid="menu-item-name">@item.Name</span></td>
+                            <td data-label="Price" data-testid="menu-item-price">@(item.Price is decimal p ? Money.Format(p, client.Currency) : "No price")</td>
+                            <td data-label="Other names" class="small" dir="auto">@item.Aliases</td>
+                            <td data-label="Status">
+                                @if (item.IsAvailable) { <span class="badge bg-success" data-testid="menu-item-status">Available</span> }
+                                else { <span class="badge bg-warning text-dark" data-testid="menu-item-status">Sold out</span> }
+                            </td>
+                            <td class="text-nowrap">
+                                <form asp-action="ToggleAvailable" asp-route-id="@item.Id" method="post" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary" data-testid="toggle-available">@(item.IsAvailable ? "Sold out" : "Available")</button>
+                                </form>
+                                <a class="btn btn-sm btn-outline-primary" asp-action="Edit" asp-route-id="@item.Id" data-testid="edit-item">Edit</a>
+                                <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Delete @item.Name?">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" data-testid="delete-item">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+<div class="form-text mt-2">The bot quotes these prices and works out order totals from them. "Sold out" items are refused until you switch them back.</div>

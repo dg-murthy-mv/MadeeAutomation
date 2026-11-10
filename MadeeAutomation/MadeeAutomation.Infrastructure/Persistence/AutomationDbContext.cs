@@ -18,6 +18,9 @@ public class AutomationDbContext : DbContext
     public DbSet<InboundEvent> InboundEvents => Set<InboundEvent>();
     public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<MenuItem> MenuItems => Set<MenuItem>();
+    public DbSet<OpeningHours> OpeningHours => Set<OpeningHours>();
+    public DbSet<ClosedDate> ClosedDates => Set<ClosedDate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -45,6 +48,30 @@ public class AutomationDbContext : DbContext
             entity.Property(u => u.PasswordHash).HasMaxLength(500).IsRequired();
             entity.Property(u => u.SecurityStamp).HasMaxLength(64).IsRequired();
             entity.Property(u => u.TimeZoneId).HasMaxLength(64).IsRequired();
+        });
+
+        modelBuilder.Entity<MenuItem>(entity =>
+        {
+            entity.ToTable("MenuItems");
+            entity.HasIndex(m => m.ClientConfigId);
+            entity.Property(m => m.Name).HasMaxLength(200).IsRequired();
+            entity.Property(m => m.Category).HasMaxLength(100);
+            entity.Property(m => m.Aliases).HasMaxLength(500);
+            entity.Property(m => m.Price).HasPrecision(18, 2);
+            entity.Ignore(m => m.AliasList);
+        });
+
+        modelBuilder.Entity<OpeningHours>(entity =>
+        {
+            entity.ToTable("OpeningHours");
+            entity.HasIndex(h => h.ClientConfigId);
+        });
+
+        modelBuilder.Entity<ClosedDate>(entity =>
+        {
+            entity.ToTable("ClosedDates");
+            entity.HasIndex(c => new { c.ClientConfigId, c.Date }).IsUnique();
+            entity.Property(c => c.Reason).HasMaxLength(200);
         });
 
         modelBuilder.Entity<PasswordResetToken>(entity =>
