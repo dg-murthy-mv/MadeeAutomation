@@ -70,6 +70,9 @@ public class AutomationDbContext : DbContext
             entity.Property(o => o.RequestedForText).HasMaxLength(200);
             entity.Property(o => o.CustomerNote).HasMaxLength(1000);
             entity.Property(o => o.StatusChangedBy).HasMaxLength(200);
+            entity.Property(o => o.Language).HasMaxLength(40);
+            entity.Property(o => o.CancelReason).HasMaxLength(300);
+            entity.Property(o => o.CustomerNoticeNote).HasMaxLength(500);
             entity.HasMany(o => o.Items).WithOne().HasForeignKey(i => i.OrderId).OnDelete(DeleteBehavior.Cascade);
         });
 

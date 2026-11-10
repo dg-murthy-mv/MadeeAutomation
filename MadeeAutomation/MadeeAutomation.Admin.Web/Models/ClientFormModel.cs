@@ -34,6 +34,9 @@ public class ClientFormModel
     [StringLength(1000), Display(Name = "Fallback reply")]
     public string? FallbackReplyText { get; set; }
 
+    [Display(Name = "Message the customer when an order is accepted or cancelled")]
+    public bool NotifyCustomerOnOrderStatus { get; set; } = true;
+
     [EmailAddress, StringLength(256), Display(Name = "Staff alert email")]
     public string? StaffAlertEmail { get; set; }
 

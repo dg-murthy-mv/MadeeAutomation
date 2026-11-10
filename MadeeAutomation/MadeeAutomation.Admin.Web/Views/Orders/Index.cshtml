@@ -26,48 +26,83 @@
     </div>
 }
 
+<form asp-action="Index" method="get" class="mv-card mv-card-body mb-3" data-testid="orders-filter" autocomplete="off">
+    <input type="hidden" name="clientConfigId" value="@client.Id" />
+    <input type="hidden" name="show" value="@Model.Show" />
+    <div class="row g-2 align-items-end">
+        <div class="col-12 col-md-5">
+            <label class="form-label" for="orders-q">Search</label>
+            <input type="search" class="form-control" id="orders-q" name="q" value="@Model.Search" maxlength="100" dir="auto"
+                   placeholder="Order number, customer or item" data-testid="orders-search" />
+        </div>
+        <div class="col-7 col-md-3">
+            <label class="form-label" for="orders-day">Orders for (day)</label>
+            <input type="date" class="form-control" id="orders-day" name="day" value="@(Model.Day?.ToString("yyyy-MM-dd"))" data-testid="orders-day" />
+        </div>
+        <div class="col-5 col-md-2">
+            <label class="form-label" for="orders-ps">Per page</label>
+            <select class="form-select" id="orders-ps" name="ps" data-testid="orders-page-size">
+                @foreach (var size in new[] { 10, 20, 50 })
+                {
+                    <option value="@size" selected="@(Model.Pager.PageSize == size)">@size</option>
+                }
+            </select>
+        </div>
+        <div class="col-12 col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-primary flex-grow-1" data-testid="orders-apply">Search</button>
+        </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
+        @{
+            var baseRoute = new Dictionary<string, string?>(Model.Pager.Route);
+            string DayLink(DateOnly? d) => Url.Action("Index", "Orders", new Dictionary<string, string?>(baseRoute) { ["day"] = d?.ToString("yyyy-MM-dd") })!;
+        }
+        <a class="btn btn-sm @(Model.Day == Model.Today ? "btn-secondary" : "btn-outline-secondary")" href="@DayLink(Model.Today)" data-testid="orders-today">Today</a>
+        <a class="btn btn-sm @(Model.Day == Model.Today.AddDays(1) ? "btn-secondary" : "btn-outline-secondary")" href="@DayLink(Model.Today.AddDays(1))" data-testid="orders-tomorrow">Tomorrow</a>
+        @if (Model.IsFiltered)
+        {
+            <a class="btn btn-sm btn-link" asp-action="Index" asp-route-clientConfigId="@client.Id" asp-route-show="@Model.Show" data-testid="orders-clear">Clear search</a>
+        }
+    </div>
+</form>
+
 <ul class="nav nav-pills flex-wrap gap-1 mb-3" data-testid="order-tabs">
     @foreach (var (key, label) in tabs)
     {
+        var tabRoute = new Dictionary<string, string?>(Model.Pager.Route) { ["show"] = key };
         <li class="nav-item">
-            <a class="nav-link @(Model.Show == key ? "active" : "")" asp-action="Index" asp-route-clientConfigId="@client.Id" asp-route-show="@key" data-testid="orders-tab-@key">@label</a>
+            <a class="nav-link @(Model.Show == key ? "active" : "")" href="@Url.Action("Index", "Orders", tabRoute)" data-testid="orders-tab-@key">@label</a>
         </li>
     }
 </ul>
 
-<div class="mv-card mv-card-body">
+<div class="mv-card">
     @if (orders.Items.Count == 0)
     {
-        <div class="mv-subtle" data-testid="orders-empty">
-            @(Model.Show switch { "open" => "Nothing to do - no new or accepted orders.", "new" => "No new orders.", "done" => "No completed or cancelled orders yet.", _ => "No orders yet." })
+        <div class="mv-card-body mv-subtle" data-testid="orders-empty">
+            @if (Model.IsFiltered) { <span>No orders match this search.</span> }
+            else { <span>@(Model.Show switch { "open" => "Nothing to do - no new or accepted orders.", "new" => "No new orders.", "done" => "No completed or cancelled orders yet.", _ => "No orders yet." })</span> }
         </div>
     }
     else
     {
-        @foreach (var order in orders.Items)
-        {
-            <partial name="_OrderCard" model="(order, client, Model.Show, true)" />
-        }
-
-        <div class="mv-pagination">
-            <span class="mv-subtle">Page @orders.Page of @orders.TotalPages &middot; <span data-testid="orders-total">@orders.TotalCount</span> order(s)</span>
-            @if (orders.TotalPages > 1)
+        <div class="mv-card-body pb-0">
+            @foreach (var order in orders.Items)
             {
-                <nav>
-                    <ul class="pagination pagination-sm mb-0">
-                        <li class="page-item @(!orders.HasPrevious ? "disabled" : "")">
-                            <a class="page-link" asp-action="Index" asp-route-clientConfigId="@client.Id" asp-route-show="@Model.Show" asp-route-page="@(orders.Page - 1)">Previous</a>
-                        </li>
-                        <li class="page-item @(!orders.HasNext ? "disabled" : "")">
-                            <a class="page-link" asp-action="Index" asp-route-clientConfigId="@client.Id" asp-route-show="@Model.Show" asp-route-page="@(orders.Page + 1)">Next</a>
-                        </li>
-                    </ul>
-                </nav>
+                <partial name="_OrderCard" model="(order, client, Model.Show, true)" />
             }
         </div>
+        <partial name="_Pager" model="Model.Pager" />
     }
 </div>
 <div class="form-text mt-2">
     Accept an order when you will prepare it, and mark it Completed when it is handed over. A cancelled order frees up its items for the daily limit.
-    The bot does not message the customer when you accept or cancel - reply to them in the chat.
+    @if (client.NotifyCustomerOnOrderStatus)
+    {
+        <span data-testid="orders-notice-on">When you accept or cancel, the customer gets a message in their own language on the channel they ordered on. Nothing is sent for Completed.</span>
+    }
+    else
+    {
+        <span data-testid="orders-notice-off">Customer messages are switched off for this business: please tell the customer yourself when you accept or cancel.</span>
+    }
 </div>

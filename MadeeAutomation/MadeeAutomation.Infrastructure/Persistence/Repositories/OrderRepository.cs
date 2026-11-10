@@ -47,7 +47,7 @@ public class OrderRepository : IOrderRepository
             .FirstOrDefaultAsync(o => o.Id == orderId && o.ClientConfigId == clientConfigId, cancellationToken);
 
     public async Task<PagedResult<Order>> GetPagedAsync(Guid clientConfigId, IReadOnlyCollection<OrderStatus>? statuses, int page, int pageSize,
-        CancellationToken cancellationToken = default)
+        string? search = null, DateOnly? orderDate = null, CancellationToken cancellationToken = default)
     {
         if (page < 1) page = 1;
         var query = _db.Orders.AsNoTracking().Where(o => o.ClientConfigId == clientConfigId);
@@ -59,7 +59,23 @@ public class OrderRepository : IOrderRepository
             query = query.Where(o => o.Status == first || o.Status == second);
         }
 
+        if (orderDate is { } day) query = query.Where(o => o.OrderDate == day);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(o =>
+                o.Reference.Contains(term) ||
+                (o.CustomerName != null && o.CustomerName.Contains(term)) ||
+                (o.CustomerMessage != null && o.CustomerMessage.Contains(term)) ||
+                o.Items.Any(i => i.Name.Contains(term)));
+        }
+
         var total = await query.CountAsync(cancellationToken);
+        // Asking for a page past the end (e.g. after a filter) shows the last page instead of nothing.
+        var lastPage = Math.Max(1, (int)Math.Ceiling(total / (double)pageSize));
+        if (page > lastPage) page = lastPage;
+
         var items = await query
             .Include(o => o.Items)
             .OrderByDescending(o => o.CreatedAtUtc)
@@ -86,7 +102,18 @@ public class OrderRepository : IOrderRepository
         return rows.ToDictionary(r => r.MenuItemId, r => r.Quantity);
     }
 
-    public async Task<bool> SetStatusAsync(Guid clientConfigId, Guid orderId, OrderStatus status, string changedBy, CancellationToken cancellationToken = default)
+    public async Task SetCustomerNoticeAsync(Guid clientConfigId, Guid orderId, bool sent, string note, CancellationToken cancellationToken = default)
+    {
+        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.ClientConfigId == clientConfigId, cancellationToken);
+        if (order is null) return;
+
+        order.CustomerNoticeSent = sent;
+        order.CustomerNoticeNote = note.Length > 500 ? note[..500] : note;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> SetStatusAsync(Guid clientConfigId, Guid orderId, OrderStatus status, string changedBy, string? cancelReason = null,
+        CancellationToken cancellationToken = default)
     {
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.ClientConfigId == clientConfigId, cancellationToken);
         if (order is null) return false;
@@ -94,6 +121,10 @@ public class OrderRepository : IOrderRepository
         order.Status = status;
         order.StatusChangedBy = changedBy.Length > 200 ? changedBy[..200] : changedBy;
         order.StatusChangedAtUtc = DateTime.UtcNow;
+        if (status == OrderStatus.Cancelled)
+            order.CancelReason = string.IsNullOrWhiteSpace(cancelReason) ? null : cancelReason.Trim()[..Math.Min(cancelReason.Trim().Length, 300)];
+        order.CustomerNoticeSent = null;   // the notice below (if any) is about THIS change
+        order.CustomerNoticeNote = null;
         await _db.SaveChangesAsync(cancellationToken);
         return true;
     }

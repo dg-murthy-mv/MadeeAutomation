@@ -144,6 +144,7 @@ public class ClientsController : Controller
             MenuText = client.MenuText,
             FallbackReplyText = client.FallbackReplyText,
             StaffAlertEmail = client.StaffAlertEmail,
+            NotifyCustomerOnOrderStatus = client.NotifyCustomerOnOrderStatus,
             StaffAlertLineUserId = client.StaffAlertLineUserId
         };
 
@@ -419,6 +420,7 @@ public class ClientsController : Controller
         client.MenuText = string.IsNullOrWhiteSpace(model.MenuText) ? null : model.MenuText.Trim();
         client.FallbackReplyText = Clean(model.FallbackReplyText);
         client.StaffAlertEmail = Clean(model.StaffAlertEmail)?.ToLowerInvariant();
+        client.NotifyCustomerOnOrderStatus = model.NotifyCustomerOnOrderStatus;
         client.StaffAlertLineUserId = Clean(model.StaffAlertLineUserId);
     }
 

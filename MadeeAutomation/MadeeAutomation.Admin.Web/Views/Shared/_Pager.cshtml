@@ -1,0 +1,41 @@
+@model PagerModel
+@{
+    string Link(int page)
+    {
+        var route = new Dictionary<string, string?>(Model.Route) { ["page"] = page.ToString() };
+        return Url.Action("Index", Model.Controller, route)!;
+    }
+    // Page numbers: first, last and two either side of the current page.
+    var numbers = Enumerable.Range(1, Model.TotalPages)
+        .Where(n => n == 1 || n == Model.TotalPages || Math.Abs(n - Model.Page) <= 2)
+        .ToList();
+    var noun = Model.TotalCount == 1 ? Model.Noun : Model.Noun + "s";
+}
+<div class="mv-pagination" data-testid="pager">
+    <span class="mv-subtle" data-testid="pager-summary">
+        @if (Model.TotalCount == 0) { <span>0 @noun</span> }
+        else { <span>Showing @Model.From-@Model.To of <span data-testid="pager-total">@Model.TotalCount</span> @noun</span> }
+    </span>
+    @if (Model.TotalPages > 1)
+    {
+        <nav aria-label="Pages">
+            <ul class="pagination pagination-sm mb-0 flex-wrap">
+                <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
+                    <a class="page-link" href="@Link(Math.Max(1, Model.Page - 1))" data-testid="pager-prev">Previous</a>
+                </li>
+                @{ var previous = 0; }
+                @foreach (var n in numbers)
+                {
+                    if (n - previous > 1) { <li class="page-item disabled"><span class="page-link">&hellip;</span></li> }
+                    <li class="page-item @(n == Model.Page ? "active" : "")">
+                        <a class="page-link" href="@Link(n)" data-testid="pager-page-@n">@n</a>
+                    </li>
+                    previous = n;
+                }
+                <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
+                    <a class="page-link" href="@Link(Math.Min(Model.TotalPages, Model.Page + 1))" data-testid="pager-next">Next</a>
+                </li>
+            </ul>
+        </nav>
+    }
+</div>

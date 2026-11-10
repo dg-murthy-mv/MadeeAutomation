@@ -149,6 +149,17 @@ public sealed class FakeServer : IAsyncDisposable
         if (text.Contains("[badjson]"))
             return "Sorry, I can't help with that.";
 
+        // Round 006: translating an order notice. "[lang] same text" proves which language was asked for;
+        // a cancel reason containing "notranslate" makes the fake answer nonsense (the app must then send English).
+        if (system.StartsWith("You translate one short chat message"))
+        {
+            var lang = Regex.Match(system, @"into this language: ([^.]+)\.").Groups[1].Value;
+            return text.Contains("notranslate") ? "???" : $"[{lang}] {user}";
+        }
+
+        // The language the customer wrote in (Thai letters -> "th"), as the real AI reports it.
+        var language = Regex.IsMatch(user, @"[\u0E00-\u0E7F]") ? "th" : "en";
+
         var orderItem = text.Contains("croissant") || text.Contains("ครัวซองต์") ? "Croissant"
             : text.Contains("catering") ? "Catering package"
             : null;
@@ -166,7 +177,7 @@ public sealed class FakeServer : IAsyncDisposable
 
             return Json(new
             {
-                intent = "order", language = "en",
+                intent = "order", language,
                 reply = $"Order confirmed: {qty} x {orderItem}. Your ref is {{ORDER_REF}}.",
                 canAnswer = false, needsHuman = false,
                 order = new
@@ -194,7 +205,7 @@ public sealed class FakeServer : IAsyncDisposable
 
             return Json(new
             {
-                intent = "order", language = "en",
+                intent = "order", language,
                 reply = "Order confirmed: " + string.Join(", ", items.Select(i => $"{i.quantity} x {i.name}")) + ". Your ref is {ORDER_REF}.",
                 canAnswer = false, needsHuman = false,
                 order = new

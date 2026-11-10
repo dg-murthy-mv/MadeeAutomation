@@ -26,6 +26,9 @@ public record SeededClient(Guid Id, string Code, string LineSecret, Guid? Workfl
 ///   hoursedit UAE / AED / Asia/Dubai, no hours -> hours page UI
 ///   cakeshop  Thailand, NO POS, staff LINE user + staff email -> "New order" messages, own ORD- references,
 ///             daily limit (Birthday cake: 3 a day)
+///   bigmenu   30 menu items (12 Drinks, 12 Cakes, 6 with no category; 3 sold out; 5 with a daily limit) and
+///             45 orders (30 New, 8 Accepted, 4 Completed, 3 Cancelled; 9 for tomorrow; 5 from "Somchai")
+///             -> search, filters and paging. Nothing else may add data to this client.
 ///   portalcafe Thailand, NO POS and no staff channel; has client portal users (password World.PortalPassword):
 ///             owner@portalcafe.test, second@portalcafe.test (deactivation test)
 ///
@@ -50,6 +53,7 @@ public static class World
     public static SeededClient HoursEdit { get; private set; } = null!;
     public static SeededClient CakeShop { get; private set; } = null!;
     public static SeededClient PortalCafe { get; private set; } = null!;
+    public static SeededClient BigMenu { get; private set; } = null!;
 
     public const string PortalEmail = "owner@portalcafe.test";
     public const string PortalSecondEmail = "second@portalcafe.test";
@@ -164,6 +168,36 @@ public static class World
         await AddMenuItemAsync(db, PortalCafe.Id, "Samosa", "Snacks", 25m, null, true, 1);
         await AddAdminAsync(db, PortalEmail, "Portal Owner", PortalPassword, PortalCafe.Id);
         await AddAdminAsync(db, PortalSecondEmail, "Second User", PortalPassword, PortalCafe.Id);
+
+        BigMenu = await AddClientAsync(db, "bigmenu", "E2E Big Menu", ClientStatus.Active,
+            Encrypted(Line("bigmenu-secret", "bigmenu-token")), "bigmenu-secret", withWorkflow: true);
+        for (var n = 1; n <= 30; n++)
+        {
+            await db.ExecAsync(@"
+                INSERT INTO dbo.MenuItems (Id, ClientConfigId, Name, Category, Price, Aliases, IsAvailable, SortOrder, CreatedAtUtc, DailyLimit)
+                VALUES (NEWID(), @c, @name, @cat, @price, @aliases, @avail, @sort, SYSUTCDATETIME(), @limit);",
+                ("@c", BigMenu.Id), ("@name", (n <= 12 ? "Coffee " : n <= 24 ? "Cake " : "Special ") + n.ToString("00")),
+                ("@cat", n <= 12 ? "Drinks" : n <= 24 ? "Cakes" : null), ("@price", 40m + n),
+                ("@aliases", n == 7 ? "kafae yen, กาแฟเย็น" : null), ("@avail", n % 10 != 0), ("@sort", n),
+                ("@limit", n % 6 == 0 ? 5 : null));
+        }
+        var bangkokToday = DateTime.UtcNow.AddHours(7).Date;
+        for (var n = 1; n <= 45; n++)
+        {
+            var orderId = Guid.NewGuid();
+            await db.ExecAsync(@"
+                INSERT INTO dbo.Orders (Id, ClientConfigId, OrderNumber, Reference, Channel, CustomerId, CustomerName, CustomerMessage,
+                    Currency, Total, OrderDate, Status, CreatedAtUtc)
+                VALUES (@id, @c, @n, @ref, 'line', @cust, @name, @msg, 'THB', @total, @day, @status, @created);",
+                ("@id", orderId), ("@c", BigMenu.Id), ("@n", n), ("@ref", $"ORD-{n:0000}"), ("@cust", "Ubigmenu" + n),
+                ("@name", n % 9 == 0 ? "Somchai" : "Customer " + n), ("@msg", "order " + n), ("@total", 100m + n),
+                ("@day", n % 5 == 0 ? bangkokToday.AddDays(1) : bangkokToday),
+                ("@status", n <= 30 ? 1 : n <= 38 ? 2 : n <= 42 ? 3 : 4), ("@created", DateTime.UtcNow.AddMinutes(-200 + n)));
+            await db.ExecAsync(@"
+                INSERT INTO dbo.OrderItems (Id, OrderId, Name, Quantity, UnitPrice, LineTotal)
+                VALUES (NEWID(), @o, @name, 1, @price, @price);",
+                ("@o", orderId), ("@name", n % 2 == 0 ? "Coffee 01" : "Cake 13"), ("@price", 100m + n));
+        }
 
         // Old rows hold plain JSON - the app must still read them (and encrypt on the next save).
         Legacy = await AddClientAsync(db, "legacy", "E2E Legacy", ClientStatus.Active,

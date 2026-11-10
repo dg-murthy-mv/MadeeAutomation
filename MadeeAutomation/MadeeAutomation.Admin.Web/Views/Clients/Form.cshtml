@@ -163,9 +163,14 @@
             <div class="col-md-6 mb-3">
                 <label asp-for="StaffAlertEmail" class="form-label"></label>
                 <input asp-for="StaffAlertEmail" class="form-control" autocomplete="off" placeholder="owner@example.com" />
-                <div class="form-text">Needs the Email settings in WebApi (see SETUP.md).</div>
+                <div class="form-text">Needs the Resend email settings in WebApi (see SETUP.md).</div>
                 <span asp-validation-for="StaffAlertEmail" class="text-danger small"></span>
             </div>
+        </div>
+        <div class="form-check">
+            <input asp-for="NotifyCustomerOnOrderStatus" class="form-check-input" data-testid="notify-customer" />
+            <label asp-for="NotifyCustomerOnOrderStatus" class="form-check-label"></label>
+            <div class="form-text">The customer gets a message in their own language on the channel they ordered on. On LINE each one is a push message and counts against the account's monthly free messages.</div>
         </div>
     </div>
 

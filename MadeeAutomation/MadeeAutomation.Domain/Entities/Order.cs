@@ -49,6 +49,21 @@ public class Order
     public string? StatusChangedBy { get; set; }
     public DateTime? StatusChangedAtUtc { get; set; }
 
+    /// <summary>The language the customer wrote in, as the AI named it ("en", "th", "Thai"...). Used to message them later.</summary>
+    public string? Language { get; set; }
+
+    /// <summary>Why staff cancelled it - included in the message to the customer.</summary>
+    public string? CancelReason { get; set; }
+
+    /// <summary>
+    /// Whether the customer was told about the last Accept / Cancel: true = sent, false = could not be sent,
+    /// null = not tried (the client has these messages switched off, or nothing has happened yet).
+    /// </summary>
+    public bool? CustomerNoticeSent { get; set; }
+
+    /// <summary>What was sent, or why it could not be sent.</summary>
+    public string? CustomerNoticeNote { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
     public List<OrderItem> Items { get; set; } = new();

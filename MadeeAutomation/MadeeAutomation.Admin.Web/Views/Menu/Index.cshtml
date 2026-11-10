@@ -2,7 +2,9 @@
 @{
     var client = Model.Client;
     ViewData["Title"] = $"Menu - {client.ClientName}";
-    var groups = Model.Items.GroupBy(i => string.IsNullOrWhiteSpace(i.Category) ? "" : i.Category!).ToList();
+    var groups = Model.Items.GroupBy(i => string.IsNullOrWhiteSpace(i.Category) ? "" : i.Category!.Trim(), StringComparer.OrdinalIgnoreCase).ToList();
+    var here = Context.Request.Path + Context.Request.QueryString;   // back to this page (same search, filters and page number)
+    var selectedCategory = Model.Category is null ? "" : Model.Category.Length == 0 ? "-" : Model.Category;
 }
 
 <div class="mv-page-header">
@@ -11,7 +13,7 @@
         <div class="mv-subtle">
             @if (ClientAccess.IsClientUser(User)) { <a asp-controller="Portal" asp-action="Index">@client.ClientName</a> }
             else { <a asp-controller="Clients" asp-action="Details" asp-route-id="@client.Id">@client.ClientName</a> }
-            &middot; prices in <strong>@client.Currency</strong> &middot; <span data-testid="menu-total">@Model.Items.Count item(s)</span>
+            &middot; prices in <strong>@client.Currency</strong> &middot; <span data-testid="menu-total">@Model.TotalItems item(s)</span>
         </div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
@@ -24,7 +26,7 @@
     <div class="alert alert-info d-flex flex-wrap gap-2 align-items-center justify-content-between" data-testid="import-banner">
         <div>
             This client still has an <strong>old text menu</strong>.
-            @if (Model.Items.Count == 0) { <span>The bot is using it until you import it.</span> }
+            @if (Model.TotalItems == 0) { <span>The bot is using it until you import it.</span> }
             else { <span>The bot ignores it, because the menu below has items.</span> }
         </div>
         <form asp-action="ImportFromText" asp-route-clientConfigId="@client.Id" method="post">
@@ -71,10 +73,64 @@
     </form>
 </div>
 
+@if (Model.TotalItems > 0)
+{
+    <form asp-action="Index" method="get" class="mv-card mv-card-body mb-3" data-testid="menu-filter" autocomplete="off">
+        <input type="hidden" name="clientConfigId" value="@client.Id" />
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="menu-q">Search</label>
+                <input type="search" class="form-control" id="menu-q" name="q" value="@Model.Search" maxlength="100" dir="auto"
+                       placeholder="Name or other name" data-testid="menu-search" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label" for="menu-cat">Category</label>
+                <select class="form-select" id="menu-cat" name="cat" data-testid="menu-category-filter">
+                    <option value="">All categories</option>
+                    @foreach (var c in Model.Categories)
+                    {
+                        var value = c.Length == 0 ? "-" : c;
+                        <option value="@value" selected="@(selectedCategory == value)">@(c.Length == 0 ? "No category" : c)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label" for="menu-st">Status</label>
+                <select class="form-select" id="menu-st" name="st" data-testid="menu-status-filter">
+                    <option value="">All</option>
+                    <option value="available" selected="@(Model.Status == "available")">Available</option>
+                    <option value="soldout" selected="@(Model.Status == "soldout")">Sold out</option>
+                    <option value="limited" selected="@(Model.Status == "limited")">With daily limit</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-1">
+                <label class="form-label" for="menu-ps">Per page</label>
+                <select class="form-select" id="menu-ps" name="ps" data-testid="menu-page-size">
+                    @foreach (var size in new[] { 10, 25, 50, 100 })
+                    {
+                        <option value="@size" selected="@(Model.Pager.PageSize == size)">@size</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-primary flex-grow-1" data-testid="menu-apply">Search</button>
+            </div>
+        </div>
+        @if (Model.IsFiltered)
+        {
+            <div class="mt-2"><a class="btn btn-sm btn-link ps-0" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="menu-clear">Clear search and filters</a></div>
+        }
+    </form>
+}
+
 <div class="mv-card">
-    @if (Model.Items.Count == 0)
+    @if (Model.TotalItems == 0)
     {
         <div class="mv-card-body mv-subtle" data-testid="menu-empty">No menu items yet. Add one above@(Model.HasOldMenuText ? " or import the old menu text" : "").</div>
+    }
+    else if (Model.Items.Count == 0)
+    {
+        <div class="mv-card-body mv-subtle" data-testid="menu-no-match">No items match this search.</div>
     }
     else
     {
@@ -86,7 +142,8 @@
                 <tbody>
                 @foreach (var group in groups)
                 {
-                    @if (groups.Count > 1 || group.Key != "")
+                    @* A heading per category whenever this menu uses categories (also when a page holds one group only). *@
+                    @if (groups.Count > 1 || group.Key != "" || Model.Categories.Any(c => c.Length > 0))
                     {
                         <tr class="table-light"><td colspan="5"><strong>@(group.Key == "" ? "Other" : group.Key)</strong></td></tr>
                     }
@@ -106,11 +163,11 @@
                                 }
                             </td>
                             <td class="text-nowrap">
-                                <form asp-action="ToggleAvailable" asp-route-id="@item.Id" method="post" class="d-inline">
+                                <form asp-action="ToggleAvailable" asp-route-id="@item.Id" asp-route-returnUrl="@here" method="post" class="d-inline">
                                     <button type="submit" class="btn btn-sm btn-outline-secondary" data-testid="toggle-available">@(item.IsAvailable ? "Sold out" : "Available")</button>
                                 </form>
-                                <a class="btn btn-sm btn-outline-primary" asp-action="Edit" asp-route-id="@item.Id" data-testid="edit-item">Edit</a>
-                                <form asp-action="Delete" asp-route-id="@item.Id" method="post" class="d-inline" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Delete @item.Name?">
+                                <a class="btn btn-sm btn-outline-primary" asp-action="Edit" asp-route-id="@item.Id" asp-route-returnUrl="@here" data-testid="edit-item">Edit</a>
+                                <form asp-action="Delete" asp-route-id="@item.Id" asp-route-returnUrl="@here" method="post" class="d-inline" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Delete @item.Name?">
                                     <button type="submit" class="btn btn-sm btn-outline-danger" data-testid="delete-item">Delete</button>
                                 </form>
                             </td>
@@ -120,6 +177,7 @@
                 </tbody>
             </table>
         </div>
+        <partial name="_Pager" model="Model.Pager" />
     }
 </div>
 <div class="form-text mt-2">The bot quotes these prices and works out order totals from them. "Sold out" items are refused until you switch them back. An item with a daily limit is refused for a day once that day's limit is reached; cancelled orders don't count.</div>

@@ -20,11 +20,25 @@ public class InternalController : ControllerBase
 {
     private readonly WorkflowEngine _engine;
     private readonly IWorkflowRepository _workflows;
+    private readonly MadeeAutomation.Application.VerticalPacks.Messaging.OrderCustomerNotifier _orderNotifier;
 
-    public InternalController(WorkflowEngine engine, IWorkflowRepository workflows)
+    public InternalController(WorkflowEngine engine, IWorkflowRepository workflows,
+        MadeeAutomation.Application.VerticalPacks.Messaging.OrderCustomerNotifier orderNotifier)
     {
         _engine = engine;
         _workflows = workflows;
+        _orderNotifier = orderNotifier;
+    }
+
+    /// <summary>
+    /// Called by Admin.Web right after staff accept or cancel an order: tells the customer on the channel
+    /// they ordered on, in their own language. Answers { outcome: sent | failed | off | skipped, detail }.
+    /// </summary>
+    [HttpPost("clients/{clientConfigId:guid}/orders/{orderId:guid}/notify-customer")]
+    public async Task<IActionResult> NotifyCustomer(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken)
+    {
+        var result = await _orderNotifier.NotifyAsync(clientConfigId, orderId, cancellationToken);
+        return Ok(new { outcome = result.Outcome, detail = result.Detail });
     }
 
     /// <summary>

@@ -1,7 +1,9 @@
 using MadeeAutomation.Admin.Web.Models;
 using MadeeAutomation.Admin.Web.Security;
+using MadeeAutomation.Admin.Web.Services;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Domain.Entities;
+using MadeeAutomation.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MadeeAutomation.Admin.Web.Controllers;
@@ -12,20 +14,22 @@ namespace MadeeAutomation.Admin.Web.Controllers;
 /// </summary>
 public class OrdersController : ClientScopedController
 {
-    private const int PageSize = 20;
+    private static readonly int[] PageSizes = { 10, 20, 50 };
 
     private readonly IOrderRepository _orders;
     private readonly IClientRepository _clients;
     private readonly IClientSettingsService _settings;
+    private readonly IApiService _api;
 
-    public OrdersController(IOrderRepository orders, IClientRepository clients, IClientSettingsService settings)
+    public OrdersController(IOrderRepository orders, IClientRepository clients, IClientSettingsService settings, IApiService api)
     {
         _orders = orders;
         _clients = clients;
         _settings = settings;
+        _api = api;
     }
 
-    public async Task<IActionResult> Index(Guid clientConfigId, string? show = null, int page = 1)
+    public async Task<IActionResult> Index(Guid clientConfigId, string? show = null, int page = 1, string? q = null, string? day = null, int ps = 20)
     {
         var client = await _clients.GetWithWorkflowsAsync(Scope(clientConfigId));
         if (client is null) return NotFound();
@@ -43,10 +47,30 @@ public class OrdersController : ClientScopedController
         try { hasPos = _settings.Read(client.IntegrationSettingsJson).HasPosFirst; }
         catch { hasPos = false; }   // settings can't be read (encryption key) - the list still works
 
+        if (!PageSizes.Contains(ps)) ps = 20;
+        q = string.IsNullOrWhiteSpace(q) ? null : q.Trim()[..Math.Min(q.Trim().Length, 100)];
+        var today = DateOnly.FromDateTime(MadeeAutomation.Domain.Regional.LocalTime.ToLocal(DateTime.UtcNow, client.TimeZoneId));
+        DateOnly? forDay = DateOnly.TryParseExact(day, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var parsed) ? parsed : null;
+
+        var orders = await _orders.GetPagedAsync(client.Id, statuses, page, ps, q, forDay);
+
         return View(new OrdersPageModel
         {
             Client = client,
-            Orders = await _orders.GetPagedAsync(client.Id, statuses, page, PageSize),
+            Orders = orders,
+            Search = q,
+            Day = forDay,
+            Today = today,
+            Pager = new PagerModel
+            {
+                Page = orders.Page, PageSize = ps, TotalCount = orders.TotalCount, Controller = "Orders", Noun = "order",
+                Route = new()
+                {
+                    ["clientConfigId"] = client.Id.ToString(), ["show"] = show, ["q"] = q,
+                    ["day"] = forDay?.ToString("yyyy-MM-dd"), ["ps"] = ps == 20 ? null : ps.ToString()
+                }
+            },
             Show = show,
             NewCount = await _orders.CountAsync(client.Id, OrderStatus.New),
             HasPos = hasPos
@@ -55,7 +79,8 @@ public class OrdersController : ClientScopedController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SetStatus(Guid clientConfigId, Guid id, OrderStatus status, string? show = null)
+    public async Task<IActionResult> SetStatus(Guid clientConfigId, Guid id, OrderStatus status, string? show = null, string? reason = null,
+        string? returnUrl = null)
     {
         clientConfigId = Scope(clientConfigId);
         var order = await _orders.GetAsync(clientConfigId, id);   // null when it belongs to another client
@@ -76,15 +101,35 @@ public class OrdersController : ClientScopedController
         }
         else
         {
-            await _orders.SetStatusAsync(clientConfigId, id, status, SignedInAs);
-            TempData["Success"] = status switch
+            await _orders.SetStatusAsync(clientConfigId, id, status, SignedInAs, reason);
+            var done = status switch
             {
                 OrderStatus.Accepted => $"Order {order.Reference} accepted.",
                 OrderStatus.Completed => $"Order {order.Reference} completed.",
-                _ => $"Order {order.Reference} cancelled. Please tell the customer in the chat - the bot does not message them about this."
+                _ => $"Order {order.Reference} cancelled."
             };
+
+            if (status == OrderStatus.Completed)
+            {
+                TempData["Success"] = done;
+            }
+            else
+            {
+                // Accept / Cancel: the customer is told on the channel they ordered on (WebApi sends it).
+                var notice = await _api.NotifyCustomerAboutOrderAsync(clientConfigId, id);
+                var channel = Channels.DisplayName(order.Channel);
+                if (notice.Outcome == "sent")
+                    TempData["Success"] = $"{done} The customer was told on {channel}.";
+                else if (notice.Outcome == "off")
+                    TempData["Success"] = $"{done} Customer messages are switched off, so please tell the customer yourself.";
+                else
+                {
+                    TempData["Success"] = done;
+                    TempData["Error"] = $"The customer could NOT be told automatically ({notice.Detail}) - please message them in the chat.";
+                }
+            }
         }
 
-        return RedirectToAction(nameof(Index), new { clientConfigId, show });
+        return BackTo(returnUrl, RedirectToAction(nameof(Index), new { clientConfigId, show }));
     }
 }

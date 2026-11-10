@@ -157,6 +157,7 @@ public abstract class CustomerMessageHandlerBase : IHandler
                 RequestedForText = Cut(analysis.RequestedDeliveryText, 200),
                 OrderDate = orderDate,
                 CustomerNote = Cut(analysis.CustomerNote, 1000),
+                Language = Cut(analysis.Language?.Trim(), 40),
                 Items = lines.Select(l => new OrderItem
                 {
                     MenuItemId = l.menuItemId,

@@ -57,4 +57,11 @@ public abstract class ClientScopedController : Controller
     protected bool CanAccess(Guid clientConfigId) => OwnClientId is null || OwnClientId == clientConfigId;
 
     protected string SignedInAs => User.Identity?.Name ?? "unknown";
+
+    /// <summary>
+    /// After a button on a list (sold out, accept, delete...): back to the same page of the same filtered
+    /// list. returnUrl is only followed when it is a page of this site.
+    /// </summary>
+    protected IActionResult BackTo(string? returnUrl, IActionResult otherwise) =>
+        !string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl) ? LocalRedirect(returnUrl) : otherwise;
 }

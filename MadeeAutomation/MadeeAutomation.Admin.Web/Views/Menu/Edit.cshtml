@@ -11,7 +11,7 @@
     </div>
 </div>
 
-<form asp-action="Edit" asp-route-id="@Model.Id" method="post" autocomplete="off" class="mv-card mv-card-body" style="max-width: 720px">
+<form asp-action="Edit" asp-route-id="@Model.Id" asp-route-returnUrl="@ViewBag.ReturnUrl" method="post" autocomplete="off" class="mv-card mv-card-body" style="max-width: 720px">
     <div asp-validation-summary="ModelOnly" class="text-danger small"></div>
     <div class="mb-3">
         <label asp-for="Name" class="form-label"></label>
@@ -54,6 +54,8 @@
     </div>
     <div class="d-flex gap-2">
         <button type="submit" class="btn btn-primary" data-testid="save-item">Save</button>
-        <a class="btn btn-outline-secondary" asp-action="Index" asp-route-clientConfigId="@Model.ClientConfigId">Cancel</a>
+        @{ string? back = ViewBag.ReturnUrl; }
+        @if (!string.IsNullOrWhiteSpace(back) && Url.IsLocalUrl(back)) { <a class="btn btn-outline-secondary" href="@back" data-testid="cancel-edit">Cancel</a> }
+        else { <a class="btn btn-outline-secondary" asp-action="Index" asp-route-clientConfigId="@Model.ClientConfigId" data-testid="cancel-edit">Cancel</a> }
     </div>
 </form>

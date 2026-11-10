@@ -24,11 +24,14 @@ public class MenuController : ClientScopedController
         _orders = orders;
     }
 
-    public async Task<IActionResult> Index(Guid clientConfigId)
+    private static readonly int[] PageSizes = { 10, 25, 50, 100 };
+
+    /// <summary>q = search, cat = category ("-" = no category), st = available | soldout | limited, ps = page size.</summary>
+    public async Task<IActionResult> Index(Guid clientConfigId, string? q = null, string? cat = null, string? st = null, int page = 1, int ps = 25)
     {
         var client = await _clients.GetWithWorkflowsAsync(Scope(clientConfigId));
         if (client is null) return NotFound();
-        return View(await PageAsync(client, new MenuItemFormModel { ClientConfigId = client.Id }));
+        return View(await PageAsync(client, new MenuItemFormModel { ClientConfigId = client.Id }, q, cat, st, page, ps));
     }
 
     [HttpPost]
@@ -44,7 +47,7 @@ public class MenuController : ClientScopedController
             ModelState.AddModelError("NewItem.Name", "This menu already has an item with that name.");
         if (!ModelState.IsValid) return View("Index", await PageAsync(client, model));
 
-        var items = await _profile.GetMenuAsync(client.Id);
+        var items = await _profile.GetMenuAsync(client.Id);   // all items: the new one goes last
         await _profile.AddMenuItemsAsync(new[]
         {
             new MenuItem
@@ -64,8 +67,9 @@ public class MenuController : ClientScopedController
         return RedirectToAction(nameof(Index), new { clientConfigId = client.Id });
     }
 
-    public async Task<IActionResult> Edit(Guid id)
+    public async Task<IActionResult> Edit(Guid id, string? returnUrl = null)
     {
+        ViewBag.ReturnUrl = returnUrl;
         var item = await _profile.GetMenuItemAsync(id);
         if (item is null || !CanAccess(item.ClientConfigId)) return NotFound();
         ViewBag.Client = await _clients.GetWithWorkflowsAsync(item.ClientConfigId);
@@ -79,8 +83,9 @@ public class MenuController : ClientScopedController
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Edit(Guid id, MenuItemFormModel model)
+    public async Task<IActionResult> Edit(Guid id, MenuItemFormModel model, string? returnUrl = null)
     {
+        ViewBag.ReturnUrl = returnUrl;
         var item = await _profile.GetMenuItemAsync(id);
         if (item is null || !CanAccess(item.ClientConfigId)) return NotFound();
         model.Id = item.Id;
@@ -105,31 +110,31 @@ public class MenuController : ClientScopedController
         await _profile.UpdateMenuItemAsync(item);
 
         TempData["Success"] = $"\"{item.Name}\" saved.";
-        return RedirectToAction(nameof(Index), new { clientConfigId = item.ClientConfigId });
+        return BackTo(returnUrl, RedirectToAction(nameof(Index), new { clientConfigId = item.ClientConfigId }));
     }
 
     /// <summary>Sold out today / back in stock - one click.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ToggleAvailable(Guid id)
+    public async Task<IActionResult> ToggleAvailable(Guid id, string? returnUrl = null)
     {
         var item = await _profile.GetMenuItemAsync(id);
         if (item is null || !CanAccess(item.ClientConfigId)) return NotFound();
         item.IsAvailable = !item.IsAvailable;
         await _profile.UpdateMenuItemAsync(item);
         TempData["Success"] = item.IsAvailable ? $"\"{item.Name}\" is available again." : $"\"{item.Name}\" marked sold out - the bot won't take orders for it.";
-        return RedirectToAction(nameof(Index), new { clientConfigId = item.ClientConfigId });
+        return BackTo(returnUrl, RedirectToAction(nameof(Index), new { clientConfigId = item.ClientConfigId }));
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(Guid id)
+    public async Task<IActionResult> Delete(Guid id, string? returnUrl = null)
     {
         var item = await _profile.GetMenuItemAsync(id);
         if (item is null || !CanAccess(item.ClientConfigId)) return NotFound();
         await _profile.DeleteMenuItemAsync(id);
         TempData["Success"] = $"\"{item.Name}\" deleted.";
-        return RedirectToAction(nameof(Index), new { clientConfigId = item.ClientConfigId });
+        return BackTo(returnUrl, RedirectToAction(nameof(Index), new { clientConfigId = item.ClientConfigId }));
     }
 
     /// <summary>Turns the old free-text menu into items, then clears the old text so there is one source of truth.</summary>
@@ -161,16 +166,36 @@ public class MenuController : ClientScopedController
         return RedirectToAction(nameof(Index), new { clientConfigId = client.Id });
     }
 
-    private async Task<MenuPageModel> PageAsync(ClientConfig client, MenuItemFormModel newItem)
+    private async Task<MenuPageModel> PageAsync(ClientConfig client, MenuItemFormModel newItem,
+        string? q = null, string? cat = null, string? st = null, int page = 1, int ps = 25)
     {
-        var items = await _profile.GetMenuAsync(client.Id);
+        if (!PageSizes.Contains(ps)) ps = 25;
+        q = string.IsNullOrWhiteSpace(q) ? null : q.Trim()[..Math.Min(q.Trim().Length, 100)];
+        st = st is "available" or "soldout" or "limited" ? st : null;
+        string? category = string.IsNullOrEmpty(cat) ? null : cat == "-" ? "" : cat.Trim();
+
+        var items = await _profile.GetMenuPagedAsync(client.Id, q, category, st, page, ps);
         var today = DateOnly.FromDateTime(LocalTime.ToLocal(DateTime.UtcNow, client.TimeZoneId));
         return new MenuPageModel
         {
             Client = client,
-            Items = items,
+            Items = items.Items,
+            TotalItems = await _profile.CountMenuAsync(client.Id),
             NewItem = newItem,
-            OrderedToday = items.Any(i => i.DailyLimit.HasValue)
+            Search = q,
+            Category = category,
+            Status = st,
+            Categories = await _profile.GetMenuCategoriesAsync(client.Id),
+            Pager = new PagerModel
+            {
+                Page = items.Page, PageSize = ps, TotalCount = items.TotalCount, Controller = "Menu", Noun = "item",
+                Route = new()
+                {
+                    ["clientConfigId"] = client.Id.ToString(), ["q"] = q, ["cat"] = category is null ? null : category.Length == 0 ? "-" : category,
+                    ["st"] = st, ["ps"] = ps == 25 ? null : ps.ToString()
+                }
+            },
+            OrderedToday = items.Items.Any(i => i.DailyLimit.HasValue)
                 ? await _orders.GetOrderedQuantitiesAsync(client.Id, today)
                 : new Dictionary<Guid, int>()
         };

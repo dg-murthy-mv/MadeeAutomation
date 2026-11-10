@@ -3,6 +3,7 @@
     var o = Model.order;
     var client = Model.client;
     var culture = System.Globalization.CultureInfo.InvariantCulture;
+    var here = Context.Request.Path + Context.Request.QueryString;   // back to this page (same tab, search and page number)
     string Local(DateTime utc) => LocalTime.ToLocal(utc, client.TimeZoneId).ToString("ddd d MMM yyyy, HH:mm", culture);
     var badge = o.Status switch
     {
@@ -47,6 +48,15 @@
         @if (!string.IsNullOrWhiteSpace(o.CustomerMessage)) { <div class="mv-subtle text-break"><strong>Customer wrote:</strong> <span dir="auto">"@o.CustomerMessage"</span></div> }
         @if (o.PosOrderId is not null) { <div class="mv-subtle">Also in the POS as @o.PosOrderId</div> }
         @if (o.StatusChangedAtUtc is DateTime changed) { <div class="mv-subtle">@o.Status by @o.StatusChangedBy, @Local(changed)</div> }
+        @if (o.Status == OrderStatus.Cancelled && !string.IsNullOrWhiteSpace(o.CancelReason)) { <div data-testid="order-cancel-reason"><strong>Reason:</strong> <span dir="auto">@o.CancelReason</span></div> }
+        @if (o.CustomerNoticeSent == true)
+        {
+            <div class="text-success" data-testid="order-notice"><strong>Customer told:</strong> <span dir="auto">"@o.CustomerNoticeNote"</span></div>
+        }
+        else if (o.CustomerNoticeSent == false)
+        {
+            <div class="text-danger" data-testid="order-notice"><strong>Customer NOT told:</strong> @o.CustomerNoticeNote Please message them in the chat.</div>
+        }
     </div>
 
     @if (Model.actions && o.Status is OrderStatus.New or OrderStatus.Accepted)
@@ -54,18 +64,21 @@
         <div class="d-flex flex-wrap gap-2 mt-3">
             @if (o.Status == OrderStatus.New)
             {
-                <form asp-controller="Orders" asp-action="SetStatus" asp-route-clientConfigId="@client.Id" asp-route-id="@o.Id" asp-route-status="Accepted" asp-route-show="@Model.show" method="post">
+                <form asp-controller="Orders" asp-action="SetStatus" asp-route-clientConfigId="@client.Id" asp-route-id="@o.Id" asp-route-status="Accepted" asp-route-show="@Model.show" asp-route-returnUrl="@here" method="post">
                     <button type="submit" class="btn btn-sm btn-primary" data-testid="order-accept">Accept</button>
                 </form>
             }
             else
             {
-                <form asp-controller="Orders" asp-action="SetStatus" asp-route-clientConfigId="@client.Id" asp-route-id="@o.Id" asp-route-status="Completed" asp-route-show="@Model.show" method="post">
+                <form asp-controller="Orders" asp-action="SetStatus" asp-route-clientConfigId="@client.Id" asp-route-id="@o.Id" asp-route-status="Completed" asp-route-show="@Model.show" asp-route-returnUrl="@here" method="post">
                     <button type="submit" class="btn btn-sm btn-success" data-testid="order-complete">Completed</button>
                 </form>
             }
-            <form asp-controller="Orders" asp-action="SetStatus" asp-route-clientConfigId="@client.Id" asp-route-id="@o.Id" asp-route-status="Cancelled" asp-route-show="@Model.show" method="post"
-                  onsubmit="return confirm(this.dataset.confirm)" data-confirm="Cancel order @o.Reference? Remember to tell the customer.">
+            <form asp-controller="Orders" asp-action="SetStatus" asp-route-clientConfigId="@client.Id" asp-route-id="@o.Id" asp-route-status="Cancelled" asp-route-show="@Model.show" asp-route-returnUrl="@here" method="post"
+                  class="d-flex flex-wrap gap-2 flex-grow-1" onsubmit="return confirm(this.dataset.confirm)"
+                  data-confirm="Cancel order @o.Reference?@(client.NotifyCustomerOnOrderStatus ? " The customer will be told." : " Remember to tell the customer.")">
+                <input type="text" name="reason" class="form-control form-control-sm" style="max-width: 22rem; min-width: 10rem; flex: 1" maxlength="300" dir="auto"
+                       placeholder="Reason for the customer (optional)" aria-label="Reason for cancelling @o.Reference" data-testid="order-cancel-reason-input" />
                 <button type="submit" class="btn btn-sm btn-outline-danger" data-testid="order-cancel">Cancel order</button>
             </form>
         </div>

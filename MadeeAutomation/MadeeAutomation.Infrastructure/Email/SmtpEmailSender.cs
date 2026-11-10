@@ -7,7 +7,8 @@ using Microsoft.Extensions.Logging;
 namespace MadeeAutomation.Infrastructure.Email;
 
 /// <summary>
-/// Sends plain-text email through SMTP (e.g. Zoho Mail: smtp.zoho.com, port 587, STARTTLS).
+/// Sends plain-text email through SMTP, or writes it to a pickup folder. Since Round 006 this is the
+/// fallback: ResendEmailSender is used when Resend:ApiKey is set (see that class).
 ///
 ///   Email:Host, Email:Port (587), Email:UseSsl (true), Email:UserName, Email:Password,
 ///   Email:FromAddress, Email:FromName ("MadeeAutomation")

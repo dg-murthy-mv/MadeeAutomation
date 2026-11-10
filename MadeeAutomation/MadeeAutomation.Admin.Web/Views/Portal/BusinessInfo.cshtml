@@ -26,5 +26,10 @@
         <span asp-validation-for="StaffAlertEmail" class="text-danger small" data-testid="business-info-email-error"></span>
         <div class="form-text">Every new order, and every message the assistant could not answer, is emailed here.</div>
     </div>
+    <div class="form-check mb-3">
+        <input asp-for="NotifyCustomerOnOrderStatus" class="form-check-input" data-testid="business-info-notify" />
+        <label asp-for="NotifyCustomerOnOrderStatus" class="form-check-label"></label>
+        <div class="form-text">The customer gets a short message in their own language, for example "Your order ORD-0012 is confirmed". If you untick this, please tell customers yourself.</div>
+    </div>
     <button type="submit" class="btn btn-primary" data-testid="save-business-info">Save</button>
 </form>

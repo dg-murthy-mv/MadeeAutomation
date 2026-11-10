@@ -1,3 +1,4 @@
+using MadeeAutomation.Application.Common;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,60 @@ public class BusinessProfileRepository : IBusinessProfileRepository
             .Where(m => m.ClientConfigId == clientConfigId)
             .OrderBy(m => m.Category).ThenBy(m => m.SortOrder).ThenBy(m => m.Name)
             .ToListAsync(cancellationToken);
+
+    public async Task<PagedResult<MenuItem>> GetMenuPagedAsync(Guid clientConfigId, string? search, string? category, string? status,
+        int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        var query = _db.MenuItems.AsNoTracking().Where(m => m.ClientConfigId == clientConfigId);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(m => m.Name.Contains(term) ||
+                                     (m.Aliases != null && m.Aliases.Contains(term)) ||
+                                     (m.Category != null && m.Category.Contains(term)));
+        }
+
+        if (category is not null)
+            query = category.Length == 0
+                ? query.Where(m => m.Category == null || m.Category == "")
+                : query.Where(m => m.Category == category);
+
+        query = status switch
+        {
+            "available" => query.Where(m => m.IsAvailable),
+            "soldout" => query.Where(m => !m.IsAvailable),
+            "limited" => query.Where(m => m.DailyLimit != null),
+            _ => query
+        };
+
+        var total = await query.CountAsync(cancellationToken);
+        var lastPage = Math.Max(1, (int)Math.Ceiling(total / (double)pageSize));
+        if (page > lastPage) page = lastPage;
+
+        var items = await query
+            .OrderBy(m => m.Category == null || m.Category == "" ? 1 : 0)   // items with no category go last
+            .ThenBy(m => m.Category).ThenBy(m => m.SortOrder).ThenBy(m => m.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<MenuItem> { Items = items, TotalCount = total, Page = page, PageSize = pageSize };
+    }
+
+    public async Task<List<string>> GetMenuCategoriesAsync(Guid clientConfigId, CancellationToken cancellationToken = default)
+    {
+        var categories = await _db.MenuItems.AsNoTracking()
+            .Where(m => m.ClientConfigId == clientConfigId)
+            .Select(m => m.Category ?? "")
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        return categories.Select(c => c.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public Task<int> CountMenuAsync(Guid clientConfigId, CancellationToken cancellationToken = default) =>
+        _db.MenuItems.CountAsync(m => m.ClientConfigId == clientConfigId, cancellationToken);
 
     public Task<MenuItem?> GetMenuItemAsync(Guid id, CancellationToken cancellationToken = default) =>
         _db.MenuItems.FirstOrDefaultAsync(m => m.Id == id, cancellationToken);

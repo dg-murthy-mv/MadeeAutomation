@@ -22,9 +22,19 @@ public class WorkflowTestResult
     public List<WorkflowTestAction> Actions { get; set; } = new();
 }
 
+public class OrderNoticeResult
+{
+    /// <summary>"sent", "failed", "off", "skipped" - or "unreachable" when WebApi could not be called.</summary>
+    public string Outcome { get; set; } = "unreachable";
+    public string? Detail { get; set; }
+}
+
 /// <summary>Admin.Web -> WebApi calls (same IApiService pattern as Merkai). Sends X-Internal-Key.</summary>
 public interface IApiService
 {
+    /// <summary>Asks WebApi to tell the customer their order was accepted or cancelled. Never throws.</summary>
+    Task<OrderNoticeResult> NotifyCustomerAboutOrderAsync(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken = default);
+
     Task<WorkflowTestResult> TestWorkflowAsync(Guid workflowId, string message, string? channel, CancellationToken cancellationToken = default);
 }
 
@@ -43,6 +53,34 @@ public class ApiService : IApiService
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _logger = logger;
+    }
+
+    public async Task<OrderNoticeResult> NotifyCustomerAboutOrderAsync(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken = default)
+    {
+        var key = _configuration["InternalApi:Key"];
+        if (string.IsNullOrWhiteSpace(key))
+            return new OrderNoticeResult { Detail = "InternalApi:Key is not set in Admin.Web." };
+
+        var client = _httpClientFactory.CreateClient(ClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"api/internal/clients/{clientConfigId}/orders/{orderId}/notify-customer");
+        request.Headers.Add("X-Internal-Key", key.Trim());
+
+        try
+        {
+            using var response = await client.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Order notice call to WebApi answered {Status}: {Body}", (int)response.StatusCode, body);
+                return new OrderNoticeResult { Detail = $"WebApi answered {(int)response.StatusCode}." };
+            }
+            return JsonSerializer.Deserialize<OrderNoticeResult>(body, JsonOptions) ?? new OrderNoticeResult { Detail = "Empty answer from WebApi." };
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            _logger.LogError(ex, "Order notice call to WebApi failed");
+            return new OrderNoticeResult { Detail = "WebApi could not be reached." };
+        }
     }
 
     public async Task<WorkflowTestResult> TestWorkflowAsync(Guid workflowId, string message, string? channel, CancellationToken cancellationToken = default)

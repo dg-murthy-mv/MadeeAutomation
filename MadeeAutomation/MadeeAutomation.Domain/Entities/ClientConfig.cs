@@ -46,6 +46,12 @@ public class ClientConfig
     /// <summary>A staff member's LINE user id - alerts are pushed to them through this client's LINE account.</summary>
     public string? StaffAlertLineUserId { get; set; }
 
+    /// <summary>
+    /// When staff accept or cancel an order, message the customer on the channel they ordered on.
+    /// On by default. On LINE these are push messages, which count against the account's monthly quota.
+    /// </summary>
+    public bool NotifyCustomerOnOrderStatus { get; set; } = true;
+
     public bool MerkaiIntegrationEnabled { get; set; }
     public bool PosFirstIntegrationEnabled { get; set; }
 

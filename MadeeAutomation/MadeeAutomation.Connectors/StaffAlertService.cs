@@ -56,7 +56,7 @@ public class StaffAlertService : IStaffAlertService
                 }
                 else
                 {
-                    failed.Add("email: the Email settings are missing in WebApi");
+                    failed.Add("email: the email settings (Resend:ApiKey, Email:FromAddress) are missing in WebApi");
                     _logger.LogWarning("Staff alert email for {ClientCode} skipped - Email:* is not configured in WebApi", client.ClientCode);
                 }
             }
@@ -102,7 +102,7 @@ public class StaffAlertService : IStaffAlertService
             }
             else
             {
-                failed.Add("email: the Email settings are missing in WebApi");
+                failed.Add("email: the email settings (Resend:ApiKey, Email:FromAddress) are missing in WebApi");
                 _logger.LogWarning("New-order email for {ClientCode} skipped - Email:* is not configured in WebApi", client.ClientCode);
             }
         }

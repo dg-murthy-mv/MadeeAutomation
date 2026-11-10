@@ -105,6 +105,19 @@ public interface IInboundEventRepository
 public interface IBusinessProfileRepository
 {
     Task<List<MenuItem>> GetMenuAsync(Guid clientConfigId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// One page of the menu for the Menu screen, grouped by category.
+    /// search looks in the name, other names and category. category: null = all, "" = items with no category.
+    /// status: null = all, "available", "soldout" or "limited" (has a daily limit).
+    /// </summary>
+    Task<PagedResult<MenuItem>> GetMenuPagedAsync(Guid clientConfigId, string? search, string? category, string? status, int page, int pageSize,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>The categories in use, A-Z ("" when some items have no category).</summary>
+    Task<List<string>> GetMenuCategoriesAsync(Guid clientConfigId, CancellationToken cancellationToken = default);
+
+    Task<int> CountMenuAsync(Guid clientConfigId, CancellationToken cancellationToken = default);
+
     Task<MenuItem?> GetMenuItemAsync(Guid id, CancellationToken cancellationToken = default);
     Task<bool> MenuNameExistsAsync(Guid clientConfigId, string name, Guid? exceptId = null, CancellationToken cancellationToken = default);
     Task AddMenuItemsAsync(IEnumerable<MenuItem> items, CancellationToken cancellationToken = default);
@@ -137,17 +150,25 @@ public interface IOrderRepository
     /// <summary>Includes Items. Null when the order does not belong to this client.</summary>
     Task<Order?> GetAsync(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken = default);
 
-    /// <summary>Newest first, with Items. statuses = null means all.</summary>
+    /// <summary>
+    /// Newest first, with Items. statuses = null means all.
+    /// search looks in the order reference, the customer's name, their message and the item names.
+    /// orderDate keeps only orders FOR that day (client's local date).
+    /// </summary>
     Task<PagedResult<Order>> GetPagedAsync(Guid clientConfigId, IReadOnlyCollection<OrderStatus>? statuses, int page, int pageSize,
-        CancellationToken cancellationToken = default);
+        string? search = null, DateOnly? orderDate = null, CancellationToken cancellationToken = default);
 
     Task<int> CountAsync(Guid clientConfigId, OrderStatus status, CancellationToken cancellationToken = default);
 
     /// <summary>How many of each menu item are already ordered for that day (cancelled orders don't count). Key = MenuItemId.</summary>
     Task<Dictionary<Guid, int>> GetOrderedQuantitiesAsync(Guid clientConfigId, DateOnly orderDate, CancellationToken cancellationToken = default);
 
-    /// <summary>False when the order does not belong to this client.</summary>
-    Task<bool> SetStatusAsync(Guid clientConfigId, Guid orderId, OrderStatus status, string changedBy, CancellationToken cancellationToken = default);
+    /// <summary>False when the order does not belong to this client. cancelReason is saved when cancelling.</summary>
+    Task<bool> SetStatusAsync(Guid clientConfigId, Guid orderId, OrderStatus status, string changedBy, string? cancelReason = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Records whether the customer was told about an Accept / Cancel, and what was sent (or why not).</summary>
+    Task SetCustomerNoticeAsync(Guid clientConfigId, Guid orderId, bool sent, string note, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Admin.Web sign-in accounts and their password-reset links.</summary>
