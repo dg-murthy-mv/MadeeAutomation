@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 namespace MadeeAutomation.E2E.Infrastructure;
 
 /// <summary>One call the apps made to the fake LINE API.</summary>
-public record LineCall(string Kind, string? To, string? ReplyToken, string Text, string Authorization, int StatusReturned, DateTime AtUtc, string Body = "")
+public record LineCall(string Kind, string? To, string? ReplyToken, string Text, string Authorization, int StatusReturned, DateTime AtUtc, string Body = "", string RetryKey = "")
 {
     /// <summary>The labels of the quick-reply buttons on this message, in order.</summary>
     public List<string> Buttons => Actions("quickReply").Select(a => a.Label).ToList();
@@ -59,7 +59,10 @@ public record LineCall(string Kind, string? To, string? ReplyToken, string Text,
 public record ClaudeCall(string System, string UserMessage, string ApiKey, DateTime AtUtc);
 
 /// <summary>One order the apps created in the fake POSFirst.</summary>
-public record PosOrder(string OrderId, string CustomerId, string BodyJson, string ApiKey, DateTime AtUtc);
+public record PosOrder(string OrderId, string CustomerId, string BodyJson, string ApiKey, DateTime AtUtc, string IdempotencyKey = "");
+
+/// <summary>One call to the fake POSFirst, including refused ones (to count retries).</summary>
+public record PosAttempt(string Path, string ApiKey, string IdempotencyKey, int StatusReturned, DateTime AtUtc);
 
 /// <summary>
 /// A single in-process web server that plays LINE, Claude (Anthropic) and POSFirst for the apps under test,
@@ -121,7 +124,11 @@ public sealed class FakeServer : IAsyncDisposable
             var status = auth.EndsWith("fail-token") ? 500 : 200;
             var raw = body?.ToJsonString() ?? "";
             if (status == 200 && to is not null && to.StartsWith("Ubadrich") && (raw.Contains("quickReply") || raw.Contains("\"flex\""))) status = 400;
-            LineCalls.Enqueue(new LineCall("push", to, null, FirstText(body), auth, status, DateTime.UtcNow, raw));
+            // A customer id starting "Uflaky": LINE is briefly unavailable - the FIRST try of each retry key gets 503.
+            var retryKey = ctx.Request.Headers["X-Line-Retry-Key"].ToString();
+            if (status == 200 && to is not null && to.StartsWith("Uflaky") && LineRetryKeysSeen.TryAdd(retryKey, true)) status = 503;
+            LineCalls.Enqueue(new LineCall("push", to, null, FirstText(body), auth, status, DateTime.UtcNow, raw, retryKey));
+            if (status == 503) return Results.Json(new { message = "fake LINE briefly unavailable" }, statusCode: 503);
 
             return status == 400 ? Results.Json(new { message = "fake LINE: invalid message" }, statusCode: 400)
                 : status == 500
@@ -171,16 +178,33 @@ public sealed class FakeServer : IAsyncDisposable
         });
 
         // ---------------- POSFirst ----------------
+        // A POS whose API key starts "pos-down" answers 503 until the test calls RecoverPos(key).
+        // "pos-500" always answers 500 (must NOT be retried: the order might have been created).
         app.MapPost("/api/orders", async (HttpContext ctx) =>
         {
             var body = await ReadJsonAsync(ctx);
+            var apiKey = ctx.Request.Headers["X-Api-Key"].ToString();
+            var idem = ctx.Request.Headers["Idempotency-Key"].ToString();
+            var status = apiKey.StartsWith("pos-down") && !PosRecovered.ContainsKey(apiKey) ? 503 : apiKey == "pos-500" ? 500 : 200;
+            PosAttempts.Enqueue(new PosAttempt("/api/orders", apiKey, idem, status, DateTime.UtcNow));
+            if (status != 200) return Results.Json(new { message = "fake POS is down" }, statusCode: status);
+
             var orderId = $"POS-{Interlocked.Increment(ref _orderCounter):0000}";
             PosOrders.Enqueue(new PosOrder(orderId, body?["customerId"]?.GetValue<string>() ?? "",
-                body?.ToJsonString() ?? "{}", ctx.Request.Headers["X-Api-Key"].ToString(), DateTime.UtcNow));
+                body?.ToJsonString() ?? "{}", apiKey, DateTime.UtcNow, idem));
             return Results.Json(new { orderId });
         });
 
-        app.MapGet("/api/inventory/low-stock", () => Results.Json(new { items = new[] { new { name = "Butter" } } }));
+        // "lowstock-down" makes the low-stock check fail (a scheduled job that fails -> retries).
+        app.MapGet("/api/inventory/low-stock", (HttpContext ctx) =>
+        {
+            var apiKey = ctx.Request.Headers["X-Api-Key"].ToString();
+            var status = apiKey == "lowstock-down" ? 503 : 200;
+            PosAttempts.Enqueue(new PosAttempt("/api/inventory/low-stock", apiKey, "", status, DateTime.UtcNow));
+            return status == 200
+                ? Results.Json(new { items = new[] { new { name = "Butter" } } })
+                : Results.Json(new { message = "fake POS is down" }, statusCode: status);
+        });
 
         await app.StartAsync();
         _app = app;
@@ -250,7 +274,7 @@ public sealed class FakeServer : IAsyncDisposable
 
         // Round 004: structured-menu items. The fake AI passes the customer's own words through
         // (e.g. "tea"), so our alias matching and sold-out checks are what's being tested.
-        var cafeItems = Regex.Matches(text, @"(\d+)\s*(?:x\s*)?(chai|tea|samosa|paneer roll|cake)\b");
+        var cafeItems = Regex.Matches(text, @"(\d+)\s*(?:x\s*)?(chai|tea|samosa|paneer roll|cake|shawarma)\b");
         if (cafeItems.Count > 0)
         {
             var items = cafeItems.Select(x => new { name = x.Groups[2].Value, quantity = int.Parse(x.Groups[1].Value) }).ToArray();
@@ -330,6 +354,14 @@ public sealed class FakeServer : IAsyncDisposable
 
     public IReadOnlyList<LineCall> LineCallsFor(string userOrToken) =>
         LineCalls.Where(c => c.To == userOrToken || (c.ReplyToken?.Contains(userOrToken) ?? false)).ToList();
+
+    public System.Collections.Concurrent.ConcurrentQueue<PosAttempt> PosAttempts { get; } = new();
+
+    /// <summary>"pos-down..." keys that are up again.</summary>
+    public System.Collections.Concurrent.ConcurrentDictionary<string, bool> PosRecovered { get; } = new();
+    public void RecoverPos(string apiKey) => PosRecovered[apiKey] = true;
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> LineRetryKeysSeen = new();
 
     public IReadOnlyList<PosOrder> OrdersFor(string customerId) =>
         PosOrders.Where(o => o.CustomerId == customerId).ToList();

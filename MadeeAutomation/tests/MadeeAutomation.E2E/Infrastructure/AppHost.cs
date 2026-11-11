@@ -45,6 +45,9 @@ public sealed class AppHost : IAsyncDisposable
             ["Connectors__WhatsApp__InternalNotifyTo"] = "",
             ["Webhooks__RequireLineSignature"] = "true",
             ["Worker__PollSeconds"] = "1",
+            // Phase 4: check for due scheduled jobs every second; retry a failed job after 3 s, twice.
+            ["Scheduler__PollSeconds"] = "1",
+            ["Scheduler__RetryDelaysMinutes"] = "0.05,0.05",
         };
 
         var admin = new Dictionary<string, string>(common)

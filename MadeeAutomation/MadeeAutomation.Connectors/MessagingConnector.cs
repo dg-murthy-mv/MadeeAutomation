@@ -125,15 +125,21 @@ public class MessagingConnector : IMessagingConnector
         if (string.IsNullOrWhiteSpace(message.To))
             return MessageSendResult.Fail("reply", $"Reply failed ({replyError}) and there is no user id to push to.");
 
-        using var push = new HttpRequestMessage(HttpMethod.Post, new Uri(LineBase, "v2/bot/message/push"))
+        // The same retry key on every try: LINE delivers the message once even if we have to repeat it.
+        var retryKey = Guid.NewGuid().ToString();
+        using var pushResponse = await HttpRetry.SendAsync(ct =>
         {
-            Content = Json(new { to = message.To, messages })
-        };
-        push.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        // Lets LINE drop a duplicate if this exact request is ever retried.
-        push.Headers.Add("X-Line-Retry-Key", Guid.NewGuid().ToString());
+            var push = new HttpRequestMessage(HttpMethod.Post, new Uri(LineBase, "v2/bot/message/push"))
+            {
+                Content = Json(new { to = message.To, messages })
+            };
+            push.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            push.Headers.Add("X-Line-Retry-Key", retryKey);
+            return client.SendAsync(push, ct);
+        }, "LINE push", _logger, cancellationToken, safeToRepeat: true);
 
-        using var pushResponse = await client.SendAsync(push, cancellationToken);
+        // 409 = LINE already accepted this retry key on an earlier try: it was delivered.
+        if ((int)pushResponse.StatusCode == 409) return MessageSendResult.Ok(replyError is null ? "push" : "push (reply token failed)");
         if (pushResponse.IsSuccessStatusCode) return MessageSendResult.Ok(replyError is null ? "push" : "push (reply token failed)");
 
         var pushError = $"{(int)pushResponse.StatusCode} {await pushResponse.Content.ReadAsStringAsync(cancellationToken)}";
@@ -179,13 +185,16 @@ public class MessagingConnector : IMessagingConnector
         CancellationToken cancellationToken)
     {
         var client = _httpClientFactory.CreateClient(label == "Messenger" ? "MessengerApi" : "WhatsAppApi");
-        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(GraphBase, $"{GraphVersion}/{path}"))
+        // Meta has no duplicate protection: only retried when the message certainly did not arrive.
+        using var response = await HttpRetry.SendAsync(ct =>
         {
-            Content = Json(payload)
-        };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-        using var response = await client.SendAsync(request, cancellationToken);
+            var request = new HttpRequestMessage(HttpMethod.Post, new Uri(GraphBase, $"{GraphVersion}/{path}"))
+            {
+                Content = Json(payload)
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            return client.SendAsync(request, ct);
+        }, $"{label} send", _logger, cancellationToken, safeToRepeat: false);
         if (response.IsSuccessStatusCode) return MessageSendResult.Ok("send");
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken);

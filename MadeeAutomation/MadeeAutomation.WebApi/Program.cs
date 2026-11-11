@@ -37,6 +37,7 @@ try
 
     // Runs the customer messages the webhooks store (see WebhooksController).
     builder.Services.AddHostedService<InboundEventWorker>();
+    builder.Services.AddHostedService<SchedulerWorker>();
 
     var app = builder.Build();
 

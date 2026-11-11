@@ -174,8 +174,9 @@ public class AdminTests : PageTest
     {
         await Page.GotoAsync($"/Clients/CreateWorkflow?clientConfigId={World.Bakery.Id}");
         await Page.FillAsync("#Name", "Morning stock check");
-        await Page.SelectOptionAsync("#HandlerKey", "low-stock-alert");
-        await Page.FillAsync("#TriggerConfigJson", "{ cron: 0 7 * * *");
+        // Scheduled workflows use the "When to run" picker now (Phase 4); the JSON box is for webhook handlers.
+        await Page.SelectOptionAsync("#HandlerKey", "lead-scoring");
+        await Page.FillAsync("#TriggerConfigJson", "{ source: website");
         await Page.ClickAsync("[data-testid=save-workflow]");
 
         await Expect(Page.Locator("[data-testid=error-TriggerConfigJson]")).ToContainTextAsync("not valid JSON");

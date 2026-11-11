@@ -287,26 +287,6 @@ public abstract partial class CustomerMessageHandlerBase : IHandler
         var money = itemsTotal is { } sum ? Tax.Calculate(sum, client?.TaxName, client?.TaxRatePercent, client?.PricesIncludeTax ?? true) : null;
         decimal? orderTotal = money?.Total;
 
-        var orderPayload = new
-        {
-            source = turn.Channel,
-            customerId = turn.From,
-            rawMessage = customerMessage,
-            currency,
-            items = lines.Select(l => new { l.name, l.quantity, l.unitPrice, l.lineTotal, l.onMenu }).ToList(),
-            orderTotal,
-            subtotal = money is { HasTax: true } ? money.Subtotal : (decimal?)null,
-            taxName = money is { HasTax: true } ? money.TaxName : null,
-            taxRatePercent = money is { HasTax: true } ? money.RatePercent : null,
-            taxAmount = money is { HasTax: true } ? money.TaxAmount : (decimal?)null,
-            pricesIncludeTax = money is { HasTax: true } ? money.PricesIncludeTax : (bool?)null,
-            requestedDeliveryLocal = deliveryLocal?.ToString("yyyy-MM-dd'T'HH:mm:sszzz"),
-            requestedDeliveryUtc = deliveryLocal?.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"),
-            requestedDeliveryText = deliveryText,
-            timeZone = timeZoneId,
-            customerNote
-        };
-
         // Saved in our own Orders list for every client; also sent to the POS when one is connected.
         // An Admin test run sends and saves nothing.
         var order = new Order
@@ -336,7 +316,7 @@ public abstract partial class CustomerMessageHandlerBase : IHandler
                 LineTotal = l.lineTotal
             }).ToList()
         };
-        await _orderDesk.PlaceAsync(order, orderPayload, context.IsTest, cancellationToken);
+        await _orderDesk.PlaceAsync(order, client, context.IsTest, cancellationToken);
         var orderId = order.Reference;
         if (onPlaced is not null) await onPlaced();
 

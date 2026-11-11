@@ -59,4 +59,41 @@ public class WorkflowRepository : IWorkflowRepository
         await _db.SaveChangesAsync(cancellationToken);
         return true;
     }
+
+    public async Task<List<Guid>> GetDueScheduledIdsAsync(DateTime utcNow, int take, CancellationToken cancellationToken = default) =>
+        await _db.WorkflowDefinitions.AsNoTracking()
+            .Where(w => w.IsEnabled && w.TriggerType == TriggerType.Scheduled && (w.NextRunAtUtc == null || w.NextRunAtUtc <= utcNow))
+            .OrderBy(w => w.NextRunAtUtc)
+            .Select(w => w.Id)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
+    public async Task<bool> TryClaimRunAsync(Guid workflowDefinitionId, DateTime? expectedNextUtc, DateTime? newNextUtc,
+        CancellationToken cancellationToken = default)
+    {
+        // One UPDATE with the old value in the WHERE: if two copies of WebApi try at once, only one row changes.
+        var query = _db.WorkflowDefinitions.Where(w => w.Id == workflowDefinitionId);
+        query = expectedNextUtc is { } expected
+            ? query.Where(w => w.NextRunAtUtc == expected)
+            : query.Where(w => w.NextRunAtUtc == null);
+        var changed = await query.ExecuteUpdateAsync(set => set.SetProperty(w => w.NextRunAtUtc, newNextUtc), cancellationToken);
+        return changed == 1;
+    }
+
+    public async Task RecordRunAsync(Guid workflowDefinitionId, DateTime? lastRunAtUtc, string status, DateTime? nextRunAtUtc, int retryAttempt,
+        CancellationToken cancellationToken = default)
+    {
+        status = status.Length > 300 ? status[..300] : status;
+        if (lastRunAtUtc is { } ran)
+            await _db.WorkflowDefinitions.Where(w => w.Id == workflowDefinitionId).ExecuteUpdateAsync(set => set
+                .SetProperty(w => w.LastRunAtUtc, ran)
+                .SetProperty(w => w.LastRunStatus, status)
+                .SetProperty(w => w.NextRunAtUtc, nextRunAtUtc)
+                .SetProperty(w => w.RetryAttempt, retryAttempt), cancellationToken);
+        else
+            await _db.WorkflowDefinitions.Where(w => w.Id == workflowDefinitionId).ExecuteUpdateAsync(set => set
+                .SetProperty(w => w.LastRunStatus, status)
+                .SetProperty(w => w.NextRunAtUtc, nextRunAtUtc)
+                .SetProperty(w => w.RetryAttempt, retryAttempt), cancellationToken);
+    }
 }

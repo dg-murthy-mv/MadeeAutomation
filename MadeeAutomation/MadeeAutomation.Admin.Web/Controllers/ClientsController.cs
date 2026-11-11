@@ -242,7 +242,7 @@ public class ClientsController : Controller
             ClientName = client.ClientName,
             Vertical = client.Vertical,
             Name = "LINE customer messages"
-        });
+        }.WithSchedule(null, client.TimeZoneId));
     }
 
     [HttpPost]
@@ -287,7 +287,7 @@ public class ClientsController : Controller
             Channel = workflow.Channel ?? "",
             TriggerConfigJson = workflow.TriggerConfigJson,
             IsEnabled = workflow.IsEnabled
-        });
+        }.WithSchedule(workflow));
     }
 
     [HttpPost]
@@ -519,6 +519,20 @@ public class ClientsController : Controller
             model.Channel = "";
         }
 
+        // Scheduled: the schedule form (days + times, or a cron) becomes the trigger config.
+        if (model.TriggerType == TriggerType.Scheduled)
+        {
+            model.ClientTimeZoneId = client.TimeZoneId;
+            string? scheduleError;
+            var schedule = !string.IsNullOrWhiteSpace(model.ScheduleCron)
+                ? WorkflowSchedule.FromCron(model.ScheduleCron, out scheduleError)
+                : WorkflowSchedule.FromSimple(model.ScheduleDays, model.ScheduleTimes, out scheduleError);
+            if (schedule is null)
+                ModelState.AddModelError(string.IsNullOrWhiteSpace(model.ScheduleCron) ? nameof(model.ScheduleTimes) : nameof(model.ScheduleCron), scheduleError!);
+            else
+                model.TriggerConfigJson = schedule.ToJson();
+        }
+
         var json = string.IsNullOrWhiteSpace(model.TriggerConfigJson) ? "{}" : model.TriggerConfigJson.Trim();
         try
         {
@@ -558,7 +572,22 @@ public class ClientsController : Controller
         workflow.Vertical = model.Vertical;
         workflow.TriggerType = model.TriggerType;
         workflow.Channel = string.IsNullOrEmpty(model.Channel) ? null : model.Channel;
+        // A changed schedule (or a workflow switched on again) starts afresh: the next run is worked out now,
+        // in the client's time zone, and any retry of an old failure is dropped.
+        var scheduleChanged = workflow.TriggerConfigJson != model.TriggerConfigJson || workflow.TriggerType != model.TriggerType ||
+                              (!workflow.IsEnabled && model.IsEnabled);
         workflow.TriggerConfigJson = model.TriggerConfigJson;
         workflow.IsEnabled = model.IsEnabled;
+        if (model.TriggerType == TriggerType.Scheduled && (scheduleChanged || workflow.NextRunAtUtc is null))
+        {
+            var schedule = WorkflowSchedule.Parse(model.TriggerConfigJson, out _);
+            workflow.NextRunAtUtc = schedule?.NextAfter(DateTime.UtcNow, model.ClientTimeZoneId) ?? DateTime.MaxValue;
+            workflow.RetryAttempt = 0;
+        }
+        else if (model.TriggerType != TriggerType.Scheduled)
+        {
+            workflow.NextRunAtUtc = null;
+            workflow.RetryAttempt = 0;
+        }
     }
 }

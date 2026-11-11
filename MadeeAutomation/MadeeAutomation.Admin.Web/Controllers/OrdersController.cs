@@ -77,6 +77,21 @@ public class OrdersController : ClientScopedController
         });
     }
 
+    /// <summary>The order could not be sent to the client's POS when it was taken: try again.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendToPos(Guid clientConfigId, Guid id, string? returnUrl = null)
+    {
+        clientConfigId = Scope(clientConfigId);
+        var order = await _orders.GetAsync(clientConfigId, id);   // null when it belongs to another client
+        if (order is null) return NotFound();
+
+        var error = await _api.SendOrderToPosAsync(clientConfigId, id);
+        if (error is null) TempData["Success"] = $"Order {order.Reference} is now in the POS.";
+        else TempData["Error"] = $"Order {order.Reference} could still not be sent to the POS: {error}";
+        return BackTo(returnUrl, RedirectToAction(nameof(Index), new { clientConfigId }));
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SetStatus(Guid clientConfigId, Guid id, OrderStatus status, string? show = null, string? reason = null,

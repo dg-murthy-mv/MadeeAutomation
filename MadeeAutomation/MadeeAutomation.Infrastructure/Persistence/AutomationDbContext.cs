@@ -76,6 +76,7 @@ public class AutomationDbContext : DbContext
             entity.HasIndex(o => new { o.ClientConfigId, o.CreatedAtUtc });
             entity.Property(o => o.Reference).HasMaxLength(100).IsRequired();
             entity.Property(o => o.PosOrderId).HasMaxLength(100);
+            entity.Property(o => o.PosError).HasMaxLength(300);
             entity.Property(o => o.Channel).HasMaxLength(20).IsRequired();
             entity.Property(o => o.CustomerId).HasMaxLength(200);
             entity.Property(o => o.CustomerName).HasMaxLength(200);
@@ -136,6 +137,8 @@ public class AutomationDbContext : DbContext
 
         modelBuilder.Entity<WorkflowDefinition>(entity =>
         {
+            entity.Property(w => w.LastRunStatus).HasMaxLength(300);
+            entity.HasIndex(w => new { w.TriggerType, w.IsEnabled, w.NextRunAtUtc });
             entity.ToTable("WorkflowDefinitions");
             entity.HasOne(w => w.ClientConfig)
                   .WithMany(c => c.Workflows)

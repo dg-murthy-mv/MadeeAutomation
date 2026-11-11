@@ -7,9 +7,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace MadeeAutomation.WebApi.Controllers;
 
 /// <summary>
-/// Runs a client's scheduled workflows (e.g. LowStockAlertHandler) when called.
-/// Protected: callers must send header X-Internal-Key (InternalApi:Key). A real scheduler that reads
-/// the cron in TriggerConfigJson comes in Phase 3 - until then call it from a Windows scheduled task:
+/// Runs ALL of a client's scheduled workflows now, whatever their schedule (a manual "run now" for
+/// support). Normal runs happen by themselves at their times - see SchedulerWorker.
+/// Protected: callers must send header X-Internal-Key (InternalApi:Key):
 ///   curl -X POST -H "X-Internal-Key: ..." https://localhost:58715/api/scheduled-triggers/run/{clientConfigId}
 /// </summary>
 [ApiController]

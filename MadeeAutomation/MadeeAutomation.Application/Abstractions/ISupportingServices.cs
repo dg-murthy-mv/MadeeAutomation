@@ -63,6 +63,19 @@ public interface IWorkflowRepository
     Task AddAsync(WorkflowDefinition workflow, CancellationToken cancellationToken = default);
     Task UpdateAsync(WorkflowDefinition workflow, CancellationToken cancellationToken = default);
     Task<bool> SetEnabledAsync(Guid workflowDefinitionId, bool isEnabled, CancellationToken cancellationToken = default);
+
+    /// <summary>Enabled Scheduled workflows that are due (NextRunAtUtc at or before utcNow) or not worked out yet (null).</summary>
+    Task<List<Guid>> GetDueScheduledIdsAsync(DateTime utcNow, int take, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Takes a due run: moves NextRunAtUtc from expectedNextUtc to newNextUtc, but ONLY if nobody else
+    /// moved it first. False = another copy of WebApi (or an earlier loop) already took this run.
+    /// </summary>
+    Task<bool> TryClaimRunAsync(Guid workflowDefinitionId, DateTime? expectedNextUtc, DateTime? newNextUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>Records how a scheduled run went and when the next one is.</summary>
+    Task RecordRunAsync(Guid workflowDefinitionId, DateTime? lastRunAtUtc, string status, DateTime? nextRunAtUtc, int retryAttempt,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>Client list/create/update for the Admin dashboard (keeps DbContext out of controllers).</summary>
@@ -167,6 +180,9 @@ public interface IOrderRepository
     Task<bool> SetStatusAsync(Guid clientConfigId, Guid orderId, OrderStatus status, string changedBy, string? cancelReason = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Records the result of sending a saved order to the POS again: the POS id, or the error (null = clear it).</summary>
+    Task SetPosResultAsync(Guid clientConfigId, Guid orderId, string? posOrderId, string? posError, CancellationToken cancellationToken = default);
+
     /// <summary>Records whether the customer was told about an Accept / Cancel, and what was sent (or why not).</summary>
     Task SetCustomerNoticeAsync(Guid clientConfigId, Guid orderId, bool sent, string note, CancellationToken cancellationToken = default);
 }
@@ -244,7 +260,12 @@ public interface IPosFirstConnector
     /// <summary>False when the client has no POS connected - the order then lives only in our own Orders list.</summary>
     Task<bool> IsConfiguredAsync(Guid clientConfigId, CancellationToken cancellationToken = default);
 
-    Task<string> CreateOrderAsync(Guid clientConfigId, object orderPayload, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Creates the order in the client's POS and returns the POS order id. Throws when the POS can't be
+    /// reached or refuses it. idempotencyKeyFor = our own order id, sent as Idempotency-Key so a repeat
+    /// (a retry, or "Send to POS again") can be recognised by the POS.
+    /// </summary>
+    Task<string> CreateOrderAsync(Guid clientConfigId, object orderPayload, CancellationToken cancellationToken = default, string? idempotencyKeyFor = null);
     Task<List<string>> GetLowStockItemsAsync(Guid clientConfigId, CancellationToken cancellationToken = default);
 }
 

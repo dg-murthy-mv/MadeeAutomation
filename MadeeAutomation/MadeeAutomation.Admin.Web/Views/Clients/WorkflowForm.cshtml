@@ -60,9 +60,52 @@
         </div>
     </div>
 
-    <div class="mb-3">
+    @{
+        (int Day, string Label)[] days = { (1, "Mon"), (2, "Tue"), (3, "Wed"), (4, "Thu"), (5, "Fri"), (6, "Sat"), (0, "Sun") };
+    }
+    <fieldset class="border rounded p-3 mb-3" id="scheduleGroup" data-testid="schedule-group">
+        <legend class="float-none w-auto px-2 fs-6 mb-0">When to run</legend>
+        <div class="form-text mb-2">
+            In the client's own time zone: <strong data-testid="schedule-tz">@(Model.ClientTimeZoneId ?? "UTC")</strong>. 7:00 means 7:00 at the shop.
+        </div>
+        <div class="mb-2">
+            <div class="form-label mb-1">Days <span class="mv-subtle small">(none ticked = every day)</span></div>
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var (day, label) in days)
+                {
+                    <div class="form-check form-check-inline me-1">
+                        <input class="form-check-input" type="checkbox" name="ScheduleDays" value="@day" id="day-@day"
+                               @(Model.ScheduleDays.Contains(day) ? "checked" : "") data-testid="schedule-day-@day" />
+                        <label class="form-check-label" for="day-@day">@label</label>
+                    </div>
+                }
+            </div>
+        </div>
+        <div class="mb-2" style="max-width: 360px">
+            <label asp-for="ScheduleTimes" class="form-label"></label>
+            <input asp-for="ScheduleTimes" class="form-control" placeholder="07:00, 15:30" autocomplete="off" data-testid="schedule-times" />
+            <div class="form-text">24-hour times, separated by commas.</div>
+            <span asp-validation-for="ScheduleTimes" class="text-danger small" data-testid="error-ScheduleTimes"></span>
+        </div>
+        <details @(string.IsNullOrWhiteSpace(Model.ScheduleCron) ? "" : "open")>
+            <summary class="small">Advanced: cron</summary>
+            <div class="mt-2" style="max-width: 360px">
+                <input asp-for="ScheduleCron" class="form-control font-monospace" placeholder="*/30 8-18 * * 1-5" autocomplete="off" data-testid="schedule-cron" />
+                <div class="form-text">minute hour day-of-month month day-of-week. When filled in, it is used instead of the days and times.</div>
+                <span asp-validation-for="ScheduleCron" class="text-danger small" data-testid="error-ScheduleCron"></span>
+            </div>
+        </details>
+        @if (Model.IsEdit)
+        {
+            <div class="small mt-2" data-testid="schedule-next">Next run: <strong>@Model.NextRunText</strong></div>
+            @if (Model.LastRunText is not null) { <div class="small mv-subtle" data-testid="schedule-last">Last: @Model.LastRunText</div> }
+        }
+        <div class="form-text mt-1">If a run fails, it is tried again after 2, 10 and 30 minutes; after that the client's staff are told.</div>
+    </fieldset>
+
+    <div class="mb-3" id="configGroup">
         <label asp-for="TriggerConfigJson" class="form-label"></label>
-        <textarea asp-for="TriggerConfigJson" class="form-control font-monospace" rows="3" placeholder='{ "cron": "0 7 * * *" }'></textarea>
+        <textarea asp-for="TriggerConfigJson" class="form-control font-monospace" rows="3" placeholder='{ }'></textarea>
         <span asp-validation-for="TriggerConfigJson" class="text-danger small" data-testid="error-TriggerConfigJson"></span>
     </div>
 
@@ -84,6 +127,14 @@
         const triggerGroup = document.getElementById('triggerGroup');
         const trigger = document.getElementById('TriggerType');
         const desc = document.getElementById('handlerDescription');
+        const scheduleGroup = document.getElementById('scheduleGroup');
+        const configGroup = document.getElementById('configGroup');
+        function syncTrigger() {
+            const scheduled = trigger.value === '2';   // TriggerType.Scheduled
+            scheduleGroup.style.display = scheduled ? '' : 'none';
+            const isMessage = handler.options[handler.selectedIndex].dataset.message === '1';
+            configGroup.style.display = scheduled || isMessage ? 'none' : '';
+        }
         function sync(changed) {
             const opt = handler.options[handler.selectedIndex];
             const isMessage = opt.dataset.message === '1';
@@ -91,8 +142,10 @@
             triggerGroup.style.display = isMessage ? 'none' : '';
             desc.textContent = opt.dataset.desc || '';
             if (changed || isMessage) trigger.value = opt.dataset.trigger;
+            syncTrigger();
         }
         handler.addEventListener('change', () => sync(true));
+        trigger.addEventListener('change', syncTrigger);
         sync(false);
     })();
 </script>

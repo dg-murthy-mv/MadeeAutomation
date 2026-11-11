@@ -102,6 +102,15 @@ public class OrderRepository : IOrderRepository
         return rows.ToDictionary(r => r.MenuItemId, r => r.Quantity);
     }
 
+    public async Task SetPosResultAsync(Guid clientConfigId, Guid orderId, string? posOrderId, string? posError, CancellationToken cancellationToken = default)
+    {
+        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.ClientConfigId == clientConfigId, cancellationToken);
+        if (order is null) return;
+        if (posOrderId is not null) order.PosOrderId = posOrderId.Length > 100 ? posOrderId[..100] : posOrderId;
+        order.PosError = posError is null ? null : posError.Length > 300 ? posError[..300] : posError;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task SetCustomerNoticeAsync(Guid clientConfigId, Guid orderId, bool sent, string note, CancellationToken cancellationToken = default)
     {
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.ClientConfigId == clientConfigId, cancellationToken);

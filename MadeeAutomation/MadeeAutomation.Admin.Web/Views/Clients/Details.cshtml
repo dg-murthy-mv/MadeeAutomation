@@ -192,6 +192,15 @@
                             {
                                 <div class="small mv-subtle text-break">@Model.GenericWebhookUrl(workflow.Id)</div>
                             }
+                            @if (workflow.TriggerType == TriggerType.Scheduled)
+                            {
+                                <div class="small" data-testid="workflow-schedule">@ScheduleText.Describe(workflow) <span class="mv-subtle">(@client.TimeZoneId)</span></div>
+                                <div class="small mv-subtle" data-testid="workflow-next-run">Next: @ScheduleText.Next(workflow)</div>
+                                @if (ScheduleText.Last(workflow) is { } last)
+                                {
+                                    <div class="small @(workflow.LastRunStatus!.StartsWith("Failed") || workflow.LastRunStatus.StartsWith("Missed") ? "text-danger" : "mv-subtle")" data-testid="workflow-last-run">Last: @last</div>
+                                }
+                            }
                         </td>
                         <td data-label="Handler"><code>@workflow.HandlerKey</code></td>
                         <td data-label="Trigger">@workflow.TriggerType</td>

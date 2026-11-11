@@ -21,13 +21,30 @@ public class InternalController : ControllerBase
     private readonly WorkflowEngine _engine;
     private readonly IWorkflowRepository _workflows;
     private readonly MadeeAutomation.Application.VerticalPacks.Messaging.OrderCustomerNotifier _orderNotifier;
+    private readonly MadeeAutomation.Application.VerticalPacks.Messaging.OrderDesk _orderDesk;
+    private readonly ICurrentClientService _clients;
 
     public InternalController(WorkflowEngine engine, IWorkflowRepository workflows,
-        MadeeAutomation.Application.VerticalPacks.Messaging.OrderCustomerNotifier orderNotifier)
+        MadeeAutomation.Application.VerticalPacks.Messaging.OrderCustomerNotifier orderNotifier,
+        MadeeAutomation.Application.VerticalPacks.Messaging.OrderDesk orderDesk, ICurrentClientService clients)
     {
         _engine = engine;
         _workflows = workflows;
         _orderNotifier = orderNotifier;
+        _orderDesk = orderDesk;
+        _clients = clients;
+    }
+
+    /// <summary>
+    /// "Send to POS again" for an order whose first send to the client's POS failed.
+    /// Answers { sent: true } or { sent: false, error }.
+    /// </summary>
+    [HttpPost("clients/{clientConfigId:guid}/orders/{orderId:guid}/send-to-pos")]
+    public async Task<IActionResult> SendToPos(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken)
+    {
+        var client = await _clients.GetClientAsync(clientConfigId, cancellationToken);
+        var error = await _orderDesk.ResendToPosAsync(clientConfigId, orderId, client, cancellationToken);
+        return Ok(new { sent = error is null, error });
     }
 
     /// <summary>

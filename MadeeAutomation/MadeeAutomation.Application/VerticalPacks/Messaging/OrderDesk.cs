@@ -36,8 +36,12 @@ public class OrderDesk
     /// <summary>
     /// Sends the order to the POS (if any) and saves it. In a test run nothing is sent or saved -
     /// the order just gets the reference "TEST-ORDER".
+    ///
+    /// If the POS can't be reached or refuses the order (after the quick retries), the order is NOT
+    /// lost: it is saved here with our own reference (ORD-0001), the customer is still confirmed, and
+    /// the staff message says to enter it in the POS by hand (or "Send to POS again" on the Orders page).
     /// </summary>
-    public async Task PlaceAsync(Order order, object posPayload, bool isTest, CancellationToken cancellationToken = default)
+    public async Task PlaceAsync(Order order, ClientConfig? client, bool isTest, CancellationToken cancellationToken = default)
     {
         if (isTest)
         {
@@ -47,18 +51,76 @@ public class OrderDesk
 
         if (await _posFirst.IsConfiguredAsync(order.ClientConfigId, cancellationToken))
         {
-            var posOrderId = await _posFirst.CreateOrderAsync(order.ClientConfigId, posPayload, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(posOrderId))
+            var (posOrderId, error) = await SendToPosAsync(order, client, cancellationToken);
+            if (posOrderId is not null)
             {
-                order.PosOrderId = posOrderId.Length > 100 ? posOrderId[..100] : posOrderId;
-                order.Reference = order.PosOrderId;
+                order.PosOrderId = posOrderId;
+                order.Reference = posOrderId;
             }
+            order.PosError = error;
         }
 
         if (!string.IsNullOrWhiteSpace(order.CustomerId))
             order.CustomerName = await _messaging.GetCustomerNameAsync(order.ClientConfigId, order.Channel, order.CustomerId, cancellationToken);
 
         await _orders.AddAsync(order, cancellationToken);   // no POS id -> gets our own "ORD-0001"
+    }
+
+    /// <summary>"Send to POS again" for a saved order whose first send failed. Returns the error, or null when it worked.</summary>
+    public async Task<string?> ResendToPosAsync(Guid clientConfigId, Guid orderId, ClientConfig? client, CancellationToken cancellationToken = default)
+    {
+        var order = await _orders.GetAsync(clientConfigId, orderId, cancellationToken);
+        if (order is null) return "Order not found.";
+        if (order.PosOrderId is not null) return null;   // already there
+        if (!await _posFirst.IsConfiguredAsync(clientConfigId, cancellationToken)) return "This client has no POS connected.";
+
+        var (posOrderId, error) = await SendToPosAsync(order, client, cancellationToken);
+        await _orders.SetPosResultAsync(clientConfigId, orderId, posOrderId, error, CancellationToken.None);
+        return error;
+    }
+
+    private async Task<(string? PosOrderId, string? Error)> SendToPosAsync(Order order, ClientConfig? client, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var posOrderId = await _posFirst.CreateOrderAsync(order.ClientConfigId, PosPayload(order, client), cancellationToken, order.Id.ToString("N"));
+            return string.IsNullOrWhiteSpace(posOrderId)
+                ? (null, "The POS accepted the order but sent back no order number.")
+                : (posOrderId.Length > 100 ? posOrderId[..100] : posOrderId, null);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            var reason = ex is TaskCanceledException ? "the POS did not answer in time" : ex.Message;
+            return (null, reason.Length > 300 ? reason[..300] : reason);
+        }
+    }
+
+    /// <summary>What we send to the POS - built from the saved order, so a resend sends exactly the same.</summary>
+    public static object PosPayload(Order order, ClientConfig? client)
+    {
+        var timeZoneId = client?.TimeZoneId;
+        DateTimeOffset? deliveryLocal = order.RequestedForUtc is { } utc ? LocalTime.ToLocalOffset(utc, timeZoneId) : null;
+        var tax = order.Money() is { HasTax: true } m ? m : null;
+        return new
+        {
+            externalOrderId = order.Id.ToString("N"),   // our id: the same on every try
+            source = order.Channel,
+            customerId = order.CustomerId,
+            rawMessage = order.CustomerMessage,
+            currency = order.Currency,
+            items = order.Items.Select(i => new { name = i.Name, quantity = i.Quantity, unitPrice = i.UnitPrice, lineTotal = i.LineTotal, onMenu = i.MenuItemId is not null }).ToList(),
+            orderTotal = order.Total,
+            subtotal = tax?.Subtotal,
+            taxName = tax?.TaxName,
+            taxRatePercent = tax?.RatePercent,
+            taxAmount = tax?.TaxAmount,
+            pricesIncludeTax = tax?.PricesIncludeTax,
+            requestedDeliveryLocal = deliveryLocal?.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture),
+            requestedDeliveryUtc = order.RequestedForUtc?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
+            requestedDeliveryText = order.RequestedForText,
+            timeZone = timeZoneId,
+            customerNote = order.CustomerNote
+        };
     }
 
     /// <summary>The message the client's staff get (LINE and/or email). English - our side is English only.</summary>
@@ -95,7 +157,9 @@ public class OrderDesk
 
         sb.Append(order.PosOrderId is not null
             ? "It is also in your POS."
-            : "No POS is connected - please prepare it from this message or the Orders page.");
+            : order.PosError is not null
+                ? $"It could NOT be sent to your POS ({order.PosError}) - please enter it in the POS by hand, or use \"Send to POS again\" on the Orders page."
+                : "No POS is connected - please prepare it from this message or the Orders page.");
         return sb.ToString();
     }
 

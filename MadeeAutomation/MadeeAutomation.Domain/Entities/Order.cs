@@ -26,6 +26,13 @@ public class Order
 
     public string? PosOrderId { get; set; }
 
+    /// <summary>
+    /// The client has a POS but this order could not be sent to it (POS down, refused it). The order
+    /// is still saved here and confirmed to the customer; staff are told to enter it by hand, or use
+    /// "Send to POS again" on the Orders page. Null = sent fine, or there is no POS.
+    /// </summary>
+    public string? PosError { get; set; }
+
     public string Channel { get; set; } = string.Empty;
     public string? CustomerId { get; set; }
     public string? CustomerName { get; set; }          // e.g. the LINE display name, when we could read it

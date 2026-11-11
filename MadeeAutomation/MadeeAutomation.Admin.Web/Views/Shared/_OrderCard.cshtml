@@ -53,7 +53,17 @@
         <div data-testid="order-customer"><strong>Customer:</strong> <span dir="auto">@(string.IsNullOrWhiteSpace(o.CustomerName) ? o.CustomerId : o.CustomerName)</span></div>
         @if (!string.IsNullOrWhiteSpace(o.CustomerNote)) { <div><strong>Note:</strong> <span dir="auto">@o.CustomerNote</span></div> }
         @if (!string.IsNullOrWhiteSpace(o.CustomerMessage)) { <div class="mv-subtle text-break"><strong>Customer wrote:</strong> <span dir="auto">"@o.CustomerMessage"</span></div> }
-        @if (o.PosOrderId is not null) { <div class="mv-subtle">Also in the POS as @o.PosOrderId</div> }
+        @if (o.PosOrderId is not null && o.PosOrderId != o.Reference) { <div class="mv-subtle" data-testid="order-in-pos">Now in the POS as @o.PosOrderId</div> }
+        else if (o.PosOrderId is not null) { <div class="mv-subtle">Also in the POS as @o.PosOrderId</div> }
+        @if (o.PosError is not null && o.PosOrderId is null)
+        {
+            <div class="alert alert-warning py-2 px-3 my-2 small d-flex flex-wrap align-items-center justify-content-between gap-2" data-testid="order-pos-error">
+                <span><strong>Not in the POS.</strong> It could not be sent: @o.PosError. Enter it in the POS by hand, or try again.</span>
+                <form asp-controller="Orders" asp-action="SendToPos" asp-route-clientConfigId="@client.Id" asp-route-id="@o.Id" asp-route-returnUrl="@here" method="post">
+                    <button type="submit" class="btn btn-sm btn-warning" data-testid="order-send-to-pos">Send to POS again</button>
+                </form>
+            </div>
+        }
         @if (o.StatusChangedAtUtc is DateTime changed) { <div class="mv-subtle">@o.Status by @o.StatusChangedBy, @Local(changed)</div> }
         @if (o.Status == OrderStatus.Cancelled && !string.IsNullOrWhiteSpace(o.CancelReason)) { <div data-testid="order-cancel-reason"><strong>Reason:</strong> <span dir="auto">@o.CancelReason</span></div> }
         @if (o.CustomerNoticeSent == true)

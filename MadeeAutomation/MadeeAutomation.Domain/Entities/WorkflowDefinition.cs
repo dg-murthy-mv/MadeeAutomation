@@ -26,7 +26,24 @@ public class WorkflowDefinition
     /// </summary>
     public string? Channel { get; set; }
 
-    public string TriggerConfigJson { get; set; } = "{}";      // e.g. cron expression for Scheduled
+    /// <summary>
+    /// Scheduled workflows: when to run, in the client's own time zone - see WorkflowSchedule
+    /// ({ "days": [1,2,3,4,5], "times": ["07:00"] } or { "cron": "0 7 * * *" }).
+    /// </summary>
+    public string TriggerConfigJson { get; set; } = "{}";
+
+    // ---- Scheduled workflows: kept up to date by the scheduler in WebApi ----
+
+    /// <summary>The next time the scheduler will run it (UTC). Null = not worked out yet, or no valid schedule.</summary>
+    public DateTime? NextRunAtUtc { get; set; }
+
+    public DateTime? LastRunAtUtc { get; set; }
+
+    /// <summary>Plain English, e.g. "Succeeded", "Failed - retry 1 of 3 at 07:02", "Missed - WebApi was not running".</summary>
+    public string? LastRunStatus { get; set; }
+
+    /// <summary>0 normally; 1, 2, 3 while retrying a failed run.</summary>
+    public int RetryAttempt { get; set; }
 
     public bool IsEnabled { get; set; } = true;
 

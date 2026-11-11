@@ -32,6 +32,9 @@ public class OrderNoticeResult
 /// <summary>Admin.Web -> WebApi calls (same IApiService pattern as Merkai). Sends X-Internal-Key.</summary>
 public interface IApiService
 {
+    /// <summary>Asks WebApi to send a saved order to the client's POS again. Returns null when it worked, else the reason. Never throws.</summary>
+    Task<string?> SendOrderToPosAsync(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken = default);
+
     /// <summary>Asks WebApi to tell the customer their order was accepted or cancelled. Never throws.</summary>
     Task<OrderNoticeResult> NotifyCustomerAboutOrderAsync(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken = default);
 
@@ -53,6 +56,31 @@ public class ApiService : IApiService
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _logger = logger;
+    }
+
+    public async Task<string?> SendOrderToPosAsync(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken = default)
+    {
+        var key = _configuration["InternalApi:Key"];
+        if (string.IsNullOrWhiteSpace(key)) return "InternalApi:Key is not set in Admin.Web.";
+
+        var client = _httpClientFactory.CreateClient(ClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"api/internal/clients/{clientConfigId}/orders/{orderId}/send-to-pos");
+        request.Headers.Add("X-Internal-Key", key.Trim());
+        try
+        {
+            using var response = await client.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode) return $"WebApi answered {(int)response.StatusCode}.";
+            using var doc = JsonDocument.Parse(body);
+            return doc.RootElement.TryGetProperty("sent", out var sent) && sent.ValueKind == JsonValueKind.True
+                ? null
+                : doc.RootElement.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : "The POS did not take it.";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            _logger.LogError(ex, "Send-to-POS call to WebApi failed");
+            return "WebApi could not be reached.";
+        }
     }
 
     public async Task<OrderNoticeResult> NotifyCustomerAboutOrderAsync(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken = default)

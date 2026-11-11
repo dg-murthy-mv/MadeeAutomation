@@ -65,6 +65,14 @@ public static class World
     public static SeededClient TaxIncluded { get; private set; } = null!;
     public static SeededClient TaxAdded { get; private set; } = null!;
     public static SeededClient TaxForm { get; private set; } = null!;
+    // Phase 4: scheduler, retries, POS down
+    public static SeededClient SchedOk { get; private set; } = null!;
+    public static SeededClient SchedFail { get; private set; } = null!;
+    public static SeededClient SchedPaused { get; private set; } = null!;
+    public static SeededClient SchedForm { get; private set; } = null!;
+    public static SeededClient PosDown { get; private set; } = null!;
+    public static Guid SchedOkJob, SchedFailJob, SchedPausedJob, SchedFormJob;
+    public static readonly string PosDownStaffLineId = "Uflaky" + new string('g', 27);
     public static readonly string TaxStaffLineId = "U" + new string('e', 32);
     public static readonly string ButtonCafeStaffLineId = "U" + new string('d', 32);
 
@@ -245,6 +253,33 @@ public static class World
             Encrypted(Line("taxform-secret", "taxform-token")), "taxform-secret", withWorkflow: true);
         await AddMenuItemAsync(db, TaxForm.Id, "Samosa", "Snacks", 25m, null, true, 0);
 
+        // ---- Phase 4 ----
+        // A NULL NextRunAtUtc would let WebApi work the first time out as soon as it starts - that is tested too.
+        ClientIntegrationSettings Pos(string name, string key) => new()
+        {
+            LineChannelSecret = name + "-secret", LineChannelAccessToken = name + "-token",
+            PosFirstBaseUrl = settings.FakeServerUrl, PosFirstApiKey = key
+        };
+        SchedOk = await AddClientAsync(db, "schedok", "E2E Sched OK", ClientStatus.Active, Encrypted(Pos("schedok", "pos-key-schedok")),
+            "schedok-secret", withWorkflow: false, staffEmail: "owner@schedok.test");
+        SchedOkJob = await AddScheduledAsync(db, SchedOk.Id, "Morning low-stock check", "{\"days\":[],\"times\":[\"07:00\"]}");
+
+        SchedFail = await AddClientAsync(db, "schedfail", "E2E Sched Fail", ClientStatus.Active, Encrypted(Pos("schedfail", "lowstock-down")),
+            "schedfail-secret", withWorkflow: false, staffEmail: "owner@schedfail.test", country: "PH", currency: "PHP", timeZone: "Asia/Manila");
+        SchedFailJob = await AddScheduledAsync(db, SchedFail.Id, "Manila low-stock check", "{\"cron\":\"30 6 * * *\"}");
+
+        SchedPaused = await AddClientAsync(db, "schedpaused", "E2E Sched Paused", ClientStatus.Paused, Encrypted(Pos("schedpaused", "pos-key-schedpaused")),
+            "schedpaused-secret", withWorkflow: false, staffEmail: "owner@schedpaused.test");
+        SchedPausedJob = await AddScheduledAsync(db, SchedPaused.Id, "Paused low-stock check", "{\"days\":[],\"times\":[\"07:00\"]}");
+
+        SchedForm = await AddClientAsync(db, "schedform", "E2E Sched Form", ClientStatus.Active, Encrypted(Pos("schedform", "pos-key-schedform")),
+            "schedform-secret", withWorkflow: false, country: "AE", currency: "AED", timeZone: "Asia/Dubai");
+        SchedFormJob = await AddScheduledAsync(db, SchedForm.Id, "Dubai stock check", "{\"days\":[],\"times\":[\"07:00\"]}", enabled: false);
+
+        PosDown = await AddClientAsync(db, "posdown", "E2E POS Down", ClientStatus.Active, Encrypted(Pos("posdown", "pos-down-e2e")),
+            "posdown-secret", withWorkflow: true, country: "AE", currency: "AED", timeZone: "Asia/Dubai", staffLine: PosDownStaffLineId);
+        await AddMenuItemAsync(db, PosDown.Id, "Shawarma", "Wraps", 18m, null, true, 0);
+
         // Old rows hold plain JSON - the app must still read them (and encrypt on the next save).
         Legacy = await AddClientAsync(db, "legacy", "E2E Legacy", ClientStatus.Active,
             Line("legacy-secret", "legacy-token").ToJson(), "legacy-secret", withWorkflow: true);
@@ -275,6 +310,17 @@ public static class World
         }
 
         return new SeededClient(id, code, secret, workflowId);
+    }
+
+    private static async Task<Guid> AddScheduledAsync(TestDatabase db, Guid clientId, string name, string scheduleJson, bool enabled = true)
+    {
+        var id = Guid.NewGuid();
+        await db.ExecAsync(@"
+            INSERT INTO dbo.WorkflowDefinitions (Id, ClientConfigId, Name, HandlerKey, Vertical, TriggerType, Channel,
+                TriggerConfigJson, IsEnabled, CreatedAtUtc, RetryAttempt)
+            VALUES (@id, @client, @name, 'low-stock-alert', 1, 2, NULL, @json, @enabled, SYSUTCDATETIME(), 0);",
+            ("@id", id), ("@client", clientId), ("@name", name), ("@json", scheduleJson), ("@enabled", enabled));
+        return id;
     }
 
     private static Task AddMenuItemAsync(TestDatabase db, Guid clientId, string name, string category, decimal price,

@@ -35,7 +35,7 @@ public class PosFirstApiConnector : IPosFirstConnector
     public async Task<bool> IsConfiguredAsync(Guid clientConfigId, CancellationToken cancellationToken = default) =>
         IsConfigured((await GetSettingsAsync(clientConfigId, cancellationToken)).baseUrl);
 
-    public async Task<string> CreateOrderAsync(Guid clientConfigId, object orderPayload, CancellationToken cancellationToken = default)
+    public async Task<string> CreateOrderAsync(Guid clientConfigId, object orderPayload, CancellationToken cancellationToken = default, string? idempotencyKeyFor = null)
     {
         var (baseUrl, apiKey) = await GetSettingsAsync(clientConfigId, cancellationToken);
 
@@ -57,10 +57,25 @@ public class PosFirstApiConnector : IPosFirstConnector
         }
 
         var json = JsonSerializer.Serialize(orderPayload);
-        var response = await httpClient.PostAsync("/api/orders",
-            new StringContent(json, Encoding.UTF8, "application/json"), cancellationToken);
 
-        response.EnsureSuccessStatusCode();
+        // The same Idempotency-Key on every try (and on a later "Send to POS again"): a POS that honours
+        // it creates the order once. We still only retry when the order certainly did not arrive.
+        var idempotencyKey = idempotencyKeyFor ?? Guid.NewGuid().ToString("N");
+        using var response = await HttpRetry.SendAsync(ct =>
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, "/api/orders")
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+            request.Headers.Add("Idempotency-Key", idempotencyKey);
+            return httpClient.SendAsync(request, ct);
+        }, "POSFirst order", _logger, cancellationToken, safeToRepeat: false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException($"POSFirst answered {(int)response.StatusCode}: {(error.Length > 200 ? error[..200] : error)}", null, response.StatusCode);
+        }
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         using var responseDoc = JsonDocument.Parse(body);
         return responseDoc.RootElement.TryGetProperty("orderId", out var idEl) ? idEl.GetString() ?? "" : "";
@@ -72,11 +87,10 @@ public class PosFirstApiConnector : IPosFirstConnector
 
         if (!IsConfigured(baseUrl))
         {
-            var mockItems = new List<string> { "Sourdough flour (5kg bags)", "Butter (1kg blocks)", "Paper bakery bags" };
-            _logger.LogWarning(
-                "PosFirstApiConnector MOCK MODE - client {ClientConfigId} has no posFirstBaseUrl configured. " +
-                "Returning fake low-stock items: {Items}", clientConfigId, string.Join(", ", mockItems));
-            return mockItems;
+            // No POS connected: there is nothing to check. Never return sample items here - now that the
+            // scheduler really runs jobs, made-up stock would reach the client's staff as a real alert.
+            _logger.LogWarning("Low-stock check for client {ClientConfigId} skipped - no posFirstBaseUrl is configured.", clientConfigId);
+            return new List<string>();
         }
 
         var httpClient = _httpClientFactory.CreateClient("PosFirstApi");
@@ -86,8 +100,11 @@ public class PosFirstApiConnector : IPosFirstConnector
             httpClient.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
         }
 
-        var response = await httpClient.GetAsync("/api/inventory/low-stock", cancellationToken);
-        response.EnsureSuccessStatusCode();
+        // Reading stock changes nothing, so a short blip (timeout, 503) is simply tried again.
+        using var response = await HttpRetry.SendAsync(ct => httpClient.GetAsync("/api/inventory/low-stock", ct),
+            "POSFirst low-stock check", _logger, cancellationToken, safeToRepeat: true);
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"POSFirst low-stock check answered {(int)response.StatusCode} {response.ReasonPhrase}.");
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         using var doc = JsonDocument.Parse(body);
