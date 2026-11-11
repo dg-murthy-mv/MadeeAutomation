@@ -220,6 +220,10 @@ public abstract partial class CustomerMessageHandlerBase
         return (sb.ToString(), rich);
     }
 
+    /// <summary>LINE shows a date-and-time picker; on WhatsApp / Messenger the customer types the time.</summary>
+    private static string WhenQuestion(Turn turn, string question) =>
+        turn.Channel == Channels.Line ? question : question + "\n" + turn.T.TypeATime;
+
     private RichContent WhenButtons(Turn turn)
     {
         // Suggest half an hour from now, rounded up to the next 5 minutes.
@@ -334,7 +338,7 @@ public abstract partial class CustomerMessageHandlerBase
                     return HandlerResult.Ok("Checkout: the cart is empty.", Reply(turn, t.CartEmpty + "\n" + t.ChooseCategory, HomeButtons(turn, 1)));
                 turn.Conversation.State = Conversation.AwaitingTime;
                 await SaveConversationAsync(turn, cancellationToken);
-                return HandlerResult.Ok("Checkout: asked when they want it.", Reply(turn, CartSummaryLine(turn) + "\n" + t.WhenQuestion, WhenButtons(turn)));
+                return HandlerResult.Ok("Checkout: asked when they want it.", Reply(turn, CartSummaryLine(turn) + "\n" + WhenQuestion(turn, t.WhenQuestion), WhenButtons(turn)));
 
             case "when":
             {
@@ -348,7 +352,7 @@ public abstract partial class CustomerMessageHandlerBase
                 var picked = MessageAssistant.ParseLocal(data.GetValueOrDefault("datetime")?.Replace('t', 'T'));
                 if (picked is null || picked < turn.LocalNow.AddMinutes(-2))
                     return HandlerResult.Ok("Checkout: the chosen time is missing or in the past - asked again.",
-                        Reply(turn, picked is null ? t.WhenQuestion : t.TimePassed, WhenButtons(turn)));
+                        Reply(turn, WhenQuestion(turn, picked is null ? t.WhenQuestion : t.TimePassed), WhenButtons(turn)));
 
                 return await PlaceCartAsync(turn, picked, null, cancellationToken);
             }

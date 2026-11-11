@@ -68,16 +68,34 @@
         <div class="mv-channel-head">
             <strong>WhatsApp</strong>
             @{ Status(s?.HasWhatsApp == true, "Credentials saved", "Not set - mock", "whatsapp-status"); }
+            @{ Status(s?.HasMetaAppSecret == true, "App secret saved", "No app secret here - WebApi's is used", "whatsapp-secret-status"); }
         </div>
         @{ UrlRow("Callback URL", Model.WhatsAppWebhookUrl, "whatsapp-webhook-url"); }
+        @if (s?.HasWhatsApp == true)
+        {
+            <form asp-action="CheckWhatsApp" asp-route-id="@client.Id" method="post" class="mt-2">
+                <button type="submit" class="btn btn-sm btn-outline-primary" data-testid="check-whatsapp">Check WhatsApp</button>
+                <span class="small mv-subtle ms-1">Asks Meta which number the saved ID and token belong to. Nothing is sent.</span>
+            </form>
+        }
+        <div class="form-text">Meta developer console &rarr; WhatsApp &rarr; Configuration &rarr; Webhook: paste the Callback URL, type the verify token from the Edit page, then subscribe to <strong>messages</strong>.</div>
     </div>
 
     <div class="mv-channel">
         <div class="mv-channel-head">
             <strong>Messenger</strong>
             @{ Status(s?.HasMessenger == true, "Credentials saved", "Not set - mock", "messenger-status"); }
+            @{ Status(s?.HasMetaAppSecret == true, "App secret saved", "No app secret here - WebApi's is used", "messenger-secret-status"); }
         </div>
         @{ UrlRow("Callback URL", Model.MessengerWebhookUrl, "messenger-webhook-url"); }
+        @if (s?.HasMessenger == true)
+        {
+            <form asp-action="CheckMessenger" asp-route-id="@client.Id" method="post" class="mt-2">
+                <button type="submit" class="btn btn-sm btn-outline-primary" data-testid="check-messenger">Check Messenger</button>
+                <span class="small mv-subtle ms-1">Asks Meta which Page the saved token belongs to. Nothing is sent.</span>
+            </form>
+        }
+        <div class="form-text">Meta developer console &rarr; Messenger &rarr; Settings &rarr; Webhooks: paste the Callback URL and the verify token, subscribe the Page to <strong>messages</strong> and <strong>messaging_postbacks</strong>.</div>
     </div>
 
     <div class="mv-channel mb-0">

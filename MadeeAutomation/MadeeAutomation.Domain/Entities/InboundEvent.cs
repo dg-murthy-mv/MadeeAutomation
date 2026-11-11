@@ -32,6 +32,9 @@ public class InboundEvent
 
     public string? CustomerId { get; set; }
 
+    /// <summary>The name the platform sent with the message (WhatsApp profile name). Null when not sent.</summary>
+    public string? CustomerName { get; set; }
+
     /// <summary>
     /// "text" = the customer typed a message; "tap" = they tapped a button we sent (MessageText holds
     /// the button's data, e.g. "a=cat&c=Drinks"); "follow" = they added the account as a friend.

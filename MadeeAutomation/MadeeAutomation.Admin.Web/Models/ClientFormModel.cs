@@ -64,6 +64,8 @@ public class ClientFormModel
     [Display(Name = "WhatsApp phone number ID")] public string? WhatsAppPhoneNumberId { get; set; }
     [Display(Name = "WhatsApp access token")] public string? WhatsAppAccessToken { get; set; }
     [Display(Name = "Messenger page access token")] public string? MessengerPageAccessToken { get; set; }
+    [Display(Name = "Meta App Secret")] public string? MetaAppSecret { get; set; }
+    [Display(Name = "Meta webhook verify token")] public string? MetaVerifyToken { get; set; }
     [Display(Name = "POSFirst base URL")] public string? PosFirstBaseUrl { get; set; }
     [Display(Name = "POSFirst API key")] public string? PosFirstApiKey { get; set; }
     [Display(Name = "Merkai base URL")] public string? MerkaiBaseUrl { get; set; }
@@ -80,7 +82,7 @@ public class ClientFormModel
     public static readonly string[] SecretFields =
     {
         nameof(LineChannelSecret), nameof(LineChannelAccessToken), nameof(WhatsAppAccessToken),
-        nameof(MessengerPageAccessToken), nameof(PosFirstApiKey), nameof(MerkaiApiKey)
+        nameof(MessengerPageAccessToken), nameof(MetaAppSecret), nameof(MetaVerifyToken), nameof(PosFirstApiKey), nameof(MerkaiApiKey)
     };
 
 }

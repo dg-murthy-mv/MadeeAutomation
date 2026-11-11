@@ -43,6 +43,7 @@ public class InboundEventIngestor
                 Channel = channel,
                 ExternalEventId = message.ExternalEventId,
                 CustomerId = message.CustomerId,
+                CustomerName = message.CustomerName is { Length: > 200 } n ? n[..200] : message.CustomerName,
                 MessageText = message.Text,
                 Kind = message.Kind,
                 ReplyToken = message.ReplyToken,

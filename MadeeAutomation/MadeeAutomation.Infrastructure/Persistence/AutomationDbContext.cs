@@ -172,6 +172,7 @@ public class AutomationDbContext : DbContext
             entity.Property(e => e.ExternalEventId).HasMaxLength(200).IsRequired();
             entity.Property(e => e.Kind).HasMaxLength(20).IsRequired();
             entity.Property(e => e.CustomerId).HasMaxLength(100);
+            entity.Property(e => e.CustomerName).HasMaxLength(200);
             entity.Property(e => e.ReplyToken).HasMaxLength(200);
             entity.Property(e => e.LastError).HasMaxLength(2000);
 

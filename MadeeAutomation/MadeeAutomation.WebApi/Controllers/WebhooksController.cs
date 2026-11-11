@@ -96,40 +96,58 @@ public class WebhooksController : ControllerBase
     }
 
     // =====================================================================
-    // WhatsApp / Messenger (Meta) - signature check (X-Hub-Signature-256) comes in Phase 4
+    // WhatsApp / Messenger (Meta)
     // =====================================================================
 
     /// <summary>
-    /// Meta's "Verify and save" check. Meta calls the SAME URL you register, so this answers on
-    /// every WhatsApp / Messenger route shape.
+    /// Meta's "Verify and save" check: Meta calls the URL with hub.verify_token and expects hub.challenge back.
+    /// The token is the client's own (Edit client -> Meta app) or, if blank, WebApi's Connectors:Meta:VerifyToken
+    /// (older setting names Connectors:WhatsApp:VerifyToken / Connectors:Messenger:VerifyToken still work).
     /// </summary>
     [HttpGet("whatsapp")]
     [HttpGet("whatsapp/{clientCode}")]
     [HttpGet("whatsapp/{clientCode}/{workflowId:guid}")]
-    public IActionResult VerifyWhatsAppWebhook(
+    public Task<IActionResult> VerifyWhatsAppWebhook(string? clientCode,
         [FromQuery(Name = "hub.mode")] string? mode,
         [FromQuery(Name = "hub.verify_token")] string? verifyToken,
-        [FromQuery(Name = "hub.challenge")] string? challenge) =>
-        VerifyMeta(mode, verifyToken, challenge, _configuration["Connectors:WhatsApp:VerifyToken"]);
+        [FromQuery(Name = "hub.challenge")] string? challenge,
+        CancellationToken cancellationToken) =>
+        VerifyMetaAsync(Channels.WhatsApp, clientCode, mode, verifyToken, challenge, cancellationToken);
 
     [HttpGet("messenger")]
     [HttpGet("messenger/{clientCode}")]
     [HttpGet("messenger/{clientCode}/{workflowId:guid}")]
-    public IActionResult VerifyMessengerWebhook(
+    public Task<IActionResult> VerifyMessengerWebhook(string? clientCode,
         [FromQuery(Name = "hub.mode")] string? mode,
         [FromQuery(Name = "hub.verify_token")] string? verifyToken,
-        [FromQuery(Name = "hub.challenge")] string? challenge) =>
-        VerifyMeta(mode, verifyToken, challenge, _configuration["Connectors:Messenger:VerifyToken"]);
+        [FromQuery(Name = "hub.challenge")] string? challenge,
+        CancellationToken cancellationToken) =>
+        VerifyMetaAsync(Channels.Messenger, clientCode, mode, verifyToken, challenge, cancellationToken);
 
-    private static IActionResult VerifyMeta(string? mode, string? verifyToken, string? challenge, string? expectedToken)
+    private async Task<IActionResult> VerifyMetaAsync(string channel, string? clientCode, string? mode, string? verifyToken,
+        string? challenge, CancellationToken cancellationToken)
     {
-        var configured = !string.IsNullOrWhiteSpace(expectedToken) && !expectedToken.StartsWith("SET_", StringComparison.OrdinalIgnoreCase);
-        if (configured && mode == "subscribe" && verifyToken == expectedToken && !string.IsNullOrEmpty(challenge))
+        var expected = new List<string?>();
+        if (!string.IsNullOrWhiteSpace(clientCode) && await _clients.GetByCodeAsync(clientCode, cancellationToken) is { } client)
+            expected.Add((await _settings.GetAsync(client.Id, cancellationToken)).MetaVerifyToken);
+        expected.Add(_configuration["Connectors:Meta:VerifyToken"]);
+        expected.Add(_configuration[channel == Channels.WhatsApp ? "Connectors:WhatsApp:VerifyToken" : "Connectors:Messenger:VerifyToken"]);
+
+        var tokens = expected.Where(t => !string.IsNullOrWhiteSpace(t) && !t!.StartsWith("SET_", StringComparison.OrdinalIgnoreCase))
+            .Select(t => t!.Trim()).ToList();
+        if (mode == "subscribe" && !string.IsNullOrEmpty(challenge) && !string.IsNullOrWhiteSpace(verifyToken)
+            && tokens.Any(t => FixedEquals(t, verifyToken.Trim())))
             return new ContentResult { Content = challenge, ContentType = "text/plain", StatusCode = 200 };
 
+        _logger.LogWarning("{Channel} webhook verification for '{ClientCode}' refused - the verify token does not match " +
+                           "(set it on the client's Edit page under Meta app, or Connectors:Meta:VerifyToken in WebApi).",
+            Channels.DisplayName(channel), clientCode ?? "(no client)");
         // Plain 403 - Forbid() needs an authentication scheme and used to crash with a 500.
         return new StatusCodeResult(StatusCodes.Status403Forbidden);
     }
+
+    private static bool FixedEquals(string a, string b) =>
+        System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(a), Encoding.UTF8.GetBytes(b));
 
     [HttpPost("whatsapp/{clientCode}")]
     public Task<IActionResult> WhatsApp(string clientCode, CancellationToken cancellationToken) =>
@@ -154,7 +172,31 @@ public class WebhooksController : ControllerBase
         var (client, notFound) = await ResolveClientAsync(clientCode, workflowId, cancellationToken);
         if (client is null) return notFound!;
 
-        var parsed = ChannelPayloadParser.Parse(channel, Encoding.UTF8.GetString(body));
+        // Meta signs every call with the App Secret (X-Hub-Signature-256). Same rule as LINE: without a
+        // secret we cannot tell Meta from a fake caller, so the call is refused (Webhooks:RequireMetaSignature).
+        var settings = await _settings.GetAsync(client.Id, cancellationToken);
+        var appSecret = settings.HasMetaAppSecret ? settings.MetaAppSecret : _configuration["Connectors:Meta:AppSecret"];
+        if (!string.IsNullOrWhiteSpace(appSecret) && !appSecret.StartsWith("SET_", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!MetaSignature.IsValid(appSecret, body, Request.Headers["X-Hub-Signature-256"].ToString()))
+            {
+                _logger.LogWarning("{Channel} webhook for {ClientCode}: invalid X-Hub-Signature-256 - rejected",
+                    Channels.DisplayName(channel), client.ClientCode);
+                return Unauthorized(new { error = "Invalid signature." });
+            }
+        }
+        else if (_configuration.GetValue("Webhooks:RequireMetaSignature", true))
+        {
+            _logger.LogWarning("{Channel} webhook for {ClientCode} rejected: no Meta App Secret saved. " +
+                               "Add it in Admin -> client -> Edit -> Meta app (or Connectors:Meta:AppSecret in WebApi).",
+                Channels.DisplayName(channel), client.ClientCode);
+            return Unauthorized(new { error = "Meta App Secret is not configured for this client." });
+        }
+
+        var raw = Encoding.UTF8.GetString(body);
+        var parsed = channel == Channels.WhatsApp
+            ? ChannelPayloadParser.ParseWhatsApp(raw, settings.WhatsAppPhoneNumberId)
+            : ChannelPayloadParser.ParseMessenger(raw);
         if (parsed.Error is not null) return BadRequest(new { error = parsed.Error });
 
         var result = await _ingestor.IngestAsync(client, channel, workflowId, parsed, cancellationToken);

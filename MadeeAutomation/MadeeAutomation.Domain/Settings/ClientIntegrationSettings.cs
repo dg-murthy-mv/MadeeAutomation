@@ -21,6 +21,12 @@ public class ClientIntegrationSettings
     // Facebook Messenger
     [JsonPropertyName("messengerPageAccessToken")] public string? MessengerPageAccessToken { get; set; }
 
+    // Meta app (shared by WhatsApp and Messenger): the App Secret signs every webhook call
+    // (X-Hub-Signature-256); the verify token is what we type into Meta's "Verify and save".
+    // Both are optional per client - WebApi's Connectors:Meta:AppSecret / VerifyToken are used otherwise.
+    [JsonPropertyName("metaAppSecret")] public string? MetaAppSecret { get; set; }
+    [JsonPropertyName("metaVerifyToken")] public string? MetaVerifyToken { get; set; }
+
     // POSFirst
     [JsonPropertyName("posFirstBaseUrl")] public string? PosFirstBaseUrl { get; set; }
     [JsonPropertyName("posFirstApiKey")] public string? PosFirstApiKey { get; set; }
@@ -54,6 +60,7 @@ public class ClientIntegrationSettings
     public bool HasLineToken => !string.IsNullOrWhiteSpace(LineChannelAccessToken);
     public bool HasWhatsApp => !string.IsNullOrWhiteSpace(WhatsAppPhoneNumberId) && !string.IsNullOrWhiteSpace(WhatsAppAccessToken);
     public bool HasMessenger => !string.IsNullOrWhiteSpace(MessengerPageAccessToken);
+    public bool HasMetaAppSecret => !string.IsNullOrWhiteSpace(MetaAppSecret);
     public bool HasPosFirst => !string.IsNullOrWhiteSpace(PosFirstBaseUrl);
     public bool HasMerkai => !string.IsNullOrWhiteSpace(MerkaiBaseUrl);
 

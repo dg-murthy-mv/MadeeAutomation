@@ -203,6 +203,8 @@ public class ClientsController : Controller
         settings.LineChannelAccessToken = MergeSecret(settings.LineChannelAccessToken, model.LineChannelAccessToken, model, nameof(model.LineChannelAccessToken));
         settings.WhatsAppAccessToken = MergeSecret(settings.WhatsAppAccessToken, model.WhatsAppAccessToken, model, nameof(model.WhatsAppAccessToken));
         settings.MessengerPageAccessToken = MergeSecret(settings.MessengerPageAccessToken, model.MessengerPageAccessToken, model, nameof(model.MessengerPageAccessToken));
+        settings.MetaAppSecret = MergeSecret(settings.MetaAppSecret, model.MetaAppSecret, model, nameof(model.MetaAppSecret));
+        settings.MetaVerifyToken = MergeSecret(settings.MetaVerifyToken, model.MetaVerifyToken, model, nameof(model.MetaVerifyToken));
         settings.PosFirstApiKey = MergeSecret(settings.PosFirstApiKey, model.PosFirstApiKey, model, nameof(model.PosFirstApiKey));
         settings.MerkaiApiKey = MergeSecret(settings.MerkaiApiKey, model.MerkaiApiKey, model, nameof(model.MerkaiApiKey));
 
@@ -362,6 +364,38 @@ public class ClientsController : Controller
         return RedirectToAction(nameof(Details), new { id });
     }
 
+    // ================= WhatsApp / Messenger credentials check =================
+
+    /// <summary>Asks Meta which WhatsApp number the saved phone number ID + token belong to. Nothing is sent.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public Task<IActionResult> CheckWhatsApp(Guid id, [FromServices] MetaCredentialChecker checker, CancellationToken cancellationToken) =>
+        CheckMetaAsync(id, s => checker.CheckWhatsAppAsync(s.WhatsAppPhoneNumberId, s.WhatsAppAccessToken, cancellationToken), cancellationToken);
+
+    /// <summary>Asks Meta which Facebook Page the saved page access token belongs to. Nothing is sent.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public Task<IActionResult> CheckMessenger(Guid id, [FromServices] MetaCredentialChecker checker, CancellationToken cancellationToken) =>
+        CheckMetaAsync(id, s => checker.CheckMessengerAsync(s.MessengerPageAccessToken, cancellationToken), cancellationToken);
+
+    private async Task<IActionResult> CheckMetaAsync(Guid id, Func<ClientIntegrationSettings, Task<LineCheckResult>> check, CancellationToken cancellationToken)
+    {
+        var client = await _clients.GetWithWorkflowsAsync(id, cancellationToken);
+        if (client is null) return NotFound();
+
+        try
+        {
+            var result = await check(_settings.Read(client.IntegrationSettingsJson));
+            TempData[result.Ok ? "Success" : "Error"] = result.Message;
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
     // ================= Test a message workflow =================
 
     public async Task<IActionResult> TestWorkflow(Guid id)
@@ -483,6 +517,7 @@ public class ClientsController : Controller
         // Never send a saved secret back to the browser - only a masked hint.
         model.LineChannelSecret = model.LineChannelAccessToken = model.WhatsAppAccessToken = null;
         model.MessengerPageAccessToken = model.PosFirstApiKey = model.MerkaiApiKey = null;
+        model.MetaAppSecret = model.MetaVerifyToken = null;
 
         void Hint(string field, string? value)
         {
@@ -492,6 +527,8 @@ public class ClientsController : Controller
         Hint(nameof(model.LineChannelAccessToken), settings.LineChannelAccessToken);
         Hint(nameof(model.WhatsAppAccessToken), settings.WhatsAppAccessToken);
         Hint(nameof(model.MessengerPageAccessToken), settings.MessengerPageAccessToken);
+        Hint(nameof(model.MetaAppSecret), settings.MetaAppSecret);
+        Hint(nameof(model.MetaVerifyToken), settings.MetaVerifyToken);
         Hint(nameof(model.PosFirstApiKey), settings.PosFirstApiKey);
         Hint(nameof(model.MerkaiApiKey), settings.MerkaiApiKey);
     }

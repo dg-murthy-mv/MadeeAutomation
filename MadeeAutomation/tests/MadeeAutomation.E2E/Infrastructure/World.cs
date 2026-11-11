@@ -73,6 +73,12 @@ public static class World
     public static SeededClient PosDown { get; private set; } = null!;
     public static Guid SchedOkJob, SchedFailJob, SchedPausedJob, SchedFormJob;
     public static readonly string PosDownStaffLineId = "Uflaky" + new string('g', 27);
+    // Phase 5: WhatsApp + Messenger
+    public static SeededClient MetaCafe { get; private set; } = null!;
+    public static SeededClient MetaNoSecret { get; private set; } = null!;
+    public const string MetaSecret = "e2e-meta-app-secret";
+    public const string MetaVerifyToken = "e2e-verify-me";
+    public const string MetaPhoneNumberId = "100000000000001";
     public static readonly string TaxStaffLineId = "U" + new string('e', 32);
     public static readonly string ButtonCafeStaffLineId = "U" + new string('d', 32);
 
@@ -280,6 +286,25 @@ public static class World
             "posdown-secret", withWorkflow: true, country: "AE", currency: "AED", timeZone: "Asia/Dubai", staffLine: PosDownStaffLineId);
         await AddMenuItemAsync(db, PosDown.Id, "Shawarma", "Wraps", 18m, null, true, 0);
 
+        // ---- Phase 5: WhatsApp + Messenger (Philippines) ----
+        MetaCafe = await AddClientAsync(db, "metacafe", "E2E Meta Cafe", ClientStatus.Active, Encrypted(new ClientIntegrationSettings
+            {
+                WhatsAppPhoneNumberId = MetaPhoneNumberId, WhatsAppAccessToken = "wa-token-e2e", MessengerPageAccessToken = "fb-token-e2e",
+                MetaAppSecret = MetaSecret, MetaVerifyToken = MetaVerifyToken
+            }), MetaSecret, withWorkflow: false, country: "PH", currency: "PHP", timeZone: "Asia/Manila", staffEmail: "owner@metacafe.test");
+        await AddChannelWorkflowAsync(db, MetaCafe.Id, "WhatsApp customer messages", "whatsapp");
+        await AddChannelWorkflowAsync(db, MetaCafe.Id, "Messenger customer messages", "messenger");
+        await AddMenuItemAsync(db, MetaCafe.Id, "Iced coffee", "Drinks", 120m, "coffee", true, 0);
+        await AddMenuItemAsync(db, MetaCafe.Id, "Calamansi juice with honey and mint", "Drinks", 95m, null, true, 1);
+        await AddMenuItemAsync(db, MetaCafe.Id, "Ensaymada", "Bakery", 60m, null, true, 2);
+        await AddMenuItemAsync(db, MetaCafe.Id, "Pandesal", "Bakery", 10m, null, false, 3);
+
+        MetaNoSecret = await AddClientAsync(db, "metanosecret", "E2E Meta No Secret", ClientStatus.Active, Encrypted(new ClientIntegrationSettings
+            {
+                WhatsAppPhoneNumberId = "100000000000002", WhatsAppAccessToken = "wa-token-e2e-2"
+            }), "", withWorkflow: false, country: "AE", currency: "AED", timeZone: "Asia/Dubai");
+        await AddChannelWorkflowAsync(db, MetaNoSecret.Id, "WhatsApp customer messages", "whatsapp");
+
         // Old rows hold plain JSON - the app must still read them (and encrypt on the next save).
         Legacy = await AddClientAsync(db, "legacy", "E2E Legacy", ClientStatus.Active,
             Line("legacy-secret", "legacy-token").ToJson(), "legacy-secret", withWorkflow: true);
@@ -311,6 +336,13 @@ public static class World
 
         return new SeededClient(id, code, secret, workflowId);
     }
+
+    private static Task AddChannelWorkflowAsync(TestDatabase db, Guid clientId, string name, string channel) =>
+        db.ExecAsync(@"
+            INSERT INTO dbo.WorkflowDefinitions (Id, ClientConfigId, Name, HandlerKey, Vertical, TriggerType, Channel,
+                TriggerConfigJson, IsEnabled, CreatedAtUtc, RetryAttempt)
+            VALUES (NEWID(), @client, @name, 'customer-message', 1, 3, @channel, '{}', 1, SYSUTCDATETIME(), 0);",
+            ("@client", clientId), ("@name", name), ("@channel", channel));
 
     private static async Task<Guid> AddScheduledAsync(TestDatabase db, Guid clientId, string name, string scheduleJson, bool enabled = true)
     {

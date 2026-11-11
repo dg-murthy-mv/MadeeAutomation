@@ -27,6 +27,7 @@ public static class DependencyInjection
     {
         services.AddHttpClient("LineApi");
         services.AddScoped<LineCredentialChecker>();
+        services.AddScoped<MetaCredentialChecker>();
         return services;
     }
 }

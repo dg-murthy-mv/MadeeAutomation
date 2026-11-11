@@ -40,6 +40,7 @@ public sealed class AppHost : IAsyncDisposable
             ["Anthropic__TimeoutSeconds"] = "20",
             ["Anthropic__MaxRetries"] = "0",
             ["Connectors__Line__ApiBaseUrl"] = settings.FakeServerUrl + "/",
+            ["Connectors__Meta__GraphBaseUrl"] = settings.FakeServerUrl + "/",
             ["Connectors__WhatsApp__PhoneNumberId"] = "",
             ["Connectors__WhatsApp__AccessToken"] = "",
             ["Connectors__WhatsApp__InternalNotifyTo"] = "",
@@ -56,6 +57,7 @@ public sealed class AppHost : IAsyncDisposable
             ["WebApi__PublicBaseUrl"] = settings.WebApiUrl,
             ["WebApi__InternalBaseUrl"] = settings.WebApiUrl,
             ["Connectors__Line__ApiBaseUrl"] = settings.FakeServerUrl + "/",
+            ["Connectors__Meta__GraphBaseUrl"] = settings.FakeServerUrl + "/",
         };
 
         Start(root, "MadeeAutomation.WebApi", settings.Configuration, webApi, "webapi.out.log");

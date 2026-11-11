@@ -106,8 +106,10 @@ public abstract partial class CustomerMessageHandlerBase : IHandler
             LocalNow = LocalTime.ToLocal(utcNow, client?.TimeZoneId)
         };
 
-        // The menu-buttons chat: needs a structured menu and a customer to remember; LINE only for now.
-        turn.Buttons = Mode != AssistantMode.FaqOnly && channel == Channels.Line && client is { MenuButtonsEnabled: true }
+        // The menu-buttons chat: needs a structured menu and a customer to remember.
+        // LINE: quick replies + cards; WhatsApp: reply buttons + lists; Messenger: quick replies + cards.
+        turn.Buttons = Mode != AssistantMode.FaqOnly && channel is Channels.Line or Channels.WhatsApp or Channels.Messenger
+                       && client is { MenuButtonsEnabled: true }
                        && turn.Profile.MenuIsStructured && !string.IsNullOrWhiteSpace(from);
         turn.Profile.ShowsMenuButtons = turn.Buttons;
 
@@ -294,6 +296,7 @@ public abstract partial class CustomerMessageHandlerBase : IHandler
             ClientConfigId = context.ClientConfigId,
             Channel = turn.Channel,
             CustomerId = Cut(turn.From, 200),
+            CustomerName = Cut(context.CustomerName, 200),   // WhatsApp sends it; LINE / Messenger are looked up when saving
             CustomerMessage = customerMessage,
             Currency = currency is { Length: 3 } ? currency : null,
             Total = orderTotal,

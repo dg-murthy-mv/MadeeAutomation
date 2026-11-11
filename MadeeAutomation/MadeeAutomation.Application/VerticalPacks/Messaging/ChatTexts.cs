@@ -42,6 +42,8 @@ public class ChatTexts
     public string WhenQuestion { get; private init; } = "When do you want it?";
     public string AsSoonAsPossible { get; private init; } = "As soon as possible";
     public string ChooseTime { get; private init; } = "Choose a time";
+    /// <summary>WhatsApp / Messenger have no time picker: the customer types the time instead.</summary>
+    public string TypeATime { get; private init; } = "Or type a time, e.g. 6pm or tomorrow 9am.";
     public string BackToCart { get; private init; } = "Back to cart";
     public string TimePassed { get; private init; } = "That time has already passed. When do you want it?";
     public string OrderConfirmed { get; private init; } = "Thank you! Your order is confirmed. Order number: {0}";

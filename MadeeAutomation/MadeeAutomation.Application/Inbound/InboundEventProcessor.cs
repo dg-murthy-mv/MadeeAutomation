@@ -76,6 +76,7 @@ public class InboundEventProcessor
                 InboundEventId = ev.Id,
                 Channel = ev.Channel,
                 CustomerId = ev.CustomerId,
+                CustomerName = ev.CustomerName,
                 MessageText = ev.MessageText,
                 MessageKind = ev.Kind,
                 ReplyToken = ev.ReplyToken,

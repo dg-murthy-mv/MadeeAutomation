@@ -149,36 +149,68 @@ public class MessagingConnector : IMessagingConnector
 
     private async Task<MessageSendResult> SendWhatsAppAsync(OutboundMessage message, CancellationToken cancellationToken)
     {
-        // Buttons / cards are LINE-only for now: other channels get the same content as words.
-        if (message.Rich is not null) message.Text = LineMessageBuilder.PlainText(message.Text, message.Rich);
         var settings = await _settings.GetAsync(message.ClientConfigId, cancellationToken);
         if (!settings.HasWhatsApp)
         {
             _logger.LogWarning("MOCK (WhatsApp) - client {ClientConfigId} has no WhatsApp phone number id/token. Would have sent to {To}: \"{Text}\"",
-                message.ClientConfigId, message.To, message.Text);
+                message.ClientConfigId, message.To, LineMessageBuilder.PlainText(message.Text, message.Rich));
             return MessageSendResult.Ok("mock");
         }
 
-        return await PostGraphAsync($"{settings.WhatsAppPhoneNumberId}/messages", settings.WhatsAppAccessToken!,
-            new { messaging_product = "whatsapp", to = message.To, type = "text", text = new { body = message.Text } },
-            "WhatsApp", cancellationToken);
+        var path = $"{settings.WhatsAppPhoneNumberId!.Trim()}/messages";
+        var parts = MetaMessageBuilder.WhatsApp(message.To, message.Text, message.Rich);
+        var result = await SendPartsAsync(parts, p => PostGraphAsync(path, settings.WhatsAppAccessToken!, p, "WhatsApp", cancellationToken));
+
+        // Safety net, as for LINE: if WhatsApp refuses the buttons / list (a 400) before anything was
+        // delivered, the customer still gets the words.
+        if (!result.Success && message.Rich is { IsEmpty: false } && result.Error is { } error && error.StartsWith("400 ") && result.Mode == "send-1")
+        {
+            _logger.LogWarning("WhatsApp refused buttons/list for client {ClientConfigId} ({Error}) - sending plain text instead", message.ClientConfigId, error);
+            var retry = await PostGraphAsync(path, settings.WhatsAppAccessToken!,
+                MetaMessageBuilder.WaText(message.To, LineMessageBuilder.PlainText(message.Text, message.Rich)), "WhatsApp", cancellationToken);
+            if (retry.Success) return MessageSendResult.Ok("send, text only - WhatsApp refused the buttons");
+        }
+
+        return result.Success ? MessageSendResult.Ok("send") : result;
     }
 
     private async Task<MessageSendResult> SendMessengerAsync(OutboundMessage message, CancellationToken cancellationToken)
     {
-        if (message.Rich is not null) message.Text = LineMessageBuilder.PlainText(message.Text, message.Rich);
         var settings = await _settings.GetAsync(message.ClientConfigId, cancellationToken);
         if (!settings.HasMessenger)
         {
             _logger.LogWarning("MOCK (Messenger) - client {ClientConfigId} has no page access token. Would have sent to PSID {To}: \"{Text}\"",
-                message.ClientConfigId, message.To, message.Text);
+                message.ClientConfigId, message.To, LineMessageBuilder.PlainText(message.Text, message.Rich));
             return MessageSendResult.Ok("mock");
         }
 
+        // RESPONSE = an answer to the customer, allowed within 24 hours of their last message.
         // Token goes in the Authorization header, NOT the URL - URLs end up in log files.
-        return await PostGraphAsync("me/messages", settings.MessengerPageAccessToken!,
-            new { recipient = new { id = message.To }, messaging_type = "RESPONSE", message = new { text = message.Text } },
-            "Messenger", cancellationToken);
+        object Wrap(object part) => new { recipient = new { id = message.To }, messaging_type = "RESPONSE", message = part };
+
+        var parts = MetaMessageBuilder.Messenger(message.Text, message.Rich).Select(Wrap).ToList();
+        var result = await SendPartsAsync(parts, p => PostGraphAsync("me/messages", settings.MessengerPageAccessToken!, p, "Messenger", cancellationToken));
+
+        if (!result.Success && message.Rich is { IsEmpty: false } && result.Error is { } error && error.StartsWith("400 ") && result.Mode == "send-1")
+        {
+            _logger.LogWarning("Messenger refused buttons/cards for client {ClientConfigId} ({Error}) - sending plain text instead", message.ClientConfigId, error);
+            var retry = await PostGraphAsync("me/messages", settings.MessengerPageAccessToken!,
+                Wrap(MetaMessageBuilder.FbText(LineMessageBuilder.PlainText(message.Text, message.Rich))), "Messenger", cancellationToken);
+            if (retry.Success) return MessageSendResult.Ok("send, text only - Messenger refused the buttons");
+        }
+
+        return result.Success ? MessageSendResult.Ok("send") : result;
+    }
+
+    /// <summary>Sends the parts in order and stops at the first failure. A failure's Mode is "send-N" (N = which part).</summary>
+    private static async Task<MessageSendResult> SendPartsAsync(IReadOnlyList<object> parts, Func<object, Task<MessageSendResult>> send)
+    {
+        for (var n = 0; n < parts.Count; n++)
+        {
+            var r = await send(parts[n]);
+            if (!r.Success) return MessageSendResult.Fail($"send-{n + 1}", r.Error ?? "failed");
+        }
+        return MessageSendResult.Ok("send");
     }
 
     private async Task<MessageSendResult> PostGraphAsync(string path, string accessToken, object payload, string label,
@@ -206,8 +238,10 @@ public class MessagingConnector : IMessagingConnector
 
     public async Task<string?> GetCustomerNameAsync(Guid clientConfigId, string channel, string customerId, CancellationToken cancellationToken = default)
     {
-        // LINE only for now: WhatsApp sends the name inside the webhook, Messenger needs an extra permission.
-        if (channel != Channels.Line || string.IsNullOrWhiteSpace(customerId)) return null;
+        // WhatsApp sends the name inside the webhook (InboundEvent.CustomerName) - nothing to look up.
+        if (string.IsNullOrWhiteSpace(customerId)) return null;
+        if (channel == Channels.Messenger) return await GetMessengerNameAsync(clientConfigId, customerId, cancellationToken);
+        if (channel != Channels.Line) return null;
 
         try
         {
@@ -230,6 +264,43 @@ public class MessagingConnector : IMessagingConnector
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Could not read the LINE display name of {CustomerId} for client {ClientConfigId}", customerId, clientConfigId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Messenger: GET /{psid}?fields=first_name,last_name with the page token. Works for people who messaged
+    /// the Page; if Meta refuses (permission not approved yet), the order just shows no name.
+    /// </summary>
+    private async Task<string?> GetMessengerNameAsync(Guid clientConfigId, string psid, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var settings = await _settings.GetAsync(clientConfigId, cancellationToken);
+            if (!settings.HasMessenger) return null;
+
+            var client = _httpClientFactory.CreateClient("MessengerApi");
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                new Uri(GraphBase, $"{GraphVersion}/{Uri.EscapeDataString(psid)}?fields=first_name,last_name"));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.MessengerPageAccessToken);
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+            using var response = await client.SendAsync(request, timeout.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("Messenger name for {Psid} not available ({Status})", psid, (int)response.StatusCode);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(timeout.Token));
+            string? Part(string name) => doc.RootElement.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            var full = $"{Part("first_name")} {Part("last_name")}".Trim();
+            return full.Length == 0 ? null : (full.Length > 200 ? full[..200] : full);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Could not read the Messenger name of {Psid} for client {ClientConfigId}", psid, clientConfigId);
             return null;
         }
     }

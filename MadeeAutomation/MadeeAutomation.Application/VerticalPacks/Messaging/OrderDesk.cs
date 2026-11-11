@@ -60,7 +60,7 @@ public class OrderDesk
             order.PosError = error;
         }
 
-        if (!string.IsNullOrWhiteSpace(order.CustomerId))
+        if (!string.IsNullOrWhiteSpace(order.CustomerId) && string.IsNullOrWhiteSpace(order.CustomerName))
             order.CustomerName = await _messaging.GetCustomerNameAsync(order.ClientConfigId, order.Channel, order.CustomerId, cancellationToken);
 
         await _orders.AddAsync(order, cancellationToken);   // no POS id -> gets our own "ORD-0001"

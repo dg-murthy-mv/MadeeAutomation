@@ -56,6 +56,34 @@ public record LineCall(string Kind, string? To, string? ReplyToken, string Text,
 }
 
 /// <summary>One call the apps made to the fake Claude API.</summary>
+/// <summary>One call to the fake Meta Graph API (WhatsApp Cloud API or Messenger Send API).</summary>
+public record MetaCall(string Channel, string To, string Body, string Authorization, int StatusReturned, DateTime AtUtc)
+{
+    /// <summary>"text", "button", "list" (WhatsApp interactive type) or "text" / "template" for Messenger.</summary>
+    public string Type
+    {
+        get
+        {
+            var node = System.Text.Json.Nodes.JsonNode.Parse(Body);
+            if (Channel == "whatsapp")
+                return node?["type"]?.GetValue<string>() == "interactive" ? node["interactive"]?["type"]?.GetValue<string>() ?? "?" : "text";
+            return node?["message"]?["attachment"] is not null ? "template" : "text";
+        }
+    }
+
+    /// <summary>The words of the message (WhatsApp text body / interactive body; Messenger text).</summary>
+    public string Text
+    {
+        get
+        {
+            var node = System.Text.Json.Nodes.JsonNode.Parse(Body);
+            return (Channel == "whatsapp"
+                ? node?["text"]?["body"] ?? node?["interactive"]?["body"]?["text"]
+                : node?["message"]?["text"])?.GetValue<string>() ?? "";
+        }
+    }
+}
+
 public record ClaudeCall(string System, string UserMessage, string ApiKey, DateTime AtUtc);
 
 /// <summary>One order the apps created in the fake POSFirst.</summary>
@@ -81,6 +109,8 @@ public sealed class FakeServer : IAsyncDisposable
 
     public ConcurrentQueue<LineCall> LineCalls { get; } = new();
     public ConcurrentQueue<ClaudeCall> ClaudeCalls { get; } = new();
+    public ConcurrentQueue<MetaCall> MetaCalls { get; } = new();
+    public IReadOnlyList<MetaCall> MetaCallsTo(string to) => MetaCalls.Where(c => c.To == to).ToList();
     public ConcurrentQueue<PosOrder> PosOrders { get; } = new();
 
     public async Task StartAsync(string url)
@@ -154,6 +184,37 @@ public sealed class FakeServer : IAsyncDisposable
         });
 
         // ---------------- Anthropic Messages API ----------------
+        // ---- Meta Graph API (WhatsApp Cloud API + Messenger Send API) ----
+        // WhatsApp: a recipient starting "66400" gets a 400 for buttons / lists (tests the plain-text fallback).
+        app.MapPost("/{version}/{phoneNumberId}/messages", async (string version, string phoneNumberId, HttpContext ctx) =>
+        {
+            var body = await ReadJsonAsync(ctx);
+            var raw = body?.ToJsonString() ?? "{}";
+            var to = body?["to"]?.GetValue<string>() ?? "";
+            var status = to.StartsWith("66400") && raw.Contains("\"interactive\"") ? 400 : 200;
+            MetaCalls.Enqueue(new MetaCall("whatsapp", to, raw, ctx.Request.Headers.Authorization.ToString(), status, DateTime.UtcNow));
+            return status == 200
+                ? Results.Json(new { messaging_product = "whatsapp", messages = new[] { new { id = "wamid.fake" + Guid.NewGuid().ToString("N") } } })
+                : Results.Json(new { error = new { message = "(#131009) Parameter value is not valid", code = 131009 } }, statusCode: 400);
+        });
+        app.MapPost("/{version}/me/messages", async (string version, HttpContext ctx) =>
+        {
+            var body = await ReadJsonAsync(ctx);
+            var to = body?["recipient"]?["id"]?.GetValue<string>() ?? "";
+            MetaCalls.Enqueue(new MetaCall("messenger", to, body?.ToJsonString() ?? "{}", ctx.Request.Headers.Authorization.ToString(), 200, DateTime.UtcNow));
+            return Results.Json(new { recipient_id = to, message_id = "m_fake" + Guid.NewGuid().ToString("N") });
+        });
+        // Who-am-I checks and the Messenger name lookup. A token containing "bad" is refused like an expired one.
+        app.MapGet("/{version}/{id}", (string version, string id, HttpContext ctx) =>
+        {
+            if (ctx.Request.Headers.Authorization.ToString().Contains("bad"))
+                return Results.Json(new { error = new { message = "Error validating access token", code = 190 } }, statusCode: 401);
+            if (id == "me") return Results.Json(new { name = "E2E Page", id = "1000" });
+            if (ctx.Request.Query["fields"].ToString().Contains("display_phone_number"))
+                return Results.Json(new { display_phone_number = "+66 80 000 0000", verified_name = "E2E WhatsApp Shop", id });
+            return Results.Json(new { first_name = "Maria", last_name = "Santos", id });
+        });
+
         app.MapPost("/v1/messages", async (HttpContext ctx) =>
         {
             var body = await ReadJsonAsync(ctx);

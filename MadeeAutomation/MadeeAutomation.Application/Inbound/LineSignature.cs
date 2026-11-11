@@ -34,3 +34,36 @@ public static class LineSignature
         return CryptographicOperations.FixedTimeEquals(expected, actual);
     }
 }
+
+/// <summary>
+/// Meta (WhatsApp / Messenger) signs every webhook: X-Hub-Signature-256 = "sha256=" + hex( HMAC-SHA256( app secret, raw body ) ).
+/// The App Secret is in the Meta developer console: App settings -> Basic -> App secret.
+/// </summary>
+public static class MetaSignature
+{
+    public static string Compute(string appSecret, byte[] body)
+    {
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(appSecret));
+        return "sha256=" + Convert.ToHexString(hmac.ComputeHash(body)).ToLowerInvariant();
+    }
+
+    public static bool IsValid(string? appSecret, byte[] body, string? signatureHeader)
+    {
+        if (string.IsNullOrWhiteSpace(appSecret) || string.IsNullOrWhiteSpace(signatureHeader)) return false;
+        var header = signatureHeader.Trim();
+        if (!header.StartsWith("sha256=", StringComparison.OrdinalIgnoreCase)) return false;
+
+        byte[] actual;
+        try
+        {
+            actual = Convert.FromHexString(header[7..]);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(appSecret.Trim()));
+        return CryptographicOperations.FixedTimeEquals(hmac.ComputeHash(body), actual);
+    }
+}

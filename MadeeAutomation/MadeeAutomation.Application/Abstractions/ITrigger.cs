@@ -36,6 +36,9 @@ public class TriggerContext
     public Guid? InboundEventId { get; set; }
     public string? Channel { get; set; }
     public string? CustomerId { get; set; }
+
+    /// <summary>Customer's display name when the channel sent it with the message (WhatsApp).</summary>
+    public string? CustomerName { get; set; }
     public string? MessageText { get; set; }
     public string? ReplyToken { get; set; }
 

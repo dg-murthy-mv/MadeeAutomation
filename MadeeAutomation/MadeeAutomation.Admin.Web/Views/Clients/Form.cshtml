@@ -218,14 +218,21 @@
             @{ SecretField(nameof(Model.LineChannelAccessToken), "Channel access token (long-lived)", "Needed to send replies."); }
 
             <h6 class="mt-4">WhatsApp Business</h6>
+            <div class="form-text mb-2">Meta developer console &rarr; your app &rarr; WhatsApp &rarr; API Setup (phone number ID). Use a permanent System User token from Meta Business Settings - the temporary one expires in 24 hours.</div>
             <div class="mb-3">
                 <label asp-for="WhatsAppPhoneNumberId" class="form-label"></label>
-                <input asp-for="WhatsAppPhoneNumberId" class="form-control" />
+                <input asp-for="WhatsAppPhoneNumberId" class="form-control" inputmode="numeric" autocomplete="off" data-testid="whatsapp-phone-id" />
             </div>
-            @{ SecretField(nameof(Model.WhatsAppAccessToken), "WhatsApp access token", ""); }
+            @{ SecretField(nameof(Model.WhatsAppAccessToken), "WhatsApp access token", "Needed to send replies."); }
 
             <h6 class="mt-4">Facebook Messenger</h6>
-            @{ SecretField(nameof(Model.MessengerPageAccessToken), "Page access token", ""); }
+            <div class="form-text mb-2">Meta developer console &rarr; your app &rarr; Messenger &rarr; Settings &rarr; Access tokens (generate one for the client's Page).</div>
+            @{ SecretField(nameof(Model.MessengerPageAccessToken), "Page access token", "Needed to send replies."); }
+
+            <h6 class="mt-4">Meta app (WhatsApp and Messenger)</h6>
+            <div class="form-text mb-2">Both are optional when the client uses MadeeAutomation's own Meta app - WebApi's settings are used then.</div>
+            @{ SecretField(nameof(Model.MetaAppSecret), "App Secret", "Meta developer console -> App settings -> Basic -> App secret. Needed to check that webhook calls really come from Meta; without it (here or in WebApi) WhatsApp and Messenger calls are refused."); }
+            @{ SecretField(nameof(Model.MetaVerifyToken), "Webhook verify token", "Any password you make up. Type the same text into Meta's webhook \"Verify token\" box when you add the Callback URL."); }
 
             <h6 class="mt-4">POSFirst</h6>
             <div class="mb-3">
