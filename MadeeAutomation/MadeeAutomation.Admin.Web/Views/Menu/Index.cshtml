@@ -13,7 +13,12 @@
         <div class="mv-subtle">
             @if (ClientAccess.IsClientUser(User)) { <a asp-controller="Portal" asp-action="Index">@client.ClientName</a> }
             else { <a asp-controller="Clients" asp-action="Details" asp-route-id="@client.Id">@client.ClientName</a> }
-            &middot; prices in <strong>@client.Currency</strong> &middot; <span data-testid="menu-total">@Model.TotalItems item(s)</span>
+            &middot; prices in <strong>@client.Currency</strong>
+            @if (Tax.IsConfigured(client.TaxName, client.TaxRatePercent))
+            {
+                <span data-testid="menu-tax">(@(client.PricesIncludeTax ? "including" : "before") @Tax.Label(client.TaxName!, client.TaxRatePercent!.Value))</span>
+            }
+            &middot; <span data-testid="menu-total">@Model.TotalItems item(s)</span>
         </div>
     </div>
     <div class="d-flex gap-2 flex-wrap">

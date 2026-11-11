@@ -44,6 +44,7 @@ public class InboundEventIngestor
                 ExternalEventId = message.ExternalEventId,
                 CustomerId = message.CustomerId,
                 MessageText = message.Text,
+                Kind = message.Kind,
                 ReplyToken = message.ReplyToken,
                 Status = InboundEventStatus.Pending,
                 ReceivedAtUtc = DateTime.UtcNow

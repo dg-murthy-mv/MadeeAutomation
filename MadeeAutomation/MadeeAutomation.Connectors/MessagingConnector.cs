@@ -87,8 +87,24 @@ public class MessagingConnector : IMessagingConnector
             return MessageSendResult.Ok("mock");
         }
 
+        var hasRich = message.Rich is { IsEmpty: false };
+        var result = await SendLineMessagesAsync(settings.LineChannelAccessToken!, message, LineMessageBuilder.Build(text, message.Rich), cancellationToken);
+
+        // Safety net: if LINE refuses the buttons / cards (a 400), the customer still gets the words.
+        if (!result.Success && hasRich && result.Error is { } error && error.Contains("400 "))
+        {
+            _logger.LogWarning("LINE refused buttons/cards for client {ClientConfigId} ({Error}) - sending plain text instead", message.ClientConfigId, error);
+            var plain = LineMessageBuilder.PlainText(text, message.Rich);
+            var retry = await SendLineMessagesAsync(settings.LineChannelAccessToken!, message, LineMessageBuilder.Build(plain, null), cancellationToken);
+            if (retry.Success) return MessageSendResult.Ok(retry.Mode + ", text only - LINE refused the buttons");
+        }
+
+        return result;
+    }
+
+    private async Task<MessageSendResult> SendLineMessagesAsync(string accessToken, OutboundMessage message, object[] messages, CancellationToken cancellationToken)
+    {
         var client = _httpClientFactory.CreateClient("LineApi");
-        var messages = new[] { new { type = "text", text } };
         string? replyError = null;
 
         if (!string.IsNullOrWhiteSpace(message.ReplyToken))
@@ -97,7 +113,7 @@ public class MessagingConnector : IMessagingConnector
             {
                 Content = Json(new { replyToken = message.ReplyToken, messages })
             };
-            reply.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.LineChannelAccessToken);
+            reply.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
             using var replyResponse = await client.SendAsync(reply, cancellationToken);
             if (replyResponse.IsSuccessStatusCode) return MessageSendResult.Ok("reply");
@@ -113,7 +129,7 @@ public class MessagingConnector : IMessagingConnector
         {
             Content = Json(new { to = message.To, messages })
         };
-        push.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.LineChannelAccessToken);
+        push.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         // Lets LINE drop a duplicate if this exact request is ever retried.
         push.Headers.Add("X-Line-Retry-Key", Guid.NewGuid().ToString());
 
@@ -127,6 +143,8 @@ public class MessagingConnector : IMessagingConnector
 
     private async Task<MessageSendResult> SendWhatsAppAsync(OutboundMessage message, CancellationToken cancellationToken)
     {
+        // Buttons / cards are LINE-only for now: other channels get the same content as words.
+        if (message.Rich is not null) message.Text = LineMessageBuilder.PlainText(message.Text, message.Rich);
         var settings = await _settings.GetAsync(message.ClientConfigId, cancellationToken);
         if (!settings.HasWhatsApp)
         {
@@ -142,6 +160,7 @@ public class MessagingConnector : IMessagingConnector
 
     private async Task<MessageSendResult> SendMessengerAsync(OutboundMessage message, CancellationToken cancellationToken)
     {
+        if (message.Rich is not null) message.Text = LineMessageBuilder.PlainText(message.Text, message.Rich);
         var settings = await _settings.GetAsync(message.ClientConfigId, cancellationToken);
         if (!settings.HasMessenger)
         {

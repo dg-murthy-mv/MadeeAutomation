@@ -19,6 +19,9 @@ public class InboundEventProcessor
     private readonly WorkflowEngine _engine;
     private readonly ILogger<InboundEventProcessor> _logger;
 
+    /// <summary>Per-customer locks (this app runs as one WebApi instance; the lock objects are tiny).</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> CustomerGates = new();
+
     public InboundEventProcessor(IInboundEventRepository events, IWorkflowRepository workflows,
         ICurrentClientService clients, WorkflowEngine engine, ILogger<InboundEventProcessor> logger)
     {
@@ -74,13 +77,26 @@ public class InboundEventProcessor
                 Channel = ev.Channel,
                 CustomerId = ev.CustomerId,
                 MessageText = ev.MessageText,
+                MessageKind = ev.Kind,
                 ReplyToken = ev.ReplyToken,
                 OccurredAtUtc = ev.ReceivedAtUtc,
                 // Same { message, from } shape the older handlers read, plus the channel.
                 PayloadJson = JsonSerializer.Serialize(new { message = ev.MessageText, from = ev.CustomerId, channel = ev.Channel })
             };
 
-            var outcome = await _engine.RunAsync(context, cancellationToken);
+            // One message at a time per customer: two quick taps must not both read the same cart
+            // (that could add an item twice, or place the same order twice).
+            WorkflowRunOutcome outcome;
+            var gate = CustomerGates.GetOrAdd($"{client.Id}|{ev.Channel}|{ev.CustomerId}", _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                outcome = await _engine.RunAsync(context, cancellationToken);
+            }
+            finally
+            {
+                gate.Release();
+            }
 
             if (outcome.ExecutionLogId is null)
             {

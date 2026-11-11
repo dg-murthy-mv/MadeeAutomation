@@ -145,6 +145,10 @@ public class ClientsController : Controller
             FallbackReplyText = client.FallbackReplyText,
             StaffAlertEmail = client.StaffAlertEmail,
             NotifyCustomerOnOrderStatus = client.NotifyCustomerOnOrderStatus,
+            MenuButtonsEnabled = client.MenuButtonsEnabled,
+            TaxName = client.TaxName,
+            TaxRatePercent = client.TaxRatePercent,
+            PricesIncludeTax = client.PricesIncludeTax,
             StaffAlertLineUserId = client.StaffAlertLineUserId
         };
 
@@ -421,6 +425,10 @@ public class ClientsController : Controller
         client.FallbackReplyText = Clean(model.FallbackReplyText);
         client.StaffAlertEmail = Clean(model.StaffAlertEmail)?.ToLowerInvariant();
         client.NotifyCustomerOnOrderStatus = model.NotifyCustomerOnOrderStatus;
+        client.MenuButtonsEnabled = model.MenuButtonsEnabled;
+        client.TaxName = Clean(model.TaxName);
+        client.TaxRatePercent = client.TaxName is null ? null : model.TaxRatePercent;
+        client.PricesIncludeTax = model.PricesIncludeTax;
         client.StaffAlertLineUserId = Clean(model.StaffAlertLineUserId);
     }
 
@@ -434,6 +442,13 @@ public class ClientsController : Controller
             ModelState.AddModelError(nameof(model.Currency), "Choose THB, INR, PHP or AED.");
         if (!Markets.TimeZoneIds.Contains(model.TimeZoneId))
             ModelState.AddModelError(nameof(model.TimeZoneId), "Choose one of the listed time zones.");
+
+        // Tax: a name and a rate go together (both blank = no tax on orders).
+        var hasTaxName = !string.IsNullOrWhiteSpace(model.TaxName);
+        if (hasTaxName && model.TaxRatePercent is null)
+            ModelState.AddModelError(nameof(model.TaxRatePercent), "Enter the tax rate, or clear the tax name.");
+        if (!hasTaxName && model.TaxRatePercent is not null)
+            ModelState.AddModelError(nameof(model.TaxName), "Enter the tax name (for example GST or VAT), or clear the rate.");
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

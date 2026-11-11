@@ -29,6 +29,12 @@ public record SeededClient(Guid Id, string Code, string LineSecret, Guid? Workfl
 ///   bigmenu   30 menu items (12 Drinks, 12 Cakes, 6 with no category; 3 sold out; 5 with a daily limit) and
 ///             45 orders (30 New, 8 Accepted, 4 Completed, 3 Cancelled; 9 for tomorrow; 5 from "Somchai")
 ///             -> search, filters and paging. Nothing else may add data to this client.
+///   buttoncafe Thailand, NO POS, staff LINE user. Menu: Drinks (Iced latte 75, Thai tea 45 with a daily limit
+///             of 3), Bakery (Croissant 45, Brownie 60 SOLD OUT) -> the menu-buttons chat (Round 008)
+///   buttonoff  like buttoncafe with one item; the test switches the menu buttons off
+///   taxincluded Thailand, VAT 7% INCLUDED in menu prices; no POS; staff LINE user
+///   taxadded    India, GST 5% ADDED on top of menu prices; POSFirst connected
+///   taxform     Thailand, no tax - the test sets and clears it on the client's Edit page
 ///   portalcafe Thailand, NO POS and no staff channel; has client portal users (password World.PortalPassword):
 ///             owner@portalcafe.test, second@portalcafe.test (deactivation test)
 ///
@@ -54,6 +60,13 @@ public static class World
     public static SeededClient CakeShop { get; private set; } = null!;
     public static SeededClient PortalCafe { get; private set; } = null!;
     public static SeededClient BigMenu { get; private set; } = null!;
+    public static SeededClient ButtonCafe { get; private set; } = null!;
+    public static SeededClient ButtonOff { get; private set; } = null!;
+    public static SeededClient TaxIncluded { get; private set; } = null!;
+    public static SeededClient TaxAdded { get; private set; } = null!;
+    public static SeededClient TaxForm { get; private set; } = null!;
+    public static readonly string TaxStaffLineId = "U" + new string('e', 32);
+    public static readonly string ButtonCafeStaffLineId = "U" + new string('d', 32);
 
     public const string PortalEmail = "owner@portalcafe.test";
     public const string PortalSecondEmail = "second@portalcafe.test";
@@ -198,6 +211,39 @@ public static class World
                 VALUES (NEWID(), @o, @name, 1, @price, @price);",
                 ("@o", orderId), ("@name", n % 2 == 0 ? "Coffee 01" : "Cake 13"), ("@price", 100m + n));
         }
+
+        ButtonCafe = await AddClientAsync(db, "buttoncafe", "E2E Button Cafe", ClientStatus.Active,
+            Encrypted(Line("buttoncafe-secret", "buttoncafe-token")), "buttoncafe-secret", withWorkflow: true,
+            kb: "Delivery: Ban Chang only.", staffLine: ButtonCafeStaffLineId);
+        await AddMenuItemAsync(db, ButtonCafe.Id, "Iced latte", "Drinks", 75m, "latte", true, 0);
+        await AddMenuItemAsync(db, ButtonCafe.Id, "Thai tea", "Drinks", 45m, "tea", true, 1, dailyLimit: 3);
+        await AddMenuItemAsync(db, ButtonCafe.Id, "Croissant", "Bakery", 45m, null, true, 2);
+        await AddMenuItemAsync(db, ButtonCafe.Id, "Brownie", "Bakery", 60m, null, false, 3);
+
+        ButtonOff = await AddClientAsync(db, "buttonoff", "E2E Button Off", ClientStatus.Active,
+            Encrypted(Line("buttonoff-secret", "buttonoff-token")), "buttonoff-secret", withWorkflow: true);
+        await AddMenuItemAsync(db, ButtonOff.Id, "Thai tea", "Drinks", 45m, "tea", true, 0);
+        await AddMenuItemAsync(db, ButtonOff.Id, "Croissant", "Bakery", 45m, null, true, 1);
+
+        TaxIncluded = await AddClientAsync(db, "taxincluded", "E2E Tax Included", ClientStatus.Active,
+            Encrypted(Line("taxincluded-secret", "taxincluded-token")), "taxincluded-secret", withWorkflow: true, staffLine: TaxStaffLineId);
+        await AddMenuItemAsync(db, TaxIncluded.Id, "Thai tea", "Drinks", 55m, "tea", true, 0);
+        await db.ExecAsync("UPDATE dbo.ClientConfigs SET TaxName = 'VAT', TaxRatePercent = 7, PricesIncludeTax = 1 WHERE Id = @c", ("@c", TaxIncluded.Id));
+
+        TaxAdded = await AddClientAsync(db, "taxadded", "E2E Tax Added", ClientStatus.Active,
+            Encrypted(new ClientIntegrationSettings
+            {
+                LineChannelSecret = "taxadded-secret",
+                LineChannelAccessToken = "taxadded-token",
+                PosFirstBaseUrl = settings.FakeServerUrl,
+                PosFirstApiKey = "pos-key-taxadded"
+            }), "taxadded-secret", withWorkflow: true, country: "IN", currency: "INR", timeZone: "Asia/Kolkata");
+        await AddMenuItemAsync(db, TaxAdded.Id, "Samosa", "Snacks", 25m, null, true, 0);
+        await db.ExecAsync("UPDATE dbo.ClientConfigs SET TaxName = 'GST', TaxRatePercent = 5, PricesIncludeTax = 0 WHERE Id = @c", ("@c", TaxAdded.Id));
+
+        TaxForm = await AddClientAsync(db, "taxform", "E2E Tax Form", ClientStatus.Active,
+            Encrypted(Line("taxform-secret", "taxform-token")), "taxform-secret", withWorkflow: true);
+        await AddMenuItemAsync(db, TaxForm.Id, "Samosa", "Snacks", 25m, null, true, 0);
 
         // Old rows hold plain JSON - the app must still read them (and encrypt on the next save).
         Legacy = await AddClientAsync(db, "legacy", "E2E Legacy", ClientStatus.Active,

@@ -32,7 +32,14 @@ public class Order
     public string? CustomerMessage { get; set; }       // the customer's own words
 
     public string? Currency { get; set; }
-    public decimal? Total { get; set; }                // null when an item had no price
+    public decimal? Total { get; set; }                // what the customer pays; null when an item had no price
+
+    // Tax on this order, as it was when the order was taken (null / 0 = the client has no tax set).
+    public decimal? Subtotal { get; set; }             // the total before tax
+    public decimal? TaxAmount { get; set; }
+    public string? TaxName { get; set; }               // "VAT", "GST"
+    public decimal? TaxRatePercent { get; set; }
+    public bool PricesIncludeTax { get; set; } = true;
 
     public DateTime? RequestedForUtc { get; set; }     // delivery / pick-up time, when the customer gave one
     public string? RequestedForText { get; set; }      // "tomorrow 9am"
@@ -69,6 +76,12 @@ public class Order
     public List<OrderItem> Items { get; set; } = new();
 
     public static string OwnReference(int orderNumber) => $"ORD-{orderNumber:0000}";
+
+    /// <summary>The order's money lines (subtotal, tax, total). Null when there is no total.</summary>
+    public MadeeAutomation.Domain.Regional.TaxBreakdown? Money() => Total is not { } total ? null
+        : TaxName is not null && TaxRatePercent is > 0 && TaxAmount is { } tax
+            ? new MadeeAutomation.Domain.Regional.TaxBreakdown(Subtotal ?? total - tax, tax, total, TaxName, TaxRatePercent, PricesIncludeTax)
+            : new MadeeAutomation.Domain.Regional.TaxBreakdown(total, 0m, total, null, null, PricesIncludeTax);
 }
 
 public class OrderItem

@@ -72,7 +72,10 @@ public class OrderDesk
             var price = item.LineTotal is { } t ? " - " + Money.Format(t, currency) : item.MenuItemId is null ? " (not on the menu - check the price)" : "";
             sb.AppendLine($"{item.Quantity} x {item.Name}{price}");
         }
-        sb.AppendLine(order.Total is { } total ? $"Total: {Money.Format(total, currency)}" : "Total: not calculated (an item has no price)");
+        if (order.Money() is { } money)
+            foreach (var line in Tax.Lines(money, currency)) sb.AppendLine(line);
+        else
+            sb.AppendLine("Total: not calculated (an item has no price)");
 
         if (order.RequestedForUtc is { } forUtc)
         {

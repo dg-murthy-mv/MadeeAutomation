@@ -10,6 +10,9 @@ public class ParsedInboundMessage
     public string CustomerId { get; set; } = string.Empty;
     public string Text { get; set; } = string.Empty;
     public string? ReplyToken { get; set; }
+
+    /// <summary>"text", "tap" (Text = the button's data) or "follow".</summary>
+    public string Kind { get; set; } = "text";
 }
 
 /// <summary>Result of parsing a webhook body: the text messages, plus a count of events we ignored.</summary>
@@ -75,7 +78,38 @@ public static class ChannelPayloadParser
         {
             var message = Obj(evt, "message");
             var mode = Str(evt, "mode");
-            if (Str(evt, "type") != "message" || Str(message, "type") != "text" || mode == "standby")
+            var type = Str(evt, "type");
+
+            // A tapped button ("postback") or a new friend ("follow"): both carry a reply token.
+            if ((type == "postback" || type == "follow") && mode != "standby")
+            {
+                var tapSource = Obj(evt, "source");
+                var tapTarget = Str(tapSource, "groupId") ?? Str(tapSource, "roomId") ?? Str(tapSource, "userId");
+                var tapId = Str(evt, "webhookEventId");
+                var postback = Obj(evt, "postback");
+                var data = type == "follow" ? "follow" : Str(postback, "data");
+                if (string.IsNullOrWhiteSpace(tapTarget) || string.IsNullOrWhiteSpace(tapId) || string.IsNullOrWhiteSpace(data) || data.Length > 400)
+                {
+                    result.IgnoredEvents++;
+                    continue;
+                }
+
+                // The date-and-time picker adds what the customer chose.
+                var picked = Str(Obj(postback, "params"), "datetime");
+                if (picked is not null) data += "&datetime=" + Uri.EscapeDataString(picked);
+
+                result.Messages.Add(new ParsedInboundMessage
+                {
+                    ExternalEventId = tapId,
+                    CustomerId = tapTarget,
+                    Text = data,
+                    ReplyToken = Str(evt, "replyToken"),
+                    Kind = type == "follow" ? "follow" : "tap"
+                });
+                continue;
+            }
+
+            if (type != "message" || Str(message, "type") != "text" || mode == "standby")
             {
                 result.IgnoredEvents++;
                 continue;

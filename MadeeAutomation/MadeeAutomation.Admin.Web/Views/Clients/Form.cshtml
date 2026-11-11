@@ -167,6 +167,37 @@
                 <span asp-validation-for="StaffAlertEmail" class="text-danger small"></span>
             </div>
         </div>
+        <h6 class="mt-3">Tax shown on orders</h6>
+        <div class="row g-3 mb-2">
+            <div class="col-6 col-md-3">
+                <label asp-for="TaxName" class="form-label"></label>
+                <input asp-for="TaxName" class="form-control" placeholder="VAT" data-testid="tax-name" autocomplete="off" />
+                <span asp-validation-for="TaxName" class="text-danger small" data-testid="tax-name-error"></span>
+            </div>
+            <div class="col-6 col-md-3">
+                <label asp-for="TaxRatePercent" class="form-label"></label>
+                <input asp-for="TaxRatePercent" class="form-control" type="number" step="0.01" min="0.01" max="50" inputmode="decimal" placeholder="7" data-testid="tax-rate" />
+                <span asp-validation-for="TaxRatePercent" class="text-danger small" data-testid="tax-rate-error"></span>
+            </div>
+            <div class="col-12 col-md-6 d-flex align-items-end">
+                <div class="form-check">
+                    <input asp-for="PricesIncludeTax" class="form-check-input" data-testid="tax-included" />
+                    <label asp-for="PricesIncludeTax" class="form-check-label"></label>
+                </div>
+            </div>
+        </div>
+        <div class="form-text mb-3">
+            Leave both blank when the business is not tax-registered: orders then show no tax.
+            Ticked (usual for cafes): the total stays the same and the order says how much of it is tax.
+            Unticked: the tax is added on top of the menu prices.
+            Usual rates, to confirm with the client: Thailand VAT 7%, India GST 5% for restaurants, Philippines VAT 12%, UAE VAT 5%.
+            One rate for the whole menu; this is a line on the order, not a tax invoice.
+        </div>
+        <div class="form-check mb-2">
+            <input asp-for="MenuButtonsEnabled" class="form-check-input" data-testid="menu-buttons" />
+            <label asp-for="MenuButtonsEnabled" class="form-check-label"></label>
+            <div class="form-text">When a customer says hello (or adds the account as a friend), they get the menu categories as buttons, then the items with prices, a cart and "When do you want it?". Needs items on the client's Menu page. Typed orders keep working either way.</div>
+        </div>
         <div class="form-check">
             <input asp-for="NotifyCustomerOnOrderStatus" class="form-check-input" data-testid="notify-customer" />
             <label asp-for="NotifyCustomerOnOrderStatus" class="form-check-label"></label>

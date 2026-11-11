@@ -58,7 +58,11 @@
                         <td data-label="Received" class="text-nowrap">@Local(e.ReceivedAtUtc)</td>
                         <td data-label="Channel">@Channels.DisplayName(e.Channel)</td>
                         <td data-label="Customer"><code class="text-break" data-testid="inbound-customer">@e.CustomerId</code></td>
-                        <td data-label="Message" class="text-break" dir="auto">@e.MessageText</td>
+                        <td data-label="Message" class="text-break" dir="auto">
+                            @if (e.Kind == InboundKinds.Tap) { <span class="badge bg-info text-dark" data-testid="inbound-kind">button</span> <code class="small">@e.MessageText</code> }
+                            else if (e.Kind == InboundKinds.Follow) { <span class="badge bg-info text-dark" data-testid="inbound-kind">new friend</span> }
+                            else { @e.MessageText }
+                        </td>
                         <td data-label="Status"><span class="badge @Badge(e.Status)" data-testid="inbound-status">@e.Status</span></td>
                         <td data-label="Details" class="small">
                             @if (!string.IsNullOrEmpty(e.LastError)) { <div class="text-danger" data-testid="inbound-error">@e.LastError</div> }

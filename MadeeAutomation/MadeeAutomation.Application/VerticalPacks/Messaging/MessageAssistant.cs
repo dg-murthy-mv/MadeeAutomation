@@ -106,6 +106,39 @@ public class MessageAssistant
         return analysis;
     }
 
+    /// <summary>
+    /// The customer was asked "When do you want it?" and typed an answer ("3pm", "tomorrow 9", "now").
+    /// Returns the time in the client's local time, or Asap, or neither when the message is not about time.
+    /// One small AI call; any failure just means "not understood".
+    /// </summary>
+    public async Task<(DateTime? Local, bool Asap)> ResolveTimeAsync(ClientConfig? client, string customerMessage, CancellationToken cancellationToken = default)
+    {
+        var timeZoneId = string.IsNullOrWhiteSpace(client?.TimeZoneId) ? "UTC" : client!.TimeZoneId;
+        var utcNow = _clock.GetUtcNow().UtcDateTime;
+        var localNow = LocalTime.ToLocal(utcNow, timeZoneId);
+
+        var system =
+            "A shop asked its customer: \"When do you want your order?\" The customer's answer is the user message.\n" +
+            $"Now is {localNow.ToString("dddd d MMMM yyyy", CultureInfo.InvariantCulture)}, local time {localNow.ToString("HH:mm", CultureInfo.InvariantCulture)}. " +
+            $"Local date: {localNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.\n" +
+            "Respond with ONE JSON object only: { \"time\": \"yyyy-MM-ddTHH:mm\" | null, \"asap\": boolean }\n" +
+            "- time: the moment they want it, worked out from now (\"3pm\" -> today 15:00, \"tomorrow 9\" -> tomorrow 09:00). null when they gave no time.\n" +
+            "- asap: true when they want it now / as soon as possible.\n" +
+            "- If the message is not an answer about time at all (a question, a new order, anything else): time null and asap false.";
+
+        try
+        {
+            var parsed = JsonReply.TryParseObject(await _claude.CompleteJsonAsync(system, customerMessage, cancellationToken));
+            if (parsed is null) return (null, false);
+            var local = ParseLocal(parsed.Value.GetString("time"));
+            return (local, local is null && parsed.Value.GetBool("asap"));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return (null, false);
+        }
+    }
+
     private static readonly string[] LocalFormats = { "yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd" };
 
     /// <summary>Reads the AI's "yyyy-MM-ddTHH:mm" (client local time). Anything else -> null.</summary>
@@ -131,6 +164,13 @@ public class MessageAssistant
                       $"(time zone {timeZoneId}, {LocalTime.OffsetLabel(timeZoneId, utcNow)}). Local date: {localNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.");
         if (currency is not null)
             sb.AppendLine($"All prices are in {currency}.");
+        if (Tax.IsConfigured(client?.TaxName, client?.TaxRatePercent))
+        {
+            var taxLabel = Tax.Label(client!.TaxName!, client.TaxRatePercent!.Value);
+            sb.AppendLine(client.PricesIncludeTax
+                ? $"MENU prices already include {taxLabel}."
+                : $"MENU prices do NOT include {taxLabel}: the system adds it to the order total. If you quote a price, say that {taxLabel} is added.");
+        }
         sb.AppendLine();
         sb.AppendLine(mode switch
         {
@@ -148,6 +188,9 @@ public class MessageAssistant
         sb.AppendLine("- If a question is not covered by BUSINESS INFORMATION, set canAnswer to false and needsHuman to true, and reply that a staff member will get back to them soon.");
         sb.AppendLine("- Set needsHuman to true for complaints, refunds, or anything you cannot handle.");
         sb.AppendLine("- For orders, use the MENU names exactly when an item clearly matches. You may tell a customer the price of an item exactly as written in the MENU, but never calculate a total - the system adds the correct total.");
+        if (profile.ShowsMenuButtons)
+            sb.AppendLine("- If the customer asks to see the menu, what you sell, or prices in general, use intent \"menu\" and reply with ONE short friendly line only. " +
+                          "Do NOT list the items: the system shows the menu as buttons right under your reply. Do the same for a greeting.");
         sb.AppendLine("- Some MENU items have a daily limit. Never take an order for more than what is left for today; tell the customer how many are left instead.");
         sb.AppendLine("- requestedDeliveryTime: when the customer gives a delivery/pick-up time, resolve it against the BUSINESS CLOCK to local \"yyyy-MM-ddTHH:mm\" (e.g. \"tomorrow 9am\" -> next day 09:00). Use null if no time was given. Put the customer's own words in requestedDeliveryText.");
         sb.AppendLine($"- When intent is \"order\" and there is at least one item, the reply must confirm the items and include the exact text {OrderRefPlaceholder} where the order reference goes.");
@@ -198,7 +241,10 @@ public class MessageAssistant
         }
         sb.AppendLine();
         sb.AppendLine("Respond with ONE JSON object only, in exactly this shape:");
-        sb.AppendLine("{ \"intent\": \"order\" | \"question\" | \"greeting\" | \"other\", \"language\": string, \"reply\": string, " +
+        var intents = profile.ShowsMenuButtons
+            ? "\"order\" | \"question\" | \"greeting\" | \"menu\" | \"other\""
+            : "\"order\" | \"question\" | \"greeting\" | \"other\"";
+        sb.AppendLine("{ \"intent\": " + intents + ", \"language\": string, \"reply\": string, " +
                       "\"canAnswer\": boolean, \"needsHuman\": boolean, " +
                       "\"order\": { \"items\": [ { \"name\": string, \"quantity\": number } ], \"requestedDeliveryTime\": \"yyyy-MM-ddTHH:mm\"|null, \"requestedDeliveryText\": string|null, \"customerNote\": string|null } | null }");
         return sb.ToString();

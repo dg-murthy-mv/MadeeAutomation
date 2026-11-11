@@ -39,6 +39,9 @@ public class TriggerContext
     public string? MessageText { get; set; }
     public string? ReplyToken { get; set; }
 
+    /// <summary>"text" (typed), "tap" (a button - MessageText holds its data) or "follow" (added as friend). Null = text.</summary>
+    public string? MessageKind { get; set; }
+
     /// <summary>The client this run belongs to. Filled in by the WorkflowEngine before the handler runs.</summary>
     public ClientConfig? Client { get; set; }
 

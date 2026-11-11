@@ -22,6 +22,7 @@ public class AutomationDbContext : DbContext
     public DbSet<OpeningHours> OpeningHours => Set<OpeningHours>();
     public DbSet<ClosedDate> ClosedDates => Set<ClosedDate>();
     public DbSet<Order> Orders => Set<Order>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -30,6 +31,8 @@ public class AutomationDbContext : DbContext
 
         modelBuilder.Entity<ClientConfig>(entity =>
         {
+            entity.Property(c => c.TaxName).HasMaxLength(20);
+            entity.Property(c => c.TaxRatePercent).HasPrecision(5, 2);
             entity.ToTable("ClientConfigs");
             entity.HasIndex(c => c.ClientCode).IsUnique();
             entity.Property(c => c.ClientName).HasMaxLength(200).IsRequired();
@@ -54,6 +57,17 @@ public class AutomationDbContext : DbContext
             entity.Ignore(u => u.IsClientUser);
         });
 
+        modelBuilder.Entity<Conversation>(entity =>
+        {
+            entity.ToTable("Conversations");
+            entity.HasIndex(c => new { c.ClientConfigId, c.Channel, c.CustomerId }).IsUnique();
+            entity.Property(c => c.Channel).HasMaxLength(20).IsRequired();
+            entity.Property(c => c.CustomerId).HasMaxLength(200).IsRequired();
+            entity.Property(c => c.State).HasMaxLength(30).IsRequired();
+            entity.Property(c => c.Language).HasMaxLength(40);
+            entity.Property(c => c.LastCategory).HasMaxLength(100);
+        });
+
         modelBuilder.Entity<Order>(entity =>
         {
             entity.ToTable("Orders");
@@ -67,6 +81,10 @@ public class AutomationDbContext : DbContext
             entity.Property(o => o.CustomerName).HasMaxLength(200);
             entity.Property(o => o.Currency).HasMaxLength(3);
             entity.Property(o => o.Total).HasPrecision(18, 2);
+            entity.Property(o => o.Subtotal).HasPrecision(18, 2);
+            entity.Property(o => o.TaxAmount).HasPrecision(18, 2);
+            entity.Property(o => o.TaxName).HasMaxLength(20);
+            entity.Property(o => o.TaxRatePercent).HasPrecision(5, 2);
             entity.Property(o => o.RequestedForText).HasMaxLength(200);
             entity.Property(o => o.CustomerNote).HasMaxLength(1000);
             entity.Property(o => o.StatusChangedBy).HasMaxLength(200);
@@ -149,6 +167,7 @@ public class AutomationDbContext : DbContext
             entity.ToTable("InboundEvents");
             entity.Property(e => e.Channel).HasMaxLength(20).IsRequired();
             entity.Property(e => e.ExternalEventId).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Kind).HasMaxLength(20).IsRequired();
             entity.Property(e => e.CustomerId).HasMaxLength(100);
             entity.Property(e => e.ReplyToken).HasMaxLength(200);
             entity.Property(e => e.LastError).HasMaxLength(2000);

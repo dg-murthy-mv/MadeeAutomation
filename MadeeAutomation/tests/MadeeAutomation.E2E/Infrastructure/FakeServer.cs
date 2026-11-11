@@ -10,7 +10,50 @@ using Microsoft.Extensions.Logging;
 namespace MadeeAutomation.E2E.Infrastructure;
 
 /// <summary>One call the apps made to the fake LINE API.</summary>
-public record LineCall(string Kind, string? To, string? ReplyToken, string Text, string Authorization, int StatusReturned, DateTime AtUtc);
+public record LineCall(string Kind, string? To, string? ReplyToken, string Text, string Authorization, int StatusReturned, DateTime AtUtc, string Body = "")
+{
+    /// <summary>The labels of the quick-reply buttons on this message, in order.</summary>
+    public List<string> Buttons => Actions("quickReply").Select(a => a.Label).ToList();
+
+    /// <summary>The data a quick-reply button sends back when tapped (by its label).</summary>
+    public string DataOf(string label) => Actions("quickReply").First(a => a.Label == label).Data;
+
+    /// <summary>The item cards: title, price line, note and the data of each button.</summary>
+    public List<(string Title, string? Price, string? Note, List<string> ButtonData)> Cards
+    {
+        get
+        {
+            var cards = new List<(string, string?, string?, List<string>)>();
+            var messages = System.Text.Json.Nodes.JsonNode.Parse(string.IsNullOrEmpty(Body) ? "{}" : Body)?["messages"]?.AsArray();
+            foreach (var message in messages ?? new System.Text.Json.Nodes.JsonArray())
+            {
+                if (message?["type"]?.GetValue<string>() != "flex") continue;
+                foreach (var bubble in message["contents"]?["contents"]?.AsArray() ?? new System.Text.Json.Nodes.JsonArray())
+                {
+                    var texts = bubble?["body"]?["contents"]?.AsArray().Select(t => t?["text"]?.GetValue<string>()).ToList() ?? new();
+                    var isNote = bubble?["body"]?["contents"]?.AsArray().Select(t => t?["color"]?.GetValue<string>() == "#C0392B").ToList() ?? new();
+                    string? price = null, note = null;
+                    for (var i = 1; i < texts.Count; i++) { if (isNote[i]) note = texts[i]; else price = texts[i]; }
+                    var data = bubble?["footer"]?["contents"]?.AsArray().Select(b => b?["action"]?["data"]?.GetValue<string>() ?? "").ToList() ?? new();
+                    cards.Add((texts.FirstOrDefault() ?? "", price, note, data));
+                }
+            }
+            return cards;
+        }
+    }
+
+    private List<(string Label, string Data, string Type)> Actions(string property)
+    {
+        var result = new List<(string, string, string)>();
+        var messages = System.Text.Json.Nodes.JsonNode.Parse(string.IsNullOrEmpty(Body) ? "{}" : Body)?["messages"]?.AsArray();
+        foreach (var message in messages ?? new System.Text.Json.Nodes.JsonArray())
+            foreach (var item in message?[property]?["items"]?.AsArray() ?? new System.Text.Json.Nodes.JsonArray())
+                result.Add((item?["action"]?["label"]?.GetValue<string>() ?? "", item?["action"]?["data"]?.GetValue<string>() ?? "", item?["action"]?["type"]?.GetValue<string>() ?? ""));
+        return result;
+    }
+
+    public bool HasDateTimePicker => Actions("quickReply").Any(a => a.Type == "datetimepicker");
+}
 
 /// <summary>One call the apps made to the fake Claude API.</summary>
 public record ClaudeCall(string System, string UserMessage, string ApiKey, DateTime AtUtc);
@@ -57,7 +100,10 @@ public sealed class FakeServer : IAsyncDisposable
             var status = auth.EndsWith("fail-token") ? 500
                 : token is not null && token.StartsWith("expired") ? 400
                 : 200;
-            LineCalls.Enqueue(new LineCall("reply", null, token, text, auth, status, DateTime.UtcNow));
+            // A customer id starting "Ubadrich" makes the fake refuse buttons / cards, like LINE does for a malformed message.
+            var raw = body?.ToJsonString() ?? "";
+            if (status == 200 && token is not null && token.Contains("Ubadrich") && (raw.Contains("quickReply") || raw.Contains("\"flex\""))) status = 400;
+            LineCalls.Enqueue(new LineCall("reply", null, token, text, auth, status, DateTime.UtcNow, raw));
 
             return status switch
             {
@@ -73,9 +119,12 @@ public sealed class FakeServer : IAsyncDisposable
             var auth = ctx.Request.Headers.Authorization.ToString();
             var to = body?["to"]?.GetValue<string>();
             var status = auth.EndsWith("fail-token") ? 500 : 200;
-            LineCalls.Enqueue(new LineCall("push", to, null, FirstText(body), auth, status, DateTime.UtcNow));
+            var raw = body?.ToJsonString() ?? "";
+            if (status == 200 && to is not null && to.StartsWith("Ubadrich") && (raw.Contains("quickReply") || raw.Contains("\"flex\""))) status = 400;
+            LineCalls.Enqueue(new LineCall("push", to, null, FirstText(body), auth, status, DateTime.UtcNow, raw));
 
-            return status == 500
+            return status == 400 ? Results.Json(new { message = "fake LINE: invalid message" }, statusCode: 400)
+                : status == 500
                 ? Results.Json(new { message = "fake LINE failure" }, statusCode: 500)
                 : Results.Json(new { sentMessages = new[] { new { id = "2" } } });
         });
@@ -157,6 +206,15 @@ public sealed class FakeServer : IAsyncDisposable
             return text.Contains("notranslate") ? "???" : $"[{lang}] {user}";
         }
 
+        // Round 008: the customer typed an answer to "When do you want it?".
+        if (system.StartsWith("A shop asked its customer"))
+        {
+            var day = Regex.Match(system, @"Local date: (\d{4}-\d{2}-\d{2})").Groups[1].Value;
+            var hour = Regex.Match(text, @"\b(\d{1,2})\s*pm\b");
+            if (hour.Success) return Json(new { time = $"{day}T{int.Parse(hour.Groups[1].Value) % 12 + 12:00}:00", asap = false });
+            return Json(new { time = (string?)null, asap = text.Contains("now") || text.Contains("asap") });
+        }
+
         // The language the customer wrote in (Thai letters -> "th"), as the real AI reports it.
         var language = Regex.IsMatch(user, @"[\u0E00-\u0E7F]") ? "th" : "en";
 
@@ -217,6 +275,16 @@ public sealed class FakeServer : IAsyncDisposable
                 }
             });
         }
+
+        // Round 008: "what do you sell?" - with menu buttons on, the real prompt asks for intent "menu".
+        if (text.Contains("menu") || text.Contains("what do you sell") || user.Contains("เมนู"))
+            return Json(new
+            {
+                intent = system.Contains("use intent \"menu\"") ? "menu" : "question",
+                language,
+                reply = language == "th" ? "ได้เลยค่ะ" : "Sure! Here is our menu.",
+                canAnswer = true, needsHuman = false, order = (object?)null
+            });
 
         // Answered only when the client's business information mentions parking (Round 005 portal test).
         if (text.Contains("parking"))

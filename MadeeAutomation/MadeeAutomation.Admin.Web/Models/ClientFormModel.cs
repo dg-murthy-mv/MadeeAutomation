@@ -34,6 +34,20 @@ public class ClientFormModel
     [StringLength(1000), Display(Name = "Fallback reply")]
     public string? FallbackReplyText { get; set; }
 
+    // ---- Tax shown on orders ----
+    [StringLength(20), Display(Name = "Tax name")]
+    public string? TaxName { get; set; }
+
+    [Range(0.01, 50, ErrorMessage = "Enter a rate between 0.01 and 50 (or leave blank for no tax).")]
+    [Display(Name = "Tax rate (%)")]
+    public decimal? TaxRatePercent { get; set; }
+
+    [Display(Name = "Menu prices already include this tax")]
+    public bool PricesIncludeTax { get; set; } = true;
+
+    [Display(Name = "Show the menu with buttons in the chat (LINE)")]
+    public bool MenuButtonsEnabled { get; set; } = true;
+
     [Display(Name = "Message the customer when an order is accepted or cancelled")]
     public bool NotifyCustomerOnOrderStatus { get; set; } = true;
 

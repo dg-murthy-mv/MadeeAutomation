@@ -33,6 +33,29 @@ public static class Line
         message = new { id = Guid.NewGuid().ToString("N")[..12], type = "text", text, quoteToken = "q" }
     };
 
+    /// <summary>The customer tapped a button we sent. picked = what they chose in the date-and-time picker.</summary>
+    public static object TapEvent(string userId, string data, string? picked = null) => new
+    {
+        type = "postback",
+        mode = "active",
+        timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        webhookEventId = "E" + Guid.NewGuid().ToString("N"),
+        replyToken = "rt-" + userId,
+        source = new { type = "user", userId },
+        postback = picked is null ? (object)new { data } : new { data, @params = new { datetime = picked } }
+    };
+
+    /// <summary>The customer added the account as a friend.</summary>
+    public static object FollowEvent(string userId) => new
+    {
+        type = "follow",
+        mode = "active",
+        timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        webhookEventId = "E" + Guid.NewGuid().ToString("N"),
+        replyToken = "rt-" + userId,
+        source = new { type = "user", userId }
+    };
+
     public static object StickerEvent(string userId) => new
     {
         type = "message",

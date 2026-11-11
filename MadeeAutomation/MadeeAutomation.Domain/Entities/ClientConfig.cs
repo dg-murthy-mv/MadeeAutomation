@@ -52,6 +52,23 @@ public class ClientConfig
     /// </summary>
     public bool NotifyCustomerOnOrderStatus { get; set; } = true;
 
+    // ---- Tax shown on orders (blank = the business is not tax-registered: no tax lines) ----
+
+    /// <summary>What the tax is called on an order: "GST", "VAT"...</summary>
+    public string? TaxName { get; set; }
+
+    /// <summary>The rate in percent, e.g. 5, 7, 12.</summary>
+    public decimal? TaxRatePercent { get; set; }
+
+    /// <summary>True (the default): menu prices already include the tax. False: the tax is added on top.</summary>
+    public bool PricesIncludeTax { get; set; } = true;
+
+    /// <summary>
+    /// Show the menu with buttons in the chat (categories -> items -> cart -> order). On by default;
+    /// it only does anything when the client has a structured menu, and for now only on LINE.
+    /// </summary>
+    public bool MenuButtonsEnabled { get; set; } = true;
+
     public bool MerkaiIntegrationEnabled { get; set; }
     public bool PosFirstIntegrationEnabled { get; set; }
 

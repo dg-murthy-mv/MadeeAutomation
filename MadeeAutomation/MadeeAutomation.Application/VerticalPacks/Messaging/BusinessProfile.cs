@@ -11,6 +11,12 @@ public class BusinessProfile
     public bool MenuIsStructured { get; init; }
     public BusinessStatus Hours { get; init; } = new(false, false, "", "", null);
 
+    /// <summary>
+    /// True when this chat shows the menu with buttons. The AI is then told not to type the menu out
+    /// (our code sends the buttons) - set by the handler before the AI is called.
+    /// </summary>
+    public bool ShowsMenuButtons { get; set; }
+
     /// <summary>Today's date in the client's time zone.</summary>
     public DateOnly LocalToday { get; init; }
 

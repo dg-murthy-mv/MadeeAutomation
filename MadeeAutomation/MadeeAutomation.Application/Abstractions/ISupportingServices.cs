@@ -248,9 +248,52 @@ public interface IPosFirstConnector
     Task<List<string>> GetLowStockItemsAsync(Guid clientConfigId, CancellationToken cancellationToken = default);
 }
 
+/// <summary>A button the customer can tap. Tapping sends Data back to us as a "tap" event.</summary>
+public class ChatButton
+{
+    public string Label { get; set; } = string.Empty;      // what the button says (kept short)
+    public string Data { get; set; } = string.Empty;       // e.g. "a=cat&c=Drinks"
+    public string? DisplayText { get; set; }               // shown in the chat as the customer's own message
+
+    /// <summary>True = opens the phone's date-and-time picker; the chosen time comes back with the tap.</summary>
+    public bool PickDateTime { get; set; }
+    public string? PickInitial { get; set; }               // "yyyy-MM-ddTHH:mm"
+    public string? PickMin { get; set; }
+    public string? PickMax { get; set; }
+}
+
+/// <summary>One card in a swipe-through row (a menu item).</summary>
+public class ChatCard
+{
+    public string Title { get; set; } = string.Empty;
+    public string? Subtitle { get; set; }                  // the price
+    public string? Note { get; set; }                      // "Sold out today", "3 left today"
+    public List<ChatButton> Buttons { get; set; } = new();
+}
+
+/// <summary>Buttons and cards that go with a message. Channels that can't show them get plain text.</summary>
+public class RichContent
+{
+    public List<ChatCard> Cards { get; set; } = new();
+    public List<ChatButton> QuickReplies { get; set; } = new();
+    public bool IsEmpty => Cards.Count == 0 && QuickReplies.Count == 0;
+}
+
+/// <summary>Remembers each customer's cart and chat state between messages.</summary>
+public interface IConversationRepository
+{
+    Task<Conversation?> GetAsync(Guid clientConfigId, string channel, string customerId, CancellationToken cancellationToken = default);
+
+    /// <summary>Adds or updates (one row per client + channel + customer) and stamps UpdatedAtUtc.</summary>
+    Task SaveAsync(Conversation conversation, CancellationToken cancellationToken = default);
+}
+
 /// <summary>One outbound customer message.</summary>
 public class OutboundMessage
 {
+    /// <summary>Optional buttons / cards (LINE). Null = a plain text message.</summary>
+    public RichContent? Rich { get; set; }
+
     public Guid ClientConfigId { get; set; }
     public string Channel { get; set; } = string.Empty;
     public string To { get; set; } = string.Empty;

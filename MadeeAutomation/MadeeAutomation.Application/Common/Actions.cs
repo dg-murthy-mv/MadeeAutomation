@@ -7,7 +7,7 @@ namespace MadeeAutomation.Application.Common;
 /// <summary>
 /// Sends an outbound customer message on the channel the handler names (normally the channel
 /// the customer wrote on). Uses the CLIENT's own credentials, never a shared account.
-/// Parameters: channel, to, message, replyToken (optional, LINE).
+/// Parameters: channel, to, message, replyToken (optional, LINE), rich (optional: buttons / cards as JSON).
 /// </summary>
 public class SendMessageAction : IAction
 {
@@ -42,12 +42,31 @@ public class SendMessageAction : IAction
             Channel = Channels.Normalize(channel)!,
             To = to,
             Text = message,
-            ReplyToken = string.IsNullOrWhiteSpace(replyToken) ? null : replyToken
+            ReplyToken = string.IsNullOrWhiteSpace(replyToken) ? null : replyToken,
+            Rich = ReadRich(request.Parameters.GetValueOrDefault("rich"))
         }, cancellationToken);
 
         return result.Success
             ? ActionResult.Ok($"Sent via {channel} ({result.Mode})")
             : ActionResult.Fail($"{channel} {result.Mode} failed: {result.Error}");
+    }
+
+    public const string RichParameter = "rich";
+
+    public static string WriteRich(RichContent rich) => System.Text.Json.JsonSerializer.Serialize(rich);
+
+    private static RichContent? ReadRich(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            var rich = System.Text.Json.JsonSerializer.Deserialize<RichContent>(json);
+            return rich is null || rich.IsEmpty ? null : rich;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;   // a broken extra never stops the text itself from going out
+        }
     }
 }
 

@@ -9,6 +9,13 @@ namespace MadeeAutomation.Domain.Entities;
 /// The unique index on (ClientConfigId, Channel, ExternalEventId) is what stops duplicates:
 /// when LINE/Meta re-deliver the same event, the second insert is ignored.
 /// </summary>
+public static class InboundKinds
+{
+    public const string Text = "text";
+    public const string Tap = "tap";
+    public const string Follow = "follow";
+}
+
 public class InboundEvent
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -24,6 +31,13 @@ public class InboundEvent
     public string ExternalEventId { get; set; } = string.Empty;
 
     public string? CustomerId { get; set; }
+
+    /// <summary>
+    /// "text" = the customer typed a message; "tap" = they tapped a button we sent (MessageText holds
+    /// the button's data, e.g. "a=cat&c=Drinks"); "follow" = they added the account as a friend.
+    /// </summary>
+    public string Kind { get; set; } = InboundKinds.Text;
+
     public string? MessageText { get; set; }
 
     /// <summary>LINE reply token - replying with it is free; push messages count against the plan quota.</summary>
