@@ -108,7 +108,7 @@ public class OrderDesk
             customerId = order.CustomerId,
             rawMessage = order.CustomerMessage,
             currency = order.Currency,
-            items = order.Items.Select(i => new { name = i.Name, quantity = i.Quantity, unitPrice = i.UnitPrice, lineTotal = i.LineTotal, onMenu = i.MenuItemId is not null }).ToList(),
+            items = order.Items.Select(i => new { name = i.Name, quantity = i.Quantity, unitPrice = i.UnitPrice, lineTotal = i.LineTotal, onMenu = OnMenu(i) }).ToList(),
             orderTotal = order.Total,
             subtotal = tax?.Subtotal,
             taxName = tax?.TaxName,
@@ -123,6 +123,12 @@ public class OrderDesk
         };
     }
 
+    /// <summary>
+    /// The line matched the menu: either a Menu-page item (MenuItemId) or a priced line from the business
+    /// profile's price list (no MenuItemId, but a price). Only lines nobody could price are "not on the menu".
+    /// </summary>
+    public static bool OnMenu(OrderItem item) => item.MenuItemId is not null || item.UnitPrice is not null;
+
     /// <summary>The message the client's staff get (LINE and/or email). English - our side is English only.</summary>
     public static string StaffMessage(Order order, ClientConfig? client)
     {
@@ -131,7 +137,7 @@ public class OrderDesk
         sb.AppendLine($"New order {order.Reference} - {client?.ClientName ?? "client"}");
         foreach (var item in order.Items)
         {
-            var price = item.LineTotal is { } t ? " - " + Money.Format(t, currency) : item.MenuItemId is null ? " (not on the menu - check the price)" : "";
+            var price = item.LineTotal is { } t ? " - " + Money.Format(t, currency) : !OnMenu(item) ? " (not on the menu - check the price)" : "";
             sb.AppendLine($"{item.Quantity} x {item.Name}{price}");
         }
         if (order.Money() is { } money)

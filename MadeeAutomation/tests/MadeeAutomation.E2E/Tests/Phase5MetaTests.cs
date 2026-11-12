@@ -223,6 +223,14 @@ public class Phase5MetaTests : PageTest
         await Page.ClickAsync("[data-testid=check-messenger]");
         await Expect(Page.Locator("[data-testid=alert-error]")).ToContainTextAsync("Meta rejected the Messenger token");
 
+        // A Page token without pages_read_engagement: explained as fine for messages, not as an error.
+        await Page.GotoAsync($"/Clients/Edit/{World.MetaCafe.Id}");
+        await Page.FillAsync("#MessengerPageAccessToken", "noread-token-e2e");
+        await Page.ClickAsync("[data-testid=save-client]");
+        await Page.GotoAsync($"/Clients/Details/{World.MetaCafe.Id}");
+        await Page.ClickAsync("[data-testid=check-messenger]");
+        await Expect(Page.Locator("[data-testid=alert-success]")).ToContainTextAsync("messages will work");
+
         // put the good token back for any later run
         await Page.GotoAsync($"/Clients/Edit/{World.MetaCafe.Id}");
         await Page.FillAsync("#MessengerPageAccessToken", "fb-token-e2e");

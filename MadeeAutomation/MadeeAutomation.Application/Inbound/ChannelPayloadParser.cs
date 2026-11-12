@@ -24,6 +24,12 @@ public class ParsedWebhook
     public List<ParsedInboundMessage> Messages { get; } = new();
     public int IgnoredEvents { get; set; }
     public string? Error { get; set; }
+
+    /// <summary>WhatsApp: business phone number ids that messages were addressed to but that are NOT this client's.</summary>
+    public HashSet<string> OtherPhoneNumberIds { get; } = new();
+
+    /// <summary>WhatsApp: sent / delivered / read notices (normal, nothing to do).</summary>
+    public int StatusUpdates { get; set; }
 }
 
 /// <summary>
@@ -165,6 +171,8 @@ public static class ChannelPayloadParser
             var phoneNumberId = Str(Obj(value, "metadata"), "phone_number_id");
             var wrongNumber = !string.IsNullOrWhiteSpace(expectedPhoneNumberId) && phoneNumberId is not null
                               && phoneNumberId != expectedPhoneNumberId.Trim();
+            if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty("statuses", out var st) && st.ValueKind == JsonValueKind.Array)
+                result.StatusUpdates += st.GetArrayLength();
 
             var names = new Dictionary<string, string>();
             foreach (var contact in Arr(value, "contacts"))
@@ -204,6 +212,7 @@ public static class ChannelPayloadParser
                     kind = "tap";
                 }
 
+                if (wrongNumber) result.OtherPhoneNumberIds.Add(phoneNumberId!);
                 if (wrongNumber || string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(id)
                     || (kind == "tap" && text.Length > 400))
                 {

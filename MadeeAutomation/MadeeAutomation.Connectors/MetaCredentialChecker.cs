@@ -25,7 +25,7 @@ public class MetaCredentialChecker
     {
         var baseUrl = _configuration["Connectors:Meta:GraphBaseUrl"] is { Length: > 0 } b ? b.Trim() : "https://graph.facebook.com/";
         if (!baseUrl.EndsWith('/')) baseUrl += "/";
-        var version = _configuration["Connectors:Meta:GraphApiVersion"] is { Length: > 0 } v ? v.Trim('/') : "v23.0";
+        var version = _configuration["Connectors:Meta:GraphApiVersion"] is { Length: > 0 } v ? v.Trim('/') : "v27.0";
         return new Uri(new Uri(baseUrl), $"{version}/{pathAndQuery}");
     }
 
@@ -49,6 +49,11 @@ public class MetaCredentialChecker
             return new LineCheckResult(false, "Save the Messenger page access token first.");
 
         var (ok, json, error) = await GetAsync(Url("me?fields=name"), pageAccessToken, "Messenger", cancellationToken);
+        // Reading the Page's name needs pages_read_engagement; sending and receiving messages does not.
+        // Meta only says that about a token it accepted, so the token itself is fine.
+        if (!ok && error!.Contains("pages_read_engagement"))
+            return new LineCheckResult(true, "Messenger token accepted by Meta - messages will work. To show the Page name here, " +
+                "add the pages_read_engagement permission (Meta app -> Messenger -> Permissions and features), then generate the Page token again.");
         if (!ok) return new LineCheckResult(false, error!);
         return new LineCheckResult(true, $"Messenger works - connected to the Page \"{Str(json!.Value, "name") ?? "?"}\".");
     }

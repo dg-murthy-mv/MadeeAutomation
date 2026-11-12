@@ -199,7 +199,16 @@ public class WebhooksController : ControllerBase
             : ChannelPayloadParser.ParseMessenger(raw);
         if (parsed.Error is not null) return BadRequest(new { error = parsed.Error });
 
+        // Say plainly why a WhatsApp message got no answer when it was meant for another number
+        // (a wrong "WhatsApp phone number ID" in Admin, or Meta's dashboard sample, which uses a made-up number).
+        foreach (var other in parsed.OtherPhoneNumberIds)
+            _logger.LogWarning("WhatsApp message for phone number ID {Other} ignored - client {ClientCode} is set up with {Mine}. " +
+                               "If this is the client's number, fix \"WhatsApp phone number ID\" in Admin. (123456123 = Meta's test sample.)",
+                other, client.ClientCode, settings.WhatsAppPhoneNumberId ?? "(none)");
+
         var result = await _ingestor.IngestAsync(client, channel, workflowId, parsed, cancellationToken);
+        if (result.Stored == 0 && parsed.StatusUpdates > 0 && parsed.Messages.Count == 0)
+            _logger.LogInformation("WhatsApp for {ClientCode}: {Count} sent/delivered/read notice(s) - nothing to answer.", client.ClientCode, parsed.StatusUpdates);
         return Ok(new { received = result.Stored, duplicates = result.Duplicates, ignored = result.Ignored });
     }
 

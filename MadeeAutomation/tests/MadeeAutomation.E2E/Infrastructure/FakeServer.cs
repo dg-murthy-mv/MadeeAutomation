@@ -209,6 +209,9 @@ public sealed class FakeServer : IAsyncDisposable
         {
             if (ctx.Request.Headers.Authorization.ToString().Contains("bad"))
                 return Results.Json(new { error = new { message = "Error validating access token", code = 190 } }, statusCode: 401);
+            // A Page token without pages_read_engagement: Meta refuses to read the Page (messaging still works).
+            if (id == "me" && ctx.Request.Headers.Authorization.ToString().Contains("noread"))
+                return Results.Json(new { error = new { message = "(#100) This endpoint requires the 'pages_read_engagement' permission", code = 100 } }, statusCode: 400);
             if (id == "me") return Results.Json(new { name = "E2E Page", id = "1000" });
             if (ctx.Request.Query["fields"].ToString().Contains("display_phone_number"))
                 return Results.Json(new { display_phone_number = "+66 80 000 0000", verified_name = "E2E WhatsApp Shop", id });

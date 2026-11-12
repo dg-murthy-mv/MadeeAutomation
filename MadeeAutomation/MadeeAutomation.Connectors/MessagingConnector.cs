@@ -21,7 +21,7 @@ namespace MadeeAutomation.Connectors;
 ///
 /// Config: Connectors:Line:ApiBaseUrl (default https://api.line.me/),
 ///         Connectors:Meta:GraphBaseUrl (default https://graph.facebook.com/),
-///         Connectors:Meta:GraphApiVersion (default v23.0 - check Meta's changelog for the current version).
+///         Connectors:Meta:GraphApiVersion (default v27.0 - check Meta's changelog for the current version).
 /// </summary>
 public class MessagingConnector : IMessagingConnector
 {
@@ -43,7 +43,7 @@ public class MessagingConnector : IMessagingConnector
 
     private Uri LineBase => BaseUri(_configuration["Connectors:Line:ApiBaseUrl"], "https://api.line.me/");
     private Uri GraphBase => BaseUri(_configuration["Connectors:Meta:GraphBaseUrl"], "https://graph.facebook.com/");
-    private string GraphVersion => _configuration["Connectors:Meta:GraphApiVersion"] is { Length: > 0 } v ? v.Trim('/') : "v23.0";
+    private string GraphVersion => _configuration["Connectors:Meta:GraphApiVersion"] is { Length: > 0 } v ? v.Trim('/') : "v27.0";
 
     private static Uri BaseUri(string? configured, string fallback)
     {
