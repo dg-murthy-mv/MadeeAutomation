@@ -24,6 +24,10 @@ public class AutomationDbContext : DbContext
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<ServiceItem> ServiceItems => Set<ServiceItem>();
+    public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
+    public DbSet<StaffService> StaffServices => Set<StaffService>();
+    public DbSet<Booking> Bookings => Set<Booking>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -33,6 +37,7 @@ public class AutomationDbContext : DbContext
         {
             entity.Property(c => c.TaxName).HasMaxLength(20);
             entity.Property(c => c.TaxRatePercent).HasPrecision(5, 2);
+            entity.Property(c => c.HomeServiceFee).HasPrecision(18, 2);
             entity.ToTable("ClientConfigs");
             entity.HasIndex(c => c.ClientCode).IsUnique();
             entity.Property(c => c.ClientName).HasMaxLength(200).IsRequired();
@@ -113,6 +118,65 @@ public class AutomationDbContext : DbContext
             entity.Property(m => m.Aliases).HasMaxLength(500);
             entity.Property(m => m.Price).HasPrecision(18, 2);
             entity.Ignore(m => m.AliasList);
+        });
+
+        // ---- Appointments ----
+        modelBuilder.Entity<ServiceItem>(entity =>
+        {
+            entity.ToTable("ServiceItems");
+            entity.HasIndex(s => s.ClientConfigId);
+            entity.Property(s => s.Name).HasMaxLength(200).IsRequired();
+            entity.Property(s => s.Category).HasMaxLength(100);
+            entity.Property(s => s.Description).HasMaxLength(500);
+            entity.Property(s => s.Price).HasPrecision(18, 2);
+        });
+
+        modelBuilder.Entity<StaffMember>(entity =>
+        {
+            entity.ToTable("StaffMembers");
+            entity.HasIndex(s => s.ClientConfigId);
+            entity.Property(s => s.Name).HasMaxLength(100).IsRequired();
+            entity.Property(s => s.Title).HasMaxLength(100);
+            entity.Property(s => s.Gender).HasMaxLength(1);
+            entity.HasMany(s => s.Services).WithOne().HasForeignKey(x => x.StaffMemberId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<StaffService>(entity =>
+        {
+            entity.ToTable("StaffServices");
+            entity.HasKey(x => new { x.StaffMemberId, x.ServiceItemId });
+            entity.HasIndex(x => x.ServiceItemId);
+            entity.HasOne<ServiceItem>().WithMany().HasForeignKey(x => x.ServiceItemId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Booking>(entity =>
+        {
+            entity.ToTable("Bookings");
+            entity.HasIndex(b => new { b.ClientConfigId, b.BookingNumber }).IsUnique();
+            entity.HasIndex(b => new { b.ClientConfigId, b.LocalDate });
+            entity.HasIndex(b => new { b.StaffMemberId, b.BusyFromUtc });
+            entity.HasIndex(b => new { b.Status, b.ReminderDueUtc });
+            entity.HasIndex(b => new { b.ClientConfigId, b.Channel, b.CustomerId });
+            entity.Property(b => b.Reference).HasMaxLength(30).IsRequired();
+            entity.Property(b => b.Source).HasMaxLength(10).IsRequired();
+            entity.Property(b => b.Channel).HasMaxLength(20).IsRequired();
+            entity.Property(b => b.CustomerId).HasMaxLength(200);
+            entity.Property(b => b.CustomerName).HasMaxLength(200);
+            entity.Property(b => b.CustomerPhone).HasMaxLength(30);
+            entity.Property(b => b.ServiceName).HasMaxLength(200).IsRequired();
+            entity.Property(b => b.Currency).HasMaxLength(3);
+            entity.Property(b => b.Price).HasPrecision(18, 2);
+            entity.Property(b => b.HomeServiceFee).HasPrecision(18, 2);
+            entity.Property(b => b.Total).HasPrecision(18, 2);
+            entity.Property(b => b.StaffName).HasMaxLength(100);
+            entity.Property(b => b.StaffPreference).HasMaxLength(10).IsRequired();
+            entity.Property(b => b.HomeAddress).HasMaxLength(500);
+            entity.Property(b => b.CustomerNote).HasMaxLength(1000);
+            entity.Property(b => b.StatusChangedBy).HasMaxLength(200);
+            entity.Property(b => b.StatusReason).HasMaxLength(300);
+            entity.Property(b => b.Language).HasMaxLength(40);
+            entity.Property(b => b.CustomerNoticeNote).HasMaxLength(500);
+            entity.Property(b => b.ReminderNote).HasMaxLength(300);
         });
 
         modelBuilder.Entity<OpeningHours>(entity =>

@@ -1,0 +1,83 @@
+@model (Booking Booking, ClientConfig Client, string ReturnUrl)
+@{
+    var b = Model.Booking;
+    var c = Model.Client;
+    var start = LocalTime.ToLocal(b.StartUtc, c.TimeZoneId);
+    var end = LocalTime.ToLocal(b.EndUtc, c.TimeZoneId);
+    var (badge, label) = b.Status switch
+    {
+        BookingStatus.Pending => ("bg-warning text-dark", "To confirm"),
+        BookingStatus.Confirmed => ("bg-primary", "Confirmed"),
+        BookingStatus.Completed => ("bg-success", "Completed"),
+        BookingStatus.NoShow => ("bg-danger", "No-show"),
+        BookingStatus.Declined => ("bg-secondary", "Declined"),
+        _ => ("bg-secondary", "Cancelled")
+    };
+}
+<div class="mv-card mv-card-body mb-3" data-testid="booking-card" data-booking-ref="@b.Reference" data-status="@b.Status">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+            <span class="fw-semibold" data-testid="booking-ref">@b.Reference</span>
+            <span class="badge @badge" data-testid="booking-status">@label</span>
+            @if (b.AtHome) { <span class="badge bg-info text-dark">Home service</span> }
+            @if (b.Source == Booking.SourceStaff) { <span class="badge bg-light text-dark border">Added by staff</span> }
+            <div class="mv-subtle small">@(string.IsNullOrWhiteSpace(b.Channel) ? "Walk-in / phone" : Channels.DisplayName(b.Channel)) &middot; booked @LocalTime.ToLocal(b.CreatedAtUtc, c.TimeZoneId).ToString("d MMM, HH:mm")</div>
+        </div>
+        <div class="text-end">
+            <div class="fw-semibold" data-testid="booking-when">@start.ToString("ddd d MMM yyyy") &middot; @BookingDesk.Time(start, c.Country)-@BookingDesk.Time(end, c.Country)</div>
+            @if (b.Total is decimal t) { <div class="small" data-testid="booking-total">@Money.Format(t, b.Currency)</div> }
+        </div>
+    </div>
+    <div class="mt-2">
+        <div><span dir="auto" data-testid="booking-service">@b.ServiceName</span> <span class="mv-subtle">(@BookingDesk.Duration(b.DurationMinutes))</span></div>
+        <div><strong>Staff:</strong> <span data-testid="booking-staff">@(b.StaffName ?? "-")</span>
+            @(b.Source == Booking.SourceStaff ? "" : b.StaffPreference switch { "F" => "(customer asked for female)", "M" => "(customer asked for male)", "staff" => "(customer chose this person)", _ => "" })</div>
+        <div><strong>Customer:</strong> <span dir="auto" data-testid="booking-customer">@(b.CustomerName ?? "-")</span>
+            @if (!string.IsNullOrWhiteSpace(b.CustomerPhone)) { <span>&middot; <a href="tel:@b.CustomerPhone" data-testid="booking-phone">@b.CustomerPhone</a></span> }</div>
+        @if (b.AtHome) { <div><strong>Address:</strong> <span dir="auto" data-testid="booking-address">@b.HomeAddress</span></div> }
+        @if (!string.IsNullOrWhiteSpace(b.CustomerNote)) { <div><strong>Note:</strong> <span dir="auto">@b.CustomerNote</span></div> }
+        @if (!string.IsNullOrWhiteSpace(b.StatusReason)) { <div class="small"><strong>Reason:</strong> @b.StatusReason</div> }
+        @if (b.CustomerConfirmedAtUtc is not null) { <div class="small text-success" data-testid="booking-customer-confirmed">Customer replied "I'll be there".</div> }
+        @if (b.CustomerNoticeSent == false) { <div class="small text-danger" data-testid="booking-notice-failed">Customer not told: @b.CustomerNoticeNote</div> }
+        @if (!string.IsNullOrWhiteSpace(b.ReminderNote))
+        {
+            <div class="small @(b.ReminderNote == "sent" ? "mv-subtle" : "text-danger")" data-testid="booking-reminder">Reminder: @b.ReminderNote</div>
+        }
+        else if (b.ReminderDueUtc is DateTime due && b.Status == BookingStatus.Confirmed)
+        {
+            <div class="small mv-subtle" data-testid="booking-reminder-due">Reminder goes out @LocalTime.ToLocal(due, c.TimeZoneId).ToString("ddd d MMM, HH:mm")</div>
+        }
+    </div>
+    @if (b.IsHolding)
+    {
+        <div class="d-flex flex-wrap gap-2 mt-3 align-items-center">
+            @if (b.Status == BookingStatus.Pending)
+            {
+                <form asp-controller="Bookings" asp-action="SetStatus" method="post" class="d-inline">
+                    <input type="hidden" name="clientConfigId" value="@c.Id" /><input type="hidden" name="id" value="@b.Id" />
+                    <input type="hidden" name="status" value="@BookingStatus.Confirmed" /><input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+                    <button type="submit" class="btn btn-sm btn-primary" data-testid="booking-confirm">Confirm</button>
+                </form>
+            }
+            else
+            {
+                @foreach (var (st, text, css, id) in new[] { (BookingStatus.Completed, "Completed", "btn-success", "booking-complete"), (BookingStatus.NoShow, "No-show", "btn-outline-danger", "booking-noshow") })
+                {
+                    <form asp-controller="Bookings" asp-action="SetStatus" method="post" class="d-inline">
+                        <input type="hidden" name="clientConfigId" value="@c.Id" /><input type="hidden" name="id" value="@b.Id" />
+                        <input type="hidden" name="status" value="@st" /><input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+                        <button type="submit" class="btn btn-sm @css" data-testid="@id">@text</button>
+                    </form>
+                }
+            }
+            <form asp-controller="Bookings" asp-action="SetStatus" method="post" class="d-flex gap-2 flex-wrap" onsubmit="return confirm(this.dataset.confirm)"
+                  data-confirm="@(b.Status == BookingStatus.Pending ? "Decline" : "Cancel") @b.Reference?">
+                <input type="hidden" name="clientConfigId" value="@c.Id" /><input type="hidden" name="id" value="@b.Id" />
+                <input type="hidden" name="status" value="@(b.Status == BookingStatus.Pending ? BookingStatus.Declined : BookingStatus.Cancelled)" />
+                <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+                <input type="text" name="reason" class="form-control form-control-sm" style="max-width: 16rem" maxlength="300" placeholder="Reason for the customer (optional)" data-testid="booking-reason" />
+                <button type="submit" class="btn btn-sm btn-outline-danger" data-testid="booking-decline">@(b.Status == BookingStatus.Pending ? "Decline" : "Cancel booking")</button>
+            </form>
+        </div>
+    }
+</div>

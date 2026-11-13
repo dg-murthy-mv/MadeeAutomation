@@ -38,6 +38,9 @@ public interface IApiService
     /// <summary>Asks WebApi to tell the customer their order was accepted or cancelled. Never throws.</summary>
     Task<OrderNoticeResult> NotifyCustomerAboutOrderAsync(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken = default);
 
+    /// <summary>After staff confirm / decline / cancel a booking: WebApi tells the customer. Never throws.</summary>
+    Task<OrderNoticeResult> NotifyCustomerAboutBookingAsync(Guid clientConfigId, Guid bookingId, CancellationToken cancellationToken = default);
+
     Task<WorkflowTestResult> TestWorkflowAsync(Guid workflowId, string message, string? channel, CancellationToken cancellationToken = default);
 }
 
@@ -83,14 +86,20 @@ public class ApiService : IApiService
         }
     }
 
-    public async Task<OrderNoticeResult> NotifyCustomerAboutOrderAsync(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken = default)
+    public Task<OrderNoticeResult> NotifyCustomerAboutBookingAsync(Guid clientConfigId, Guid bookingId, CancellationToken cancellationToken = default) =>
+        NoticeAsync($"api/internal/clients/{clientConfigId}/bookings/{bookingId}/notify-customer", "Booking", cancellationToken);
+
+    public Task<OrderNoticeResult> NotifyCustomerAboutOrderAsync(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken = default) =>
+        NoticeAsync($"api/internal/clients/{clientConfigId}/orders/{orderId}/notify-customer", "Order", cancellationToken);
+
+    private async Task<OrderNoticeResult> NoticeAsync(string path, string what, CancellationToken cancellationToken)
     {
         var key = _configuration["InternalApi:Key"];
         if (string.IsNullOrWhiteSpace(key))
             return new OrderNoticeResult { Detail = "InternalApi:Key is not set in Admin.Web." };
 
         var client = _httpClientFactory.CreateClient(ClientName);
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"api/internal/clients/{clientConfigId}/orders/{orderId}/notify-customer");
+        using var request = new HttpRequestMessage(HttpMethod.Post, path);
         request.Headers.Add("X-Internal-Key", key.Trim());
 
         try
@@ -99,7 +108,7 @@ public class ApiService : IApiService
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Order notice call to WebApi answered {Status}: {Body}", (int)response.StatusCode, body);
+                _logger.LogWarning("{What} notice call to WebApi answered {Status}: {Body}", what, (int)response.StatusCode, body);
                 return new OrderNoticeResult { Detail = $"WebApi answered {(int)response.StatusCode}." };
             }
             return JsonSerializer.Deserialize<OrderNoticeResult>(body, JsonOptions) ?? new OrderNoticeResult { Detail = "Empty answer from WebApi." };

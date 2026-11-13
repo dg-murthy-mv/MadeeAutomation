@@ -1,0 +1,102 @@
+@model BookingsPageModel
+@{
+    var client = Model.Client;
+    ViewData["Title"] = $"Bookings - {client.ClientName}";
+    var here = Context.Request.Path + Context.Request.QueryString;
+    (string key, string label)[] tabs = { ("todo", $"To confirm ({Model.PendingCount})"), ("upcoming", "Upcoming"), ("day", "Day"), ("past", "Past"), ("all", "All") };
+    var baseRoute = new Dictionary<string, string?>(Model.Pager.Route);
+    string DayLink(DateOnly d) => Url.Action("Index", "Bookings", new Dictionary<string, string?>(baseRoute) { ["show"] = "day", ["day"] = d.ToString("yyyy-MM-dd") })!;
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Bookings</h2>
+        <div class="mv-subtle"><partial name="_ClientCrumb" model="client" /> &middot; times in <strong>@client.TimeZoneId</strong></div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-primary btn-sm" asp-action="Add" asp-route-clientConfigId="@client.Id" asp-route-day="@(Model.Day?.ToString("yyyy-MM-dd"))" data-testid="add-booking">+ Add booking</a>
+        <partial name="_BeautyLinks" model='(client, "bookings")' />
+    </div>
+</div>
+
+@if (!Model.StaffChannelSet)
+{
+    <div class="alert alert-warning" data-testid="bookings-no-staff-channel">
+        Nobody is messaged when a customer books - new bookings only appear on this page.
+        @if (ClientAccess.IsClientUser(User)) { <span>Add an email under <a asp-controller="Portal" asp-action="BusinessInfo">Business info</a>.</span> }
+        else { <span>Set a staff LINE user id or staff email on the client.</span> }
+    </div>
+}
+
+<form asp-action="Index" method="get" class="mv-card mv-card-body mb-3" data-testid="bookings-filter" autocomplete="off">
+    <input type="hidden" name="clientConfigId" value="@client.Id" />
+    <input type="hidden" name="show" value="@Model.Show" />
+    <div class="row g-2 align-items-end">
+        <div class="col-12 col-md-4">
+            <label class="form-label" for="bk-q">Search</label>
+            <input type="search" class="form-control" id="bk-q" name="q" value="@Model.Search" maxlength="100" dir="auto" placeholder="BK number, customer, mobile, service" data-testid="bookings-search" />
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label" for="bk-day">Day</label>
+            <input type="date" class="form-control" id="bk-day" name="day" value="@(Model.Day?.ToString("yyyy-MM-dd"))" data-testid="bookings-day" />
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label" for="bk-staff">Staff</label>
+            <select class="form-select" id="bk-staff" name="staff" data-testid="bookings-staff">
+                <option value="">Everyone</option>
+                @foreach (var m in Model.Staff) { <option value="@m.Id" selected="@(Model.StaffId == m.Id)">@m.Name</option> }
+            </select>
+        </div>
+        <div class="col-12 col-md-2"><button type="submit" class="btn btn-primary w-100" data-testid="bookings-apply">Search</button></div>
+    </div>
+    <div class="d-flex flex-wrap gap-2 mt-2">
+        <a class="btn btn-sm @(Model.Show == "day" && Model.Day == Model.Today ? "btn-secondary" : "btn-outline-secondary")" href="@DayLink(Model.Today)" data-testid="bookings-today">Today</a>
+        <a class="btn btn-sm @(Model.Show == "day" && Model.Day == Model.Today.AddDays(1) ? "btn-secondary" : "btn-outline-secondary")" href="@DayLink(Model.Today.AddDays(1))" data-testid="bookings-tomorrow">Tomorrow</a>
+        @if (Model.IsFiltered) { <a class="btn btn-sm btn-link" asp-action="Index" asp-route-clientConfigId="@client.Id" asp-route-show="@Model.Show" data-testid="bookings-clear">Clear search</a> }
+    </div>
+</form>
+
+<ul class="nav nav-pills flex-wrap gap-1 mb-3" data-testid="booking-tabs">
+    @foreach (var (key, label) in tabs)
+    {
+        var route = new Dictionary<string, string?>(Model.Pager.Route) { ["show"] = key, ["day"] = key == "day" ? (Model.Day ?? Model.Today).ToString("yyyy-MM-dd") : null };
+        <li class="nav-item"><a class="nav-link @(Model.Show == key ? "active" : "")" href="@Url.Action("Index", "Bookings", route)" data-testid="bookings-tab-@key">@label</a></li>
+    }
+</ul>
+
+@if (Model.Show == "day" && Model.Day is DateOnly shownDay)
+{
+    <div class="d-flex align-items-center gap-2 mb-3">
+        <a class="btn btn-sm btn-outline-secondary" href="@DayLink(shownDay.AddDays(-1))" data-testid="bookings-prev-day">&larr;</a>
+        <strong data-testid="bookings-day-title">@shownDay.ToString("dddd d MMMM yyyy")</strong>
+        <a class="btn btn-sm btn-outline-secondary" href="@DayLink(shownDay.AddDays(1))" data-testid="bookings-next-day">&rarr;</a>
+    </div>
+}
+
+@if (Model.Bookings.Items.Count == 0)
+{
+    <div class="mv-card mv-card-body mv-subtle" data-testid="bookings-empty">
+        @(Model.IsFiltered ? "No bookings match this search." : Model.Show switch
+        {
+            "todo" => "Nothing to confirm.",
+            "upcoming" => "No upcoming bookings.",
+            "day" => "No bookings on this day.",
+            "past" => "No past bookings yet.",
+            _ => "No bookings yet."
+        })
+    </div>
+}
+else
+{
+    @foreach (var b in Model.Bookings.Items)
+    {
+        <partial name="_BookingCard" model="(b, client, here)" />
+    }
+    <div class="mv-card"><partial name="_Pager" model="Model.Pager" /></div>
+}
+<div class="form-text mt-2">
+    Bookings from the chat wait for you to confirm them. @(client.NotifyCustomerOnOrderStatus
+        ? "When you confirm, decline or cancel, the customer gets a message in their own language on the channel they booked on."
+        : "Customer messages are switched off: tell the customer yourself.")
+    Declined and cancelled bookings free the time straight away.
+</div>

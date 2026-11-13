@@ -22,15 +22,18 @@ public class InternalController : ControllerBase
     private readonly IWorkflowRepository _workflows;
     private readonly MadeeAutomation.Application.VerticalPacks.Messaging.OrderCustomerNotifier _orderNotifier;
     private readonly MadeeAutomation.Application.VerticalPacks.Messaging.OrderDesk _orderDesk;
+    private readonly MadeeAutomation.Application.VerticalPacks.Beauty.BookingCustomerNotifier _bookingNotifier;
     private readonly ICurrentClientService _clients;
 
     public InternalController(WorkflowEngine engine, IWorkflowRepository workflows,
         MadeeAutomation.Application.VerticalPacks.Messaging.OrderCustomerNotifier orderNotifier,
-        MadeeAutomation.Application.VerticalPacks.Messaging.OrderDesk orderDesk, ICurrentClientService clients)
+        MadeeAutomation.Application.VerticalPacks.Messaging.OrderDesk orderDesk, ICurrentClientService clients,
+        MadeeAutomation.Application.VerticalPacks.Beauty.BookingCustomerNotifier bookingNotifier)
     {
         _engine = engine;
         _workflows = workflows;
         _orderNotifier = orderNotifier;
+        _bookingNotifier = bookingNotifier;
         _orderDesk = orderDesk;
         _clients = clients;
     }
@@ -55,6 +58,17 @@ public class InternalController : ControllerBase
     public async Task<IActionResult> NotifyCustomer(Guid clientConfigId, Guid orderId, CancellationToken cancellationToken)
     {
         var result = await _orderNotifier.NotifyAsync(clientConfigId, orderId, cancellationToken);
+        return Ok(new { outcome = result.Outcome, detail = result.Detail });
+    }
+
+    /// <summary>
+    /// Called by Admin.Web right after staff confirm, decline or cancel a booking: tells the customer on the
+    /// channel they booked on, in their own language. Answers { outcome, detail } like the order notice.
+    /// </summary>
+    [HttpPost("clients/{clientConfigId:guid}/bookings/{bookingId:guid}/notify-customer")]
+    public async Task<IActionResult> NotifyBookingCustomer(Guid clientConfigId, Guid bookingId, CancellationToken cancellationToken)
+    {
+        var result = await _bookingNotifier.NotifyAsync(clientConfigId, bookingId, cancellationToken);
         return Ok(new { outcome = result.Outcome, detail = result.Detail });
     }
 

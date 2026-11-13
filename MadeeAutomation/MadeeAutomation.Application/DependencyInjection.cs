@@ -33,6 +33,13 @@ public static class DependencyInjection
         services.AddScoped<MadeeAutomation.Application.Scheduling.ScheduleRunner>();
         services.AddScoped<CustomerMessageServices>();
         services.AddScoped<OrderCustomerNotifier>();
+
+        // Appointments (beauty & wellness)
+        services.AddScoped<MadeeAutomation.Application.VerticalPacks.Beauty.BookingDesk>();
+        services.AddScoped<MadeeAutomation.Application.VerticalPacks.Beauty.BookingAssistant>();
+        services.AddScoped<MadeeAutomation.Application.VerticalPacks.Beauty.AppointmentServices>();
+        services.AddScoped<MadeeAutomation.Application.VerticalPacks.Beauty.BookingCustomerNotifier>();
+        services.AddScoped<MadeeAutomation.Application.VerticalPacks.Beauty.BookingReminderRunner>();
         services.AddSingleton(TimeProvider.System);   // swap in tests to freeze the clock
 
         // Webhook -> InboundEvents -> background worker pipeline

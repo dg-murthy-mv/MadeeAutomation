@@ -31,6 +31,12 @@ public class Conversation
     /// <summary>The category they looked at last, for the "Add more" button.</summary>
     public string? LastCategory { get; set; }
 
+    /// <summary>
+    /// A step-by-step chat that needs more than a cart, e.g. a booking being made
+    /// (service, staff, date, time, name...). JSON owned by that chat; null when none.
+    /// </summary>
+    public string? FlowJson { get; set; }
+
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 
     public List<CartLine> ReadCart(DateTime utcNow)

@@ -1,0 +1,19 @@
+@model (ClientConfig Client, string Active)
+@* The appointment pages of a beauty / wellness client, side by side. *@
+@{
+    var c = Model.Client;
+    (string controller, string action, string label, string key)[] links =
+    {
+        ("Bookings", "Index", "Bookings", "bookings"),
+        ("Services", "Index", "Services", "services"),
+        ("Staff", "Index", "Staff", "staff"),
+        ("Hours", "Index", "Opening hours", "hours"),
+        ("Bookings", "Settings", "Booking settings", "settings")
+    };
+}
+<div class="d-flex gap-2 flex-wrap" data-testid="beauty-links">
+    @foreach (var (controller, action, label, key) in links.Where(l => l.key != Model.Active))
+    {
+        <a class="btn btn-outline-secondary btn-sm" asp-controller="@controller" asp-action="@action" asp-route-clientConfigId="@c.Id" data-testid="link-@key">@label</a>
+    }
+</div>

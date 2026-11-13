@@ -1,3 +1,4 @@
+using MadeeAutomation.Domain.Enums;
 using System.Globalization;
 using MadeeAutomation.Admin.Web.Models;
 using MadeeAutomation.Admin.Web.Security;
@@ -37,6 +38,9 @@ public class PortalController : Controller
         if (!ClientAccess.IsClientUser(User)) return RedirectToAction("Index", "Clients");
         var client = await OwnClientAsync();
         if (client is null) return NotFound();
+
+        // A spa / salon's day starts with its bookings.
+        if (client.Vertical == VerticalPack.BeautyWellness) return RedirectToAction("Index", "Bookings");
 
         var utcNow = DateTime.UtcNow;
         var localNow = LocalTime.ToLocal(utcNow, client.TimeZoneId);

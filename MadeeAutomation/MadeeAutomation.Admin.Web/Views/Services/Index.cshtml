@@ -1,0 +1,146 @@
+@model ServicesPageModel
+@{
+    var client = Model.Client;
+    ViewData["Title"] = $"Services - {client.ClientName}";
+    var here = Context.Request.Path + Context.Request.QueryString;
+    var groups = Model.Services.GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "" : s.Category!.Trim(), StringComparer.OrdinalIgnoreCase).ToList();
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Services</h2>
+        <div class="mv-subtle"><partial name="_ClientCrumb" model="client" /> &middot; prices in <strong>@client.Currency</strong> &middot; <span data-testid="services-total">@Model.Services.Count service(s)</span></div>
+    </div>
+    <partial name="_BeautyLinks" model='(client, "services")' />
+</div>
+
+@if (Model.Staff.Count == 0)
+{
+    <div class="alert alert-warning" data-testid="services-no-staff">
+        Add your <a asp-controller="Staff" asp-action="Index" asp-route-clientConfigId="@client.Id">staff</a> too: customers can only book a service that someone does.
+    </div>
+}
+@if (!Model.HoursConfigured)
+{
+    <div class="alert alert-warning" data-testid="services-no-hours">
+        Set your <a asp-controller="Hours" asp-action="Index" asp-route-clientConfigId="@client.Id">opening hours</a>: the bot only offers times when you are open.
+    </div>
+}
+
+<div class="mv-card mv-card-body mb-4" data-testid="add-service-card">
+    <h5 class="mv-section-title">Add a service</h5>
+    <form asp-action="Add" method="post" autocomplete="off">
+        <input type="hidden" asp-for="NewService.ClientConfigId" />
+        <div class="row g-2">
+            <div class="col-12 col-md-4">
+                <label asp-for="NewService.Name" class="form-label"></label>
+                <input asp-for="NewService.Name" class="form-control" dir="auto" placeholder="Swedish massage" data-testid="service-name" />
+                <span asp-validation-for="NewService.Name" class="text-danger small" data-testid="service-name-error"></span>
+            </div>
+            <div class="col-6 col-md-2">
+                <label asp-for="NewService.Category" class="form-label"></label>
+                <input asp-for="NewService.Category" class="form-control" dir="auto" placeholder="Massage" list="service-categories" data-testid="service-category" />
+                <datalist id="service-categories">
+                    @foreach (var g in groups.Where(g => g.Key.Length > 0)) { <option value="@g.Key"></option> }
+                    <option value="Massage"></option><option value="Facial"></option><option value="Nails"></option><option value="Hair"></option><option value="Waxing"></option>
+                </datalist>
+            </div>
+            <div class="col-6 col-md-2">
+                <label asp-for="NewService.DurationMinutes" class="form-label">Minutes</label>
+                <input asp-for="NewService.DurationMinutes" class="form-control" type="number" min="5" max="600" step="5" inputmode="numeric" data-testid="service-duration" />
+                <span asp-validation-for="NewService.DurationMinutes" class="text-danger small"></span>
+            </div>
+            <div class="col-6 col-md-2">
+                <label asp-for="NewService.Price" class="form-label">Price (@client.Currency)</label>
+                <input asp-for="NewService.Price" class="form-control" type="number" step="0.01" min="0" inputmode="decimal" data-testid="service-price" />
+                <span asp-validation-for="NewService.Price" class="text-danger small"></span>
+            </div>
+            <div class="col-6 col-md-2">
+                <label asp-for="NewService.BufferMinutes" class="form-label">Clean-up (min)</label>
+                <input asp-for="NewService.BufferMinutes" class="form-control" type="number" min="0" max="240" step="5" inputmode="numeric" data-testid="service-buffer" />
+            </div>
+            <div class="col-12 col-md-6">
+                <label asp-for="NewService.Description" class="form-label"></label>
+                <input asp-for="NewService.Description" class="form-control" dir="auto" placeholder="Relaxing full-body massage with oil" data-testid="service-description" />
+            </div>
+            <div class="col-12 col-md-6 d-flex align-items-end">
+                <div class="form-check mb-2">
+                    <input asp-for="NewService.HomeServiceAllowed" class="form-check-input" data-testid="service-home" />
+                    <label asp-for="NewService.HomeServiceAllowed" class="form-check-label"></label>
+                </div>
+            </div>
+            @if (Model.Staff.Count > 0)
+            {
+                <div class="col-12">
+                    <div class="form-label mb-1">Who can do it</div>
+                    <div class="d-flex flex-wrap gap-3" data-testid="service-staff">
+                        @foreach (var m in Model.Staff)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="NewService.StaffIds" value="@m.Id" id="ns-@m.Id"
+                                       checked="@Model.NewService.StaffIds.Contains(m.Id)" data-testid="service-staff-@m.Name" />
+                                <label class="form-check-label" for="ns-@m.Id">@m.Name</label>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+        <button type="submit" class="btn btn-primary mt-3" data-testid="add-service">Add service</button>
+    </form>
+</div>
+
+<div class="mv-card">
+    @if (Model.Services.Count == 0)
+    {
+        <div class="mv-card-body mv-subtle" data-testid="services-empty">No services yet. Add one above.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table mv-table align-middle mb-0" data-testid="services-table">
+                <thead><tr><th>Service</th><th>Time</th><th>Price</th><th>Who can do it</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var group in groups)
+                {
+                    @if (groups.Count > 1 || group.Key != "")
+                    {
+                        <tr class="table-light"><td colspan="6"><strong>@(group.Key == "" ? "Other" : group.Key)</strong></td></tr>
+                    }
+                    @foreach (var s in group)
+                    {
+                        var who = Model.StaffFor(s.Id);
+                        <tr data-testid="service-row" data-service-name="@s.Name">
+                            <td data-label="Service">
+                                <span dir="auto" class="fw-semibold">@s.Name</span>
+                                @if (s.HomeServiceAllowed) { <span class="badge bg-info text-dark ms-1">Home service</span> }
+                                @if (!string.IsNullOrWhiteSpace(s.Description)) { <div class="small mv-subtle" dir="auto">@s.Description</div> }
+                            </td>
+                            <td data-label="Time" class="text-nowrap">@BookingDesk.Duration(s.DurationMinutes)@(s.BufferMinutes > 0 ? $" + {s.BufferMinutes} min clean-up" : "")</td>
+                            <td data-label="Price" data-testid="service-price-cell">@(s.Price is decimal p ? Money.Format(p, client.Currency) : "No price")</td>
+                            <td data-label="Who" class="small" data-testid="service-who">
+                                @if (who.Count == 0) { <span class="text-danger">Nobody yet - can't be booked</span> }
+                                else { @string.Join(", ", who.Select(m => m.Name)) }
+                            </td>
+                            <td data-label="Status">
+                                @if (s.IsActive) { <span class="badge bg-success" data-testid="service-status">Offered</span> }
+                                else { <span class="badge bg-secondary" data-testid="service-status">Hidden</span> }
+                            </td>
+                            <td class="text-nowrap">
+                                <a class="btn btn-sm btn-outline-primary" asp-action="Edit" asp-route-id="@s.Id" asp-route-returnUrl="@here" data-testid="edit-service">Edit</a>
+                                <form asp-action="ToggleActive" asp-route-id="@s.Id" asp-route-returnUrl="@here" method="post" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary" data-testid="toggle-service">@(s.IsActive ? "Hide" : "Offer")</button>
+                                </form>
+                                <form asp-action="Delete" asp-route-id="@s.Id" asp-route-returnUrl="@here" method="post" class="d-inline" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Delete @s.Name?">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" data-testid="delete-service">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+<div class="form-text mt-2">The bot offers only times when a person who does the service is free for the whole service plus clean-up. Hidden services stay on old bookings but customers can't book them.</div>

@@ -235,7 +235,8 @@ public interface IStaffAlertService
     /// "New order" message to the CLIENT's staff only (their LINE user and/or email) - it does not go to
     /// MadeeAutomation's internal number. subject is used for the email.
     /// </summary>
-    Task<MessageSendResult> SendNewOrderAsync(Guid clientConfigId, string subject, string message, CancellationToken cancellationToken = default);
+    Task<MessageSendResult> SendNewOrderAsync(Guid clientConfigId, string subject, string message, CancellationToken cancellationToken = default,
+        string icon = "🛒");
 }
 
 /// <summary>Thin wrapper over the Anthropic Messages API - see MadeeAutomation.AI project.</summary>

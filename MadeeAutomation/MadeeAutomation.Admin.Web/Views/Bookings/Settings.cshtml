@@ -1,0 +1,73 @@
+@model BookingSettingsPageModel
+@{
+    var client = Model.Client;
+    ViewData["Title"] = $"Booking settings - {client.ClientName}";
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Booking settings</h2>
+        <div class="mv-subtle"><partial name="_ClientCrumb" model="client" /> &middot; how customers can book in the chat</div>
+    </div>
+    <partial name="_BeautyLinks" model='(client, "settings")' />
+</div>
+
+<form asp-action="Settings" method="post" autocomplete="off" class="mv-card mv-card-body" style="max-width: 760px">
+    <input type="hidden" asp-for="Form.ClientConfigId" />
+    <h5 class="mv-section-title">Times offered</h5>
+    <div class="row g-2 mb-3">
+        <div class="col-12 col-md-4">
+            <label asp-for="Form.SlotMinutes" class="form-label"></label>
+            <select asp-for="Form.SlotMinutes" class="form-select" data-testid="set-slot">
+                @foreach (var m in new[] { 15, 20, 30, 45, 60 }) { <option value="@m">@m minutes</option> }
+            </select>
+            <span asp-validation-for="Form.SlotMinutes" class="text-danger small"></span>
+        </div>
+        <div class="col-6 col-md-4">
+            <label asp-for="Form.MinNoticeMinutes" class="form-label"></label>
+            <input asp-for="Form.MinNoticeMinutes" class="form-control" type="number" min="0" max="10080" inputmode="numeric" data-testid="set-notice" />
+            <span asp-validation-for="Form.MinNoticeMinutes" class="text-danger small" data-testid="set-notice-error"></span>
+        </div>
+        <div class="col-6 col-md-4">
+            <label asp-for="Form.DaysAhead" class="form-label"></label>
+            <input asp-for="Form.DaysAhead" class="form-control" type="number" min="1" max="90" inputmode="numeric" data-testid="set-days" />
+            <span asp-validation-for="Form.DaysAhead" class="text-danger small" data-testid="set-days-error"></span>
+        </div>
+    </div>
+
+    <h5 class="mv-section-title">Home service</h5>
+    <div class="form-check mb-2">
+        <input asp-for="Form.HomeServiceEnabled" class="form-check-input" data-testid="set-home" />
+        <label asp-for="Form.HomeServiceEnabled" class="form-check-label"></label>
+    </div>
+    <div class="row g-2 mb-3">
+        <div class="col-6 col-md-4">
+            <label asp-for="Form.HomeServiceFee" class="form-label">Fee (@client.Currency)</label>
+            <input asp-for="Form.HomeServiceFee" class="form-control" type="number" step="0.01" min="0" inputmode="decimal" data-testid="set-home-fee" />
+            <span asp-validation-for="Form.HomeServiceFee" class="text-danger small"></span>
+        </div>
+        <div class="col-6 col-md-4">
+            <label asp-for="Form.HomeServiceTravelMinutes" class="form-label">Travel time (min)</label>
+            <input asp-for="Form.HomeServiceTravelMinutes" class="form-control" type="number" min="0" max="240" inputmode="numeric" data-testid="set-travel" />
+            <span asp-validation-for="Form.HomeServiceTravelMinutes" class="text-danger small"></span>
+        </div>
+    </div>
+    <div class="form-text mb-3">Only services marked "home service" and staff who do home service are offered. Travel time is blocked before and after each home visit.</div>
+
+    <h5 class="mv-section-title">Messages to customers</h5>
+    <div class="form-check mb-1">
+        <input asp-for="Form.NotifyCustomer" class="form-check-input" data-testid="set-notify" />
+        <label asp-for="Form.NotifyCustomer" class="form-check-label"></label>
+    </div>
+    <div class="form-check mb-1">
+        <input asp-for="Form.RemindersEnabled" class="form-check-input" data-testid="set-reminders" />
+        <label asp-for="Form.RemindersEnabled" class="form-check-label"></label>
+    </div>
+    <div class="form-text mb-3">
+        The reminder goes out a day before (2 hours before for bookings made later), with "I'll be there", "Reschedule" and "Cancel" buttons.
+        WhatsApp and Messenger only let a business message a customer within 24 hours of the customer's last message: when a reminder
+        can't be sent, the booking shows it with the customer's mobile number so you can text them. LINE has no such limit.
+    </div>
+
+    <button type="submit" class="btn btn-primary" data-testid="save-settings">Save</button>
+</form>

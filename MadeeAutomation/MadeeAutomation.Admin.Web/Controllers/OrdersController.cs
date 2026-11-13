@@ -33,6 +33,7 @@ public class OrdersController : ClientScopedController
     {
         var client = await _clients.GetWithWorkflowsAsync(Scope(clientConfigId));
         if (client is null) return NotFound();
+        if (client.Vertical == VerticalPack.BeautyWellness) return RedirectToAction("Index", "Bookings", new { clientConfigId = client.Id });
 
         show = show is "new" or "done" or "all" ? show : "open";
         IReadOnlyCollection<OrderStatus>? statuses = show switch

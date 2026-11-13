@@ -1,0 +1,78 @@
+@model StaffPageModel
+@{
+    var client = Model.Client;
+    ViewData["Title"] = $"Staff - {client.ClientName}";
+    string DaysOff(StaffMember m)
+    {
+        var days = Enumerable.Range(0, 7).Where(d => m.IsOffOn((DayOfWeek)d)).Select(d => BusinessClock.Short((DayOfWeek)d)).ToList();
+        return days.Count == 0 ? "None" : string.Join(", ", days);
+    }
+    string Services(StaffMember m)
+    {
+        var names = Model.Services.Where(s => m.Services.Any(x => x.ServiceItemId == s.Id)).Select(s => s.Name).ToList();
+        return names.Count == 0 ? "" : names.Count == Model.Services.Count && names.Count > 2 ? "All services" : string.Join(", ", names);
+    }
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Staff</h2>
+        <div class="mv-subtle"><partial name="_ClientCrumb" model="client" /> &middot; the people customers book with &middot; <span data-testid="staff-total">@Model.Staff.Count person(s)</span></div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-primary btn-sm" asp-action="Create" asp-route-clientConfigId="@client.Id" data-testid="add-staff">+ Add staff</a>
+        <partial name="_BeautyLinks" model='(client, "staff")' />
+    </div>
+</div>
+
+<div class="mv-card">
+    @if (Model.Staff.Count == 0)
+    {
+        <div class="mv-card-body mv-subtle" data-testid="staff-empty">No staff yet. Add the therapists, nail technicians and stylists customers can book.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table mv-table align-middle mb-0" data-testid="staff-table">
+                <thead><tr><th>Name</th><th>Day off</th><th>Services</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var m in Model.Staff)
+                {
+                    var services = Services(m);
+                    <tr data-testid="staff-row" data-staff-name="@m.Name">
+                        <td data-label="Name">
+                            <span class="fw-semibold" dir="auto">@m.Name</span>
+                            @if (!string.IsNullOrWhiteSpace(m.Title)) { <span class="small mv-subtle">&middot; @m.Title</span> }
+                            @if (m.Gender is "F" or "M") { <span class="badge bg-light text-dark border ms-1">@(m.Gender == "F" ? "Female" : "Male")</span> }
+                            @if (m.DoesHomeService) { <span class="badge bg-info text-dark ms-1">Home service</span> }
+                        </td>
+                        <td data-label="Day off" data-testid="staff-days-off">
+                            @if (m.DaysOffMask == 127)
+                            {
+                                <span class="text-danger" data-testid="staff-never-works">Every day - customers can't book them. Edit and tick their working days.</span>
+                            }
+                            else
+                            {
+                                @DaysOff(m)
+                            }
+                        </td>
+                        <td data-label="Services" class="small" data-testid="staff-services">
+                            @if (services.Length == 0) { <span class="text-danger">No services ticked</span> } else { @services }
+                        </td>
+                        <td data-label="Status">
+                            @if (m.IsActive) { <span class="badge bg-success">Working</span> } else { <span class="badge bg-secondary" data-testid="staff-inactive">Not working</span> }
+                        </td>
+                        <td class="text-nowrap">
+                            <a class="btn btn-sm btn-outline-primary" asp-action="Edit" asp-route-id="@m.Id" data-testid="edit-staff">Edit</a>
+                            <form asp-action="Delete" asp-route-id="@m.Id" method="post" class="d-inline" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Delete @m.Name?">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" data-testid="delete-staff">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+<div class="form-text mt-2">Each person serves one customer at a time. The bot never offers a time when nobody suitable is free, and never on their day off. Untick "Working" when someone is on leave.</div>

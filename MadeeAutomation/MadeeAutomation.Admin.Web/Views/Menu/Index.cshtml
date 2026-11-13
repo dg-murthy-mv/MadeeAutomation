@@ -62,7 +62,7 @@
             </div>
             <div class="col-12 col-md-4">
                 <label asp-for="NewItem.Aliases" class="form-label"></label>
-                <input asp-for="NewItem.Aliases" class="form-control" dir="auto" data-testid="item-aliases" placeholder="latte yen, ลาเต้เย็น" />
+                <input asp-for="NewItem.Aliases" class="form-control" dir="auto" data-testid="item-aliases" placeholder="@(client.Country == "TH" ? "latte yen, ลาเต้เย็น" : "cold latte, iced coffee")" />
                 <div class="form-text">Comma-separated. Other ways customers write it, in any language.</div>
             </div>
             <div class="col-6 col-md-2">

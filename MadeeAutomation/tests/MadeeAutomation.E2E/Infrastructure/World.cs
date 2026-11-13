@@ -79,6 +79,10 @@ public static class World
     public const string MetaSecret = "e2e-meta-app-secret";
     public const string MetaVerifyToken = "e2e-verify-me";
     public const string MetaPhoneNumberId = "100000000000001";
+    // Beauty & wellness: a Manila spa + nails + hair
+    public static SeededClient Spa { get; private set; } = null!;
+    public const string SpaPortalEmail = "owner@glowspa.test";
+    public static readonly string SpaStaffLineId = "U" + new string('w', 32);
     public static readonly string TaxStaffLineId = "U" + new string('e', 32);
     public static readonly string ButtonCafeStaffLineId = "U" + new string('d', 32);
 
@@ -305,6 +309,26 @@ public static class World
             }), "", withWorkflow: false, country: "AE", currency: "AED", timeZone: "Asia/Dubai");
         await AddChannelWorkflowAsync(db, MetaNoSecret.Id, "WhatsApp customer messages", "whatsapp");
 
+        // ---- Beauty & wellness: Glow Spa (Manila), open 10:00-21:00 every day, home service +300 / 30 min travel ----
+        Spa = await AddClientAsync(db, "glowspa", "E2E Glow Spa", ClientStatus.Active, Encrypted(Line("glowspa-secret", "glowspa-token")),
+            "glowspa-secret", withWorkflow: false, kb: "Address: 12 Mabini St, Makati. Free WiFi.", staffEmail: "owner@glowspa.test",
+            country: "PH", currency: "PHP", timeZone: "Asia/Manila", staffLine: SpaStaffLineId);
+        await db.ExecAsync(@"UPDATE dbo.ClientConfigs SET Vertical = 5, HomeServiceEnabled = 1, HomeServiceFee = 300, HomeServiceTravelMinutes = 30,
+                                 BookingSlotMinutes = 30, BookingMinNoticeMinutes = 60, BookingDaysAhead = 14 WHERE Id = @id;", ("@id", Spa.Id));
+        await db.ExecAsync(@"
+            INSERT INTO dbo.WorkflowDefinitions (Id, ClientConfigId, Name, HandlerKey, Vertical, TriggerType, Channel, TriggerConfigJson, IsEnabled, CreatedAtUtc, RetryAttempt)
+            VALUES (NEWID(), @c, 'LINE bookings', 'booking-message', 5, 3, 'line', '{}', 1, SYSUTCDATETIME(), 0);", ("@c", Spa.Id));
+        for (var d = 0; d < 7; d++) await AddHoursAsync(db, Spa.Id, d, "10:00", "21:00");
+        var swedish = await AddServiceAsync(db, Spa.Id, "Swedish massage", "Massage", 60, 800m, home: true, buffer: 15, sort: 0);
+        var footSpa = await AddServiceAsync(db, Spa.Id, "Foot spa", "Massage", 45, 500m, home: false, buffer: 0, sort: 1);
+        var gel = await AddServiceAsync(db, Spa.Id, "Gel manicure", "Nails", 60, 650m, home: false, buffer: 0, sort: 0);
+        var haircut = await AddServiceAsync(db, Spa.Id, "Haircut (women)", "Hair", 45, 400m, home: false, buffer: 15, sort: 0);
+        await AddStaffAsync(db, Spa.Id, "Joy", "F", "Therapist", home: true, sort: 0, swedish, footSpa);
+        await AddStaffAsync(db, Spa.Id, "Mark", "M", "Therapist", home: false, sort: 1, swedish, footSpa);
+        await AddStaffAsync(db, Spa.Id, "Ana", "F", "Nail technician", home: false, sort: 2, gel);
+        await AddStaffAsync(db, Spa.Id, "Liza", "F", "Stylist", home: false, sort: 3, haircut);
+        await AddAdminAsync(db, SpaPortalEmail, "Spa Owner", PortalPassword, Spa.Id);
+
         // Old rows hold plain JSON - the app must still read them (and encrypt on the next save).
         Legacy = await AddClientAsync(db, "legacy", "E2E Legacy", ClientStatus.Active,
             Line("legacy-secret", "legacy-token").ToJson(), "legacy-secret", withWorkflow: true);
@@ -335,6 +359,30 @@ public static class World
         }
 
         return new SeededClient(id, code, secret, workflowId);
+    }
+
+    private static async Task<Guid> AddServiceAsync(TestDatabase db, Guid clientId, string name, string category, int minutes, decimal price,
+        bool home, int buffer, int sort)
+    {
+        var id = Guid.NewGuid();
+        await db.ExecAsync(@"
+            INSERT INTO dbo.ServiceItems (Id, ClientConfigId, Name, Category, Description, DurationMinutes, BufferMinutes, Price, HomeServiceAllowed, IsActive, SortOrder, CreatedAtUtc)
+            VALUES (@id, @c, @name, @cat, NULL, @min, @buf, @price, @home, 1, @sort, SYSUTCDATETIME());",
+            ("@id", id), ("@c", clientId), ("@name", name), ("@cat", category), ("@min", minutes), ("@buf", buffer), ("@price", price),
+            ("@home", home), ("@sort", sort));
+        return id;
+    }
+
+    private static async Task AddStaffAsync(TestDatabase db, Guid clientId, string name, string gender, string title, bool home, int sort,
+        params Guid[] services)
+    {
+        var id = Guid.NewGuid();
+        await db.ExecAsync(@"
+            INSERT INTO dbo.StaffMembers (Id, ClientConfigId, Name, Title, Gender, DaysOffMask, DoesHomeService, IsActive, SortOrder, CreatedAtUtc)
+            VALUES (@id, @c, @name, @title, @g, 0, @home, 1, @sort, SYSUTCDATETIME());",
+            ("@id", id), ("@c", clientId), ("@name", name), ("@title", title), ("@g", gender), ("@home", home), ("@sort", sort));
+        foreach (var s in services)
+            await db.ExecAsync("INSERT INTO dbo.StaffServices (StaffMemberId, ServiceItemId) VALUES (@m, @s);", ("@m", id), ("@s", s));
     }
 
     private static Task AddChannelWorkflowAsync(TestDatabase db, Guid clientId, string name, string channel) =>

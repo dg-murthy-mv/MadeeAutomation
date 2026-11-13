@@ -44,7 +44,10 @@ public enum VerticalPack
     FnBRetail = 1,
     CrmSales = 2,
     FinanceChit = 3,
-    CustomerSupport = 4
+    CustomerSupport = 4,
+
+    /// <summary>Spa, massage, nails, hair, beauty: customers book appointments (services + staff + time slots).</summary>
+    BeautyWellness = 5
 }
 
 public enum ClientStatus

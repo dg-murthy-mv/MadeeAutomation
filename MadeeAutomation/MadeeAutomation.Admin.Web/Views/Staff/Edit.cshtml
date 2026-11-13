@@ -1,0 +1,90 @@
+@model StaffEditModel
+@{
+    var client = Model.Client;
+    var isNew = Model.Form.Id == Guid.Empty;
+    ViewData["Title"] = isNew ? "Add staff" : $"Edit {Model.Form.Name}";
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>@(isNew ? "Add staff" : "Edit staff")</h2>
+        <div class="mv-subtle"><a asp-action="Index" asp-route-clientConfigId="@client.Id">Staff</a> &middot; @client.ClientName</div>
+    </div>
+</div>
+
+<form asp-action="@(isNew ? "Create" : "Edit")" asp-route-id="@(isNew ? null : Model.Form.Id)" method="post" autocomplete="off" class="mv-card mv-card-body" style="max-width: 760px">
+    <input type="hidden" asp-for="Form.ClientConfigId" />
+    <div class="row g-2 mb-3">
+        <div class="col-12 col-md-5">
+            <label asp-for="Form.Name" class="form-label"></label>
+            <input asp-for="Form.Name" class="form-control" dir="auto" placeholder="Joy" data-testid="staff-name" />
+            <span asp-validation-for="Form.Name" class="text-danger small" data-testid="staff-name-error"></span>
+        </div>
+        <div class="col-7 col-md-4">
+            <label asp-for="Form.Title" class="form-label"></label>
+            <input asp-for="Form.Title" class="form-control" dir="auto" placeholder="Therapist" list="staff-titles" data-testid="staff-title" />
+            <datalist id="staff-titles"><option value="Therapist"></option><option value="Nail technician"></option><option value="Stylist"></option><option value="Aesthetician"></option></datalist>
+        </div>
+        <div class="col-5 col-md-3">
+            <label asp-for="Form.Gender" class="form-label"></label>
+            <select asp-for="Form.Gender" class="form-select" data-testid="staff-gender">
+                <option value="">Not given</option>
+                <option value="F">Female</option>
+                <option value="M">Male</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="form-label mb-1">Working days</div>
+    <div class="form-text mt-0 mb-2">Untick their weekly day off.</div>
+    <div class="d-flex flex-wrap gap-3 mb-1" data-testid="staff-days">
+        @for (var d = 0; d < 7; d++)
+        {
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="Form.WorkingDays" value="@d" id="work-@d" checked="@Model.Form.WorkingDays.Contains(d)" data-testid="staff-work-@d" />
+                <label class="form-check-label" for="work-@d">@BusinessClock.Short((DayOfWeek)d)</label>
+            </div>
+        }
+    </div>
+    <span asp-validation-for="Form.WorkingDays" class="text-danger small d-block" data-testid="staff-days-error"></span>
+    <div class="mb-3"></div>
+
+    <div class="form-check mb-1">
+        <input asp-for="Form.DoesHomeService" class="form-check-input" data-testid="staff-home" />
+        <label asp-for="Form.DoesHomeService" class="form-check-label"></label>
+    </div>
+    @if (!isNew)
+    {
+        <div class="form-check mb-1">
+            <input asp-for="Form.IsActive" class="form-check-input" data-testid="staff-active" />
+            <label asp-for="Form.IsActive" class="form-check-label"></label>
+        </div>
+        <div class="mb-3 mt-2" style="max-width: 12rem">
+            <label asp-for="Form.SortOrder" class="form-label"></label>
+            <input asp-for="Form.SortOrder" class="form-control" type="number" />
+        </div>
+    }
+
+    <div class="form-label mb-1 mt-3">Services they do</div>
+    @if (Model.Services.Count == 0)
+    {
+        <div class="mv-subtle small mb-3">No services yet - <a asp-controller="Services" asp-action="Index" asp-route-clientConfigId="@client.Id">add services</a>, then tick them here.</div>
+    }
+    else
+    {
+        <div class="d-flex flex-wrap gap-3 mb-3" data-testid="staff-services-boxes">
+            @foreach (var s in Model.Services)
+            {
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="Form.ServiceIds" value="@s.Id" id="sv-@s.Id" checked="@Model.Form.ServiceIds.Contains(s.Id)" data-testid="staff-service-@s.Name" />
+                    <label class="form-check-label" for="sv-@s.Id">@s.Name@(s.IsActive ? "" : " (hidden)")</label>
+                </div>
+            }
+        </div>
+    }
+
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary" data-testid="save-staff">@(isNew ? "Add" : "Save")</button>
+        <a class="btn btn-outline-secondary" asp-action="Index" asp-route-clientConfigId="@client.Id">Cancel</a>
+    </div>
+</form>

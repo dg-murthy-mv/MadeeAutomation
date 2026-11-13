@@ -1,0 +1,77 @@
+@model BookingAddPageModel
+@{
+    var client = Model.Client;
+    ViewData["Title"] = "Add booking";
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Add booking</h2>
+        <div class="mv-subtle"><a asp-action="Index" asp-route-clientConfigId="@client.Id">Bookings</a> &middot; @client.ClientName &middot; a walk-in or a phone call, so the bot never gives that time away</div>
+    </div>
+</div>
+
+<form asp-action="Add" method="post" autocomplete="off" class="mv-card mv-card-body" style="max-width: 760px">
+    <input type="hidden" asp-for="Form.ClientConfigId" />
+    <div asp-validation-summary="ModelOnly" class="text-danger small"></div>
+    <div class="row g-2 mb-2">
+        <div class="col-12 col-md-6">
+            <label asp-for="Form.ServiceId" class="form-label"></label>
+            <select asp-for="Form.ServiceId" class="form-select" data-testid="add-service">
+                <option value="">Choose...</option>
+                @foreach (var s in Model.Services)
+                {
+                    <option value="@s.Id">@s.Name (@BookingDesk.ServiceLine(s, client.Currency))</option>
+                }
+            </select>
+            <span asp-validation-for="Form.ServiceId" class="text-danger small" data-testid="add-service-error"></span>
+        </div>
+        <div class="col-12 col-md-6">
+            <label asp-for="Form.StaffId" class="form-label"></label>
+            <select asp-for="Form.StaffId" class="form-select" data-testid="add-staff-pick">
+                <option value="">Anyone free</option>
+                @foreach (var m in Model.Staff) { <option value="@m.Id">@m.Name</option> }
+            </select>
+            <span asp-validation-for="Form.StaffId" class="text-danger small" data-testid="add-staff-error"></span>
+        </div>
+        <div class="col-7 col-md-4">
+            <label asp-for="Form.Date" class="form-label"></label>
+            <input asp-for="Form.Date" class="form-control" type="date" data-testid="add-date" />
+            <span asp-validation-for="Form.Date" class="text-danger small"></span>
+        </div>
+        <div class="col-5 col-md-3">
+            <label asp-for="Form.Time" class="form-label"></label>
+            <input asp-for="Form.Time" class="form-control" type="time" step="300" data-testid="add-time" />
+            <span asp-validation-for="Form.Time" class="text-danger small" data-testid="add-time-error"></span>
+        </div>
+        <div class="col-12 col-md-5 d-flex align-items-end">
+            <div class="form-check mb-2">
+                <input asp-for="Form.AtHome" class="form-check-input" data-testid="add-home" />
+                <label asp-for="Form.AtHome" class="form-check-label"></label>
+            </div>
+        </div>
+        <div class="col-12">
+            <label asp-for="Form.HomeAddress" class="form-label"></label>
+            <input asp-for="Form.HomeAddress" class="form-control" dir="auto" data-testid="add-address" />
+            <span asp-validation-for="Form.HomeAddress" class="text-danger small"></span>
+        </div>
+        <div class="col-12 col-md-6">
+            <label asp-for="Form.CustomerName" class="form-label"></label>
+            <input asp-for="Form.CustomerName" class="form-control" dir="auto" data-testid="add-customer" />
+            <span asp-validation-for="Form.CustomerName" class="text-danger small" data-testid="add-customer-error"></span>
+        </div>
+        <div class="col-12 col-md-6">
+            <label asp-for="Form.CustomerPhone" class="form-label"></label>
+            <input asp-for="Form.CustomerPhone" class="form-control" type="tel" inputmode="tel" data-testid="add-phone" />
+        </div>
+        <div class="col-12">
+            <label asp-for="Form.CustomerNote" class="form-label"></label>
+            <input asp-for="Form.CustomerNote" class="form-control" dir="auto" data-testid="add-note" />
+        </div>
+    </div>
+    <div class="form-text mb-3">Saved as Confirmed. Opening hours don't limit what staff add, but nobody can be double-booked.</div>
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary" data-testid="save-booking">Add booking</button>
+        <a class="btn btn-outline-secondary" asp-action="Index" asp-route-clientConfigId="@client.Id">Cancel</a>
+    </div>
+</form>

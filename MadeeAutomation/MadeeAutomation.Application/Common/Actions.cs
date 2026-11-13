@@ -90,18 +90,24 @@ public class NotifyInternalAction : IAction
     /// <summary>Parameter "kind" = this value: a "New order" message for the client's own staff (not an alert).</summary>
     public const string OrderKind = "order";
 
+    /// <summary>A booking was made / cancelled / moved: goes to the client's staff, like an order.</summary>
+    public const string BookingKind = "booking";
+
     public async Task<ActionResult> ExecuteAsync(ActionRequest request, CancellationToken cancellationToken = default)
     {
         var message = request.Parameters.GetValueOrDefault("message", "");
         Guid? clientConfigId = Guid.TryParse(request.Parameters.GetValueOrDefault("clientConfigId", ""), out var id) ? id : null;
 
-        if (request.Parameters.GetValueOrDefault("kind") == OrderKind && clientConfigId is { } orderClientId)
+        var kind = request.Parameters.GetValueOrDefault("kind");
+        if (kind is OrderKind or BookingKind && clientConfigId is { } orderClientId)
         {
-            _logger.LogInformation("New order message for staff: {Message}", message);
-            var sent = await _alerts.SendNewOrderAsync(orderClientId, request.Parameters.GetValueOrDefault("subject", "New order"), message, cancellationToken);
+            var what = kind == OrderKind ? "order" : "booking";
+            _logger.LogInformation("New {What} message for staff: {Message}", what, message);
+            var sent = await _alerts.SendNewOrderAsync(orderClientId, request.Parameters.GetValueOrDefault("subject", $"New {what}"), message,
+                cancellationToken, kind == OrderKind ? "🛒" : "📅");
             return sent.Success
-                ? ActionResult.Ok($"Staff told about the order ({sent.Mode}).")
-                : ActionResult.Fail($"Order message to staff failed: {sent.Error}");
+                ? ActionResult.Ok($"Staff told about the {what} ({sent.Mode}).")
+                : ActionResult.Fail($"{(kind == OrderKind ? "Order" : "Booking")} message to staff failed: {sent.Error}");
         }
 
         _logger.LogInformation("Staff alert: {Message}", message);

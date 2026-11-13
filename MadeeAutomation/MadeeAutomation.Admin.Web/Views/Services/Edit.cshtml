@@ -1,0 +1,83 @@
+@model ServiceEditModel
+@{
+    var client = Model.Client;
+    ViewData["Title"] = $"Edit {Model.Form.Name}";
+    string? back = ViewBag.ReturnUrl;
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Edit service</h2>
+        <div class="mv-subtle"><a asp-action="Index" asp-route-clientConfigId="@client.Id">Services</a> &middot; @client.ClientName</div>
+    </div>
+</div>
+
+<form asp-action="Edit" asp-route-id="@Model.Form.Id" asp-route-returnUrl="@back" method="post" autocomplete="off" class="mv-card mv-card-body" style="max-width: 760px">
+    <div class="row g-2 mb-2">
+        <div class="col-12 col-md-8">
+            <label asp-for="Form.Name" class="form-label"></label>
+            <input asp-for="Form.Name" class="form-control" dir="auto" data-testid="service-name" />
+            <span asp-validation-for="Form.Name" class="text-danger small" data-testid="service-name-error"></span>
+        </div>
+        <div class="col-12 col-md-4">
+            <label asp-for="Form.Category" class="form-label"></label>
+            <input asp-for="Form.Category" class="form-control" dir="auto" data-testid="service-category" />
+        </div>
+        <div class="col-6 col-md-3">
+            <label asp-for="Form.DurationMinutes" class="form-label">Minutes</label>
+            <input asp-for="Form.DurationMinutes" class="form-control" type="number" min="5" max="600" step="5" inputmode="numeric" data-testid="service-duration" />
+            <span asp-validation-for="Form.DurationMinutes" class="text-danger small" data-testid="service-duration-error"></span>
+        </div>
+        <div class="col-6 col-md-3">
+            <label asp-for="Form.BufferMinutes" class="form-label">Clean-up (min)</label>
+            <input asp-for="Form.BufferMinutes" class="form-control" type="number" min="0" max="240" step="5" inputmode="numeric" data-testid="service-buffer" />
+            <span asp-validation-for="Form.BufferMinutes" class="text-danger small"></span>
+        </div>
+        <div class="col-6 col-md-3">
+            <label asp-for="Form.Price" class="form-label">Price (@client.Currency)</label>
+            <input asp-for="Form.Price" class="form-control" type="number" step="0.01" min="0" inputmode="decimal" data-testid="service-price" />
+            <span asp-validation-for="Form.Price" class="text-danger small"></span>
+        </div>
+        <div class="col-6 col-md-3">
+            <label asp-for="Form.SortOrder" class="form-label"></label>
+            <input asp-for="Form.SortOrder" class="form-control" type="number" />
+        </div>
+        <div class="col-12">
+            <label asp-for="Form.Description" class="form-label"></label>
+            <input asp-for="Form.Description" class="form-control" dir="auto" data-testid="service-description" />
+        </div>
+    </div>
+    <div class="form-check mb-1">
+        <input asp-for="Form.HomeServiceAllowed" class="form-check-input" data-testid="service-home" />
+        <label asp-for="Form.HomeServiceAllowed" class="form-check-label"></label>
+    </div>
+    <div class="form-check mb-3">
+        <input asp-for="Form.IsActive" class="form-check-input" data-testid="service-active" />
+        <label asp-for="Form.IsActive" class="form-check-label"></label>
+    </div>
+
+    <div class="form-label mb-1">Who can do it</div>
+    @if (Model.Staff.Count == 0)
+    {
+        <div class="mv-subtle small mb-3">No staff yet - <a asp-controller="Staff" asp-action="Create" asp-route-clientConfigId="@client.Id">add staff</a>.</div>
+    }
+    else
+    {
+        <div class="d-flex flex-wrap gap-3 mb-3" data-testid="service-staff">
+            @foreach (var m in Model.Staff)
+            {
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="Form.StaffIds" value="@m.Id" id="st-@m.Id"
+                           checked="@Model.Form.StaffIds.Contains(m.Id)" data-testid="service-staff-@m.Name" />
+                    <label class="form-check-label" for="st-@m.Id">@m.Name@(m.IsActive ? "" : " (not working)")</label>
+                </div>
+            }
+        </div>
+    }
+
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary" data-testid="save-service">Save</button>
+        @if (!string.IsNullOrWhiteSpace(back) && Url.IsLocalUrl(back)) { <a class="btn btn-outline-secondary" href="@back">Cancel</a> }
+        else { <a class="btn btn-outline-secondary" asp-action="Index" asp-route-clientConfigId="@client.Id">Cancel</a> }
+    </div>
+</form>

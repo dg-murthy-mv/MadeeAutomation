@@ -303,6 +303,42 @@ public sealed class FakeServer : IAsyncDisposable
             return Json(new { time = (string?)null, asap = text.Contains("now") || text.Contains("asap") });
         }
 
+        // Beauty & wellness: the booking assistant. Finds a service named in SERVICES, "tomorrow"/"bukas",
+        // and a time like "3pm"; Taglish words ("pwede", "po", "bukas") -> language "tl".
+        if (system.StartsWith("BOOKING ASSISTANT"))
+        {
+            var lang = Regex.IsMatch(text, @"\b(pwede|po|bukas|magkano|ba)\b") ? "tl" : "en";
+            var today = DateOnly.ParseExact(Regex.Match(system, @"Local date: (\d{4}-\d{2}-\d{2})").Groups[1].Value, "yyyy-MM-dd");
+            object Reply(string intent, string reply, bool canAnswer = true, bool needsHuman = false, string? service = null, string? date = null, string? time = null) =>
+                new { intent, language = lang, reply, canAnswer, needsHuman, service, date, time };
+
+            if (text.Contains("pregnant") || text.Contains("refund"))
+                return Json(Reply("question", "A staff member will reply to you soon.", false, true));
+            if (text.Contains("parking"))
+                return Json(Reply("question", "Let me ask our team - they will reply soon.", false, true));
+            if (text.Contains("my booking") || text.Contains("cancel my"))
+                return Json(Reply("my_bookings", "Here are your bookings."));
+            if (text.Contains("price") || text.Contains("services") || text.Contains("magkano lahat"))
+                return Json(Reply("services", "Here are our services."));
+            if (Regex.IsMatch(text, @"\b(book|pwede|available|reserve)\b"))
+            {
+                var names = Regex.Matches(system, @"^- ([^:\n]+):", RegexOptions.Multiline).Select(m => m.Groups[1].Value.Trim()).ToList();
+                var service = names.FirstOrDefault(n => text.Contains(n.ToLowerInvariant()));
+                string? date = text.Contains("tomorrow") || text.Contains("bukas") ? today.AddDays(1).ToString("yyyy-MM-dd")
+                    : text.Contains("today") || text.Contains("ngayon") ? today.ToString("yyyy-MM-dd") : null;
+                var tm = Regex.Match(text, @"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b");
+                string? time = tm.Success
+                    ? $"{int.Parse(tm.Groups[1].Value) % 12 + (tm.Groups[3].Value == "pm" ? 12 : 0):00}:{(tm.Groups[2].Success ? tm.Groups[2].Value : "00")}"
+                    : null;
+                return Json(Reply("book", lang == "tl" ? "Sige po! Hanapan natin kayo ng oras." : "Sure! Let's find you a time.", service: service, date: date, time: time));
+            }
+            if (text.Contains("open") || text.Contains("hours"))
+                return Json(Reply("question", "We are open 10:00-21:00 every day."));
+            if (Regex.IsMatch(text, @"\b(hello|hi|good morning|good afternoon)\b"))
+                return Json(Reply("greeting", "Hi! Welcome to our spa."));
+            return Json(Reply("other", "Thanks for your message!"));
+        }
+
         // The language the customer wrote in (Thai letters -> "th"), as the real AI reports it.
         var language = Regex.IsMatch(user, @"[\u0E00-\u0E7F]") ? "th" : "en";
 

@@ -33,6 +33,7 @@ public class ConversationRepository : IConversationRepository
             existing.State = conversation.State;
             existing.Language = conversation.Language;
             existing.LastCategory = conversation.LastCategory;
+            existing.FlowJson = conversation.FlowJson;
             existing.UpdatedAtUtc = conversation.UpdatedAtUtc;
         }
 

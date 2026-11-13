@@ -69,6 +69,29 @@ public class ClientConfig
     /// </summary>
     public bool MenuButtonsEnabled { get; set; } = true;
 
+    // ---- Appointments (Beauty & wellness clients) ----
+
+    /// <summary>Start times are offered every N minutes (15, 30, 60).</summary>
+    public int BookingSlotMinutes { get; set; } = 30;
+
+    /// <summary>The earliest a customer can book from now, in minutes (e.g. 60 = not within the next hour).</summary>
+    public int BookingMinNoticeMinutes { get; set; } = 60;
+
+    /// <summary>How many days ahead customers can book (today counts as day 1).</summary>
+    public int BookingDaysAhead { get; set; } = 14;
+
+    /// <summary>The business offers home service (staff travel to the customer).</summary>
+    public bool HomeServiceEnabled { get; set; }
+
+    /// <summary>Added to the price of a home-service booking.</summary>
+    public decimal? HomeServiceFee { get; set; }
+
+    /// <summary>Travel time blocked before AND after a home-service booking.</summary>
+    public int HomeServiceTravelMinutes { get; set; } = 30;
+
+    /// <summary>Send the customer a reminder before a confirmed booking.</summary>
+    public bool BookingRemindersEnabled { get; set; } = true;
+
     public bool MerkaiIntegrationEnabled { get; set; }
     public bool PosFirstIntegrationEnabled { get; set; }
 

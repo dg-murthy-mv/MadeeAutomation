@@ -1,0 +1,3 @@
+@model ClientConfig
+@if (ClientAccess.IsClientUser(User)) { <a asp-controller="Portal" asp-action="Index">@Model.ClientName</a> }
+else { <a asp-controller="Clients" asp-action="Details" asp-route-id="@Model.Id">@Model.ClientName</a> }

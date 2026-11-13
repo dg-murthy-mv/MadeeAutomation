@@ -1,3 +1,4 @@
+using MadeeAutomation.Domain.Enums;
 using MadeeAutomation.Admin.Web.Models;
 using MadeeAutomation.Admin.Web.Security;
 using MadeeAutomation.Application.Abstractions;
@@ -31,6 +32,8 @@ public class MenuController : ClientScopedController
     {
         var client = await _clients.GetWithWorkflowsAsync(Scope(clientConfigId));
         if (client is null) return NotFound();
+        // Spas and salons sell services by time, not menu items.
+        if (client.Vertical == VerticalPack.BeautyWellness) return RedirectToAction("Index", "Services", new { clientConfigId = client.Id });
         return View(await PageAsync(client, new MenuItemFormModel { ClientConfigId = client.Id }, q, cat, st, page, ps));
     }
 

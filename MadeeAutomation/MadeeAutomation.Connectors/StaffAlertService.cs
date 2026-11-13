@@ -73,7 +73,8 @@ public class StaffAlertService : IStaffAlertService
         return MessageSendResult.Ok("log only - no staff alert channel set up");
     }
 
-    public async Task<MessageSendResult> SendNewOrderAsync(Guid clientConfigId, string subject, string message, CancellationToken cancellationToken = default)
+    public async Task<MessageSendResult> SendNewOrderAsync(Guid clientConfigId, string subject, string message, CancellationToken cancellationToken = default,
+        string icon = "🛒")
     {
         var client = await _clients.GetClientAsync(clientConfigId, cancellationToken);
         if (client is null) return MessageSendResult.Fail("order message", "Client not found.");
@@ -88,7 +89,7 @@ public class StaffAlertService : IStaffAlertService
                 ClientConfigId = client.Id,
                 Channel = Channels.Line,
                 To = client.StaffAlertLineUserId.Trim(),
-                Text = "🛒 " + message
+                Text = icon + " " + message
             }, cancellationToken);
             (r.Success ? delivered : failed).Add(r.Success ? $"LINE {r.Mode}" : $"LINE: {r.Error}");
         }
