@@ -237,7 +237,10 @@ public sealed class FakeServer : IAsyncDisposable
                 role = "assistant",
                 model = "fake",
                 content = new[] { new { type = "text", text } },
-                stop_reason = "end_turn"
+                stop_reason = "end_turn",
+                // Like Anthropic: tokens used, so the AI cost report has something to add up.
+                // Fixed numbers so tests can check the cost: 1,000 in + 200 out at $3 / $15 per million = $0.006.
+                usage = new { input_tokens = 1000, output_tokens = 200, cache_read_input_tokens = 0, cache_creation_input_tokens = 0 }
             });
         });
 

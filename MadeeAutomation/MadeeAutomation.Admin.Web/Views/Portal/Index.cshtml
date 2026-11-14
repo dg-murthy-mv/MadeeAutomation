@@ -40,6 +40,14 @@
     </div>
 </div>
 
+<div class="mv-card mv-card-body mb-4 d-flex flex-wrap justify-content-between align-items-center gap-2" data-testid="portal-reports-card">
+    <div>
+        <h5 class="mv-section-title mb-1">Reports</h5>
+        <div class="mv-subtle">Orders, sales, best sellers and busiest hours - and what came in while you were closed.</div>
+    </div>
+    <a class="btn btn-outline-primary" asp-controller="Reports" asp-action="Index" data-testid="portal-open-reports">See reports</a>
+</div>
+
 <div class="mv-card mv-card-body mb-4">
     <h5 class="mv-section-title">New orders</h5>
     @if (Model.LatestNewOrders.Count == 0)

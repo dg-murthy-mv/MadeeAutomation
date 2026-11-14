@@ -203,6 +203,11 @@
             <label asp-for="NotifyCustomerOnOrderStatus" class="form-check-label"></label>
             <div class="form-text">The customer gets a message in their own language on the channel they ordered on. On LINE each one is a push message and counts against the account's monthly free messages.</div>
         </div>
+        <div class="form-check mt-2">
+            <input asp-for="MonthlyReportEnabled" class="form-check-input" data-testid="monthly-report" />
+            <label asp-for="MonthlyReportEnabled" class="form-check-label"></label>
+            <div class="form-text">Messages, orders or bookings and sales of the month, with a link to the full report. Needs a staff alert email.</div>
+        </div>
     </div>
 
     @if (Model.IsEdit)

@@ -31,5 +31,10 @@
         <label asp-for="NotifyCustomerOnOrderStatus" class="form-check-label"></label>
         <div class="form-text">The customer gets a short message in their own language, for example "Your order ORD-0012 is confirmed". If you untick this, please tell customers yourself.</div>
     </div>
+    <div class="form-check mb-3">
+        <input asp-for="MonthlyReportEnabled" class="form-check-input" data-testid="business-info-monthly" />
+        <label asp-for="MonthlyReportEnabled" class="form-check-label"></label>
+        <div class="form-text">On the 1st of each month, last month's numbers are emailed to the address above. The full report is always under <a asp-controller="Reports" asp-action="Index">Reports</a>.</div>
+    </div>
     <button type="submit" class="btn btn-primary" data-testid="save-business-info">Save</button>
 </form>

@@ -1,0 +1,28 @@
+@model RankModel
+@{
+    var top = Model.Points.Count == 0 ? 0 : Model.Points.Max(p => p.Value);
+}
+<div class="mv-card mv-card-body" data-testid="@Model.TestId">
+    <h6 class="mb-2">@Model.Title</h6>
+    @if (Model.Points.Count == 0 || top == 0)
+    {
+        <div class="mv-subtle py-2" data-testid="@Model.TestId-empty">@Model.Empty</div>
+    }
+    else
+    {
+        <ul class="mv-rank">
+            @foreach (var p in Model.Points)
+            {
+                <li data-testid="@Model.TestId-row" data-label="@p.Label">
+                    <span class="mv-rank-label" title="@p.Label">@p.Label</span>
+                    <span class="mv-rank-track"><span class="mv-rank-fill d-block" style="width:@((int)Math.Round(p.Value * 100m / top))%"></span></span>
+                    <span class="mv-rank-text">@(p.Text ?? p.Value.ToString("0.##"))@if (p.Note is not null) { <small>@p.Note</small> }</span>
+                </li>
+            }
+        </ul>
+    }
+    @if (!string.IsNullOrEmpty(Model.Footnote))
+    {
+        <div class="form-text mt-2">@Model.Footnote</div>
+    }
+</div>

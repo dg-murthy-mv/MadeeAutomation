@@ -122,6 +122,9 @@ public class BusinessInfoModel
 
     [Display(Name = "Message the customer when I accept or cancel an order")]
     public bool NotifyCustomerOnOrderStatus { get; set; } = true;
+
+    [Display(Name = "Monthly report email")]
+    public bool MonthlyReportEnabled { get; set; } = true;
 }
 
 public class ClientUserFormModel

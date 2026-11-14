@@ -1,3 +1,4 @@
+using MadeeAutomation.Application.Common;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Application.VerticalPacks.Messaging;
 using MadeeAutomation.Domain.Entities;
@@ -162,7 +163,9 @@ public class BookingCustomerNotifier
                 $"Translate it into this language: {booking.Language}. Keep it short, friendly and natural.\n" +
                 $"Keep the booking reference {booking.Reference}, the service and staff names, dates, times, prices and addresses EXACTLY as written. " +
                 "Do not add or remove any information. Answer with the translated message only.";
-            var translated = (await _claude.CompleteAsync(system, english, cancellationToken)).Trim();
+            string translated;
+            using (AiUsageScope.Begin(booking.ClientConfigId, "notice-translate"))
+                translated = (await _claude.CompleteAsync(system, english, cancellationToken)).Trim();
             if (translated.Length is > 0 and <= 900 && translated.Contains(booking.Reference, StringComparison.OrdinalIgnoreCase))
                 return translated;
             _logger.LogWarning("Translation of the booking message for {Reference} was not usable - sending English", booking.Reference);

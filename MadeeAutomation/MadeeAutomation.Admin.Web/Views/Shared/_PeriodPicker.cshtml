@@ -1,0 +1,42 @@
+@model PeriodPickerModel
+@using MadeeAutomation.Domain.Regional
+@{
+    string Link(string key) => Url.Action("Index", Model.Controller, new { clientConfigId = Model.ClientConfigId, period = key })!;
+}
+<div class="mv-card mv-card-body mb-3" data-testid="report-period">
+    <div class="d-flex flex-wrap justify-content-between gap-2 align-items-center">
+        <div class="mv-period" role="group" aria-label="Report period">
+            @foreach (var (key, label) in ReportPeriod.Presets)
+            {
+                <a class="btn btn-sm @(Model.Period.Key == key ? "btn-secondary" : "btn-outline-secondary")" href="@Link(key)"
+                   data-testid="period-@key" aria-current="@(Model.Period.Key == key ? "true" : null)">@label</a>
+            }
+        </div>
+        @if (Model.CsvUrl is not null)
+        {
+            <a class="btn btn-sm btn-outline-primary" href="@Model.CsvUrl" data-testid="report-csv">@Model.CsvLabel</a>
+        }
+    </div>
+    <form method="get" asp-controller="@Model.Controller" asp-action="Index" class="row g-2 align-items-end mt-1" data-testid="period-custom">
+        @if (Model.ClientConfigId is { } id) { <input type="hidden" name="clientConfigId" value="@id" /> }
+        <input type="hidden" name="period" value="@ReportPeriod.Custom" />
+        <div class="col-6 col-md-3">
+            <label class="form-label small mb-1" for="report-from">From</label>
+            <input type="date" class="form-control form-control-sm" id="report-from" name="from" value="@Model.Period.From.ToString("yyyy-MM-dd")" data-testid="period-from" required />
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label small mb-1" for="report-to">To</label>
+            <input type="date" class="form-control form-control-sm" id="report-to" name="to" value="@Model.Period.To.ToString("yyyy-MM-dd")" data-testid="period-to" required />
+        </div>
+        <div class="col-12 col-md-2">
+            <button type="submit" class="btn btn-sm btn-primary w-100" data-testid="period-apply">Show</button>
+        </div>
+        <div class="col-12 col-md-4 mv-subtle small" data-testid="period-label">
+            <strong>@Model.Period.Label</strong> &middot; @Model.Period.Days day@(Model.Period.Days == 1 ? "" : "s")
+        </div>
+    </form>
+    @if (Model.Error is not null)
+    {
+        <div class="alert alert-warning mt-2 mb-0 py-2" data-testid="period-error">@Model.Error</div>
+    }
+</div>

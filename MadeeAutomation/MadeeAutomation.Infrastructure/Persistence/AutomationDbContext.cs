@@ -28,6 +28,7 @@ public class AutomationDbContext : DbContext
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
     public DbSet<StaffService> StaffServices => Set<StaffService>();
     public DbSet<Booking> Bookings => Set<Booking>();
+    public DbSet<AiUsageRecord> AiUsage => Set<AiUsageRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -38,6 +39,7 @@ public class AutomationDbContext : DbContext
             entity.Property(c => c.TaxName).HasMaxLength(20);
             entity.Property(c => c.TaxRatePercent).HasPrecision(5, 2);
             entity.Property(c => c.HomeServiceFee).HasPrecision(18, 2);
+            entity.Property(c => c.MonthlyReportSentFor).HasMaxLength(7);
             entity.ToTable("ClientConfigs");
             entity.HasIndex(c => c.ClientCode).IsUnique();
             entity.Property(c => c.ClientName).HasMaxLength(200).IsRequired();
@@ -179,6 +181,17 @@ public class AutomationDbContext : DbContext
             entity.Property(b => b.ReminderNote).HasMaxLength(300);
         });
 
+        // ---- Reports ----
+        modelBuilder.Entity<AiUsageRecord>(entity =>
+        {
+            entity.ToTable("AiUsage");
+            entity.HasIndex(a => new { a.ClientConfigId, a.CreatedAtUtc });
+            entity.HasIndex(a => a.CreatedAtUtc);
+            entity.Property(a => a.Purpose).HasMaxLength(50).IsRequired();
+            entity.Property(a => a.Model).HasMaxLength(100).IsRequired();
+            entity.Property(a => a.CostUsd).HasPrecision(18, 6);
+        });
+
         modelBuilder.Entity<OpeningHours>(entity =>
         {
             entity.ToTable("OpeningHours");
@@ -243,6 +256,7 @@ public class AutomationDbContext : DbContext
             // The duplicate guard: a re-delivered event hits this index and is ignored.
             entity.HasIndex(e => new { e.ClientConfigId, e.Channel, e.ExternalEventId }).IsUnique();
             entity.HasIndex(e => new { e.Status, e.ReceivedAtUtc });
+            entity.HasIndex(e => new { e.ClientConfigId, e.ReceivedAtUtc });   // reports
         });
 
         // Every DateTime in this model is UTC. SQL Server hands datetime2 back with Kind=Unspecified,

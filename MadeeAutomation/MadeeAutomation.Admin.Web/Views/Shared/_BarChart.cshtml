@@ -1,0 +1,46 @@
+@model ChartModel
+@{
+    var n = Model.Points.Count;
+    var peak = Model.Peak;
+    // Label every k-th bar so the labels never overlap, even on a phone.
+    var every = Math.Max(1, (int)Math.Ceiling(n / 7.0));
+    var columns = $"grid-template-columns: repeat({Math.Max(1, n)}, minmax(0, 1fr));";
+    var busiest = n == 0 || peak == 0 ? null : Model.Points.First(p => p.Value == peak);
+}
+<div class="mv-card mv-card-body" data-testid="@Model.TestId">
+    <div class="d-flex justify-content-between align-items-baseline gap-2 flex-wrap mb-2">
+        <h6 class="mb-0">@Model.Title</h6>
+        @if (busiest is not null)
+        {
+            <span class="mv-chart-peak">Busiest: @busiest.Label (@(busiest.Text ?? busiest.Value.ToString("0.##")))</span>
+        }
+    </div>
+    @if (n == 0 || peak == 0)
+    {
+        <div class="mv-empty py-4 text-center mv-subtle" data-testid="@Model.TestId-empty">Nothing yet in this period.</div>
+    }
+    else
+    {
+        <div class="mv-chart" role="img" aria-label="@Model.Title. Busiest: @busiest!.Label with @(busiest.Text ?? busiest.Value.ToString("0.##")) @Model.Unit.">
+            <div class="mv-chart-bars" style="@columns">
+                @foreach (var p in Model.Points)
+                {
+                    var pct = peak == 0 ? 0 : (int)Math.Round(p.Value * 100m / peak);
+                    <div class="mv-bar-col" title="@p.Label: @(p.Text ?? p.Value.ToString("0.##")) @Model.Unit">
+                        <div class="mv-bar @(p.Value == 0 ? "mv-bar-zero" : "")" style="height:@(p.Value == 0 ? 1 : Math.Max(2, pct))%"></div>
+                    </div>
+                }
+            </div>
+            <div class="mv-chart-labels" style="@columns" aria-hidden="true">
+                @for (var i = 0; i < n; i++)
+                {
+                    <span>@(i % every == 0 ? Model.Points[i].Label : "")</span>
+                }
+            </div>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(Model.Footnote))
+    {
+        <div class="form-text mt-2">@Model.Footnote</div>
+    }
+</div>

@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using MadeeAutomation.Application.Abstractions;
+using MadeeAutomation.Domain.Entities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -18,6 +19,11 @@ namespace MadeeAutomation.AI;
 ///   Anthropic:MaxTokens       default 1024
 ///   Anthropic:TimeoutSeconds  default 60 (per attempt)
 ///   Anthropic:MaxRetries      default 2   (on 429 / 5xx / 529 overloaded / network errors)
+///   Anthropic:PriceInputPerMillion   default 3    (US$ per million input tokens - for the AI cost report)
+///   Anthropic:PriceOutputPerMillion  default 15   (US$ per million output tokens)
+///   Cache reads are priced at 10% of input and cache writes at 125%, as Anthropic does.
+///
+/// Every successful call is recorded (tokens + cost) against the client in AiUsageScope - see IAiUsageRecorder.
 /// </summary>
 public class ClaudeService : IClaudeService
 {
@@ -29,11 +35,18 @@ public class ClaudeService : IClaudeService
     private readonly int _maxTokens;
     private readonly TimeSpan _timeout;
     private readonly int _maxRetries;
+    private readonly decimal _priceInput;
+    private readonly decimal _priceOutput;
+    private readonly IAiUsageRecorder? _usage;
 
-    public ClaudeService(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<ClaudeService> logger)
+    public ClaudeService(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<ClaudeService> logger,
+        IAiUsageRecorder? usage = null)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _usage = usage;
+        _priceInput = Price(configuration["Anthropic:PriceInputPerMillion"], 3m);
+        _priceOutput = Price(configuration["Anthropic:PriceOutputPerMillion"], 15m);
 
         var key = configuration["Anthropic:ApiKey"];
         _apiKey = string.IsNullOrWhiteSpace(key) || key.StartsWith("SET_", StringComparison.OrdinalIgnoreCase) ? null : key.Trim();
@@ -81,7 +94,11 @@ public class ClaudeService : IClaudeService
                 response = await client.SendAsync(request, attemptCts.Token);
                 var body = await response.Content.ReadAsStringAsync(attemptCts.Token);
 
-                if (response.IsSuccessStatusCode) return ExtractText(body);
+                if (response.IsSuccessStatusCode)
+                {
+                    await RecordUsageAsync(body);
+                    return ExtractText(body);
+                }
 
                 var status = (int)response.StatusCode;
                 var retryable = status is 429 or 500 or 502 or 503 or 504 or 529;
@@ -134,6 +151,57 @@ public class ClaudeService : IClaudeService
         return trimmed;
     }
 
+    private static decimal Price(string? value, decimal fallback) =>
+        decimal.TryParse(value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var p) && p >= 0 ? p : fallback;
+
+    /// <summary>Tokens and cost of one call, from the "usage" part of Anthropic's answer.</summary>
+    public static (int Input, int Output, int CacheRead, int CacheWrite, string? Model) ReadUsage(string responseBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            var root = doc.RootElement;
+            string? model = root.TryGetProperty("model", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null;
+            if (!root.TryGetProperty("usage", out var u) || u.ValueKind != JsonValueKind.Object) return (0, 0, 0, 0, model);
+            int Int(string name) => u.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var i) ? i : 0;
+            return (Int("input_tokens"), Int("output_tokens"), Int("cache_read_input_tokens"), Int("cache_creation_input_tokens"), model);
+        }
+        catch (JsonException)
+        {
+            return (0, 0, 0, 0, null);
+        }
+    }
+
+    public decimal Cost(int input, int output, int cacheRead, int cacheWrite) =>
+        Math.Round((input * _priceInput + output * _priceOutput + cacheRead * _priceInput * 0.1m + cacheWrite * _priceInput * 1.25m) / 1_000_000m, 6);
+
+    private async Task RecordUsageAsync(string body)
+    {
+        if (_usage is null) return;
+        try
+        {
+            var (input, output, cacheRead, cacheWrite, model) = ReadUsage(body);
+            var scope = AiUsageScopeReader.Current();
+            await _usage.RecordAsync(new AiUsageRecord
+            {
+                ClientConfigId = scope?.ClientConfigId,
+                Purpose = scope?.Purpose ?? "other",
+                IsTest = scope?.IsTest ?? false,
+                Model = model ?? _model,
+                InputTokens = input,
+                OutputTokens = output,
+                CacheReadTokens = cacheRead,
+                CacheWriteTokens = cacheWrite,
+                CostUsd = Cost(input, output, cacheRead, cacheWrite)
+            }, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            // The customer's reply matters more than the report - never fail the call over this.
+            _logger.LogWarning(ex, "AI usage could not be recorded");
+        }
+    }
+
     private static string ExtractText(string responseBody)
     {
         using var doc = JsonDocument.Parse(responseBody);
@@ -157,4 +225,10 @@ public class ClaudeService : IClaudeService
     }
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "...";
+}
+
+/// <summary>Reads the current AiUsageScope (kept separate so the AI project's use of it is in one place).</summary>
+internal static class AiUsageScopeReader
+{
+    public static MadeeAutomation.Application.Common.AiUsageScope.Context? Current() => MadeeAutomation.Application.Common.AiUsageScope.Current;
 }

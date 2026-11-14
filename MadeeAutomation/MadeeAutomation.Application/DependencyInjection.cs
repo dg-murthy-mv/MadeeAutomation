@@ -42,6 +42,11 @@ public static class DependencyInjection
         services.AddScoped<MadeeAutomation.Application.VerticalPacks.Beauty.BookingReminderRunner>();
         services.AddSingleton(TimeProvider.System);   // swap in tests to freeze the clock
 
+        // Reports (the monthly email is sent from WebApi)
+        services.AddScoped<MadeeAutomation.Application.Reports.ReportBuilder>();
+        services.AddScoped<MadeeAutomation.Application.Reports.AdminReportBuilder>();
+        services.AddScoped<MadeeAutomation.Application.Reports.MonthlyReportRunner>();
+
         // Webhook -> InboundEvents -> background worker pipeline
         services.AddSingleton<InboundSignal>();
         services.AddScoped<InboundEventIngestor>();

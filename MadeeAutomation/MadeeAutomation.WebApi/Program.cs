@@ -39,6 +39,7 @@ try
     builder.Services.AddHostedService<InboundEventWorker>();
     builder.Services.AddHostedService<SchedulerWorker>();
     builder.Services.AddHostedService<BookingReminderWorker>();
+    builder.Services.AddHostedService<MonthlyReportWorker>();
 
     var app = builder.Build();
 

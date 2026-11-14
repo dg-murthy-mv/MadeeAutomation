@@ -107,6 +107,9 @@ public class WorkflowEngine
         context.ClientConfigId = workflow.ClientConfigId;
         context.Client = workflow.ClientConfig;
 
+        // Every AI call made during this run is recorded against this client (Admin -> Reports -> AI cost).
+        using var aiUsage = AiUsageScope.Begin(workflow.ClientConfigId, workflow.HandlerKey, context.IsTest);
+
         var stopwatch = Stopwatch.StartNew();
         var executionLog = await _executionLogRepository.StartAsync(workflow, context, cancellationToken);
         var records = new List<ActionRecord>();

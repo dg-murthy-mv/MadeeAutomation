@@ -56,12 +56,14 @@
                                 <a class="nav-link" asp-controller="Orders" asp-action="Index" data-testid="nav-orders">Orders</a>
                                 <a class="nav-link" asp-controller="Menu" asp-action="Index" data-testid="nav-menu">Menu</a>
                             }
+                            <a class="nav-link" asp-controller="Reports" asp-action="Index" data-testid="nav-reports">Reports</a>
                             <a class="nav-link" asp-controller="Hours" asp-action="Index" data-testid="nav-hours">Opening hours</a>
                             <a class="nav-link" asp-controller="Portal" asp-action="BusinessInfo" data-testid="nav-business-info">Business info</a>
                         }
                         else
                         {
                             <a class="nav-link" asp-controller="Clients" asp-action="Index">Clients</a>
+                            <a class="nav-link" asp-controller="AdminReports" asp-action="Index" data-testid="nav-admin-reports">Reports</a>
                             <a class="nav-link" asp-controller="AdminUsers" asp-action="Index" data-testid="nav-admins">Admin users</a>
                         }
                         <a class="nav-link mv-nav-user" asp-controller="Account" asp-action="MyAccount" data-testid="nav-user">@User.Identity.Name</a>

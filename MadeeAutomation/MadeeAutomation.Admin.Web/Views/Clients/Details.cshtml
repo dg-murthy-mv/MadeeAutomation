@@ -117,6 +117,7 @@
             <a class="btn btn-sm btn-outline-primary" asp-controller="Staff" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-staff">Staff</a>
             <a class="btn btn-sm btn-outline-primary" asp-controller="Hours" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-hours">Opening hours</a>
             <a class="btn btn-sm btn-outline-primary" asp-controller="Bookings" asp-action="Settings" asp-route-clientConfigId="@client.Id" data-testid="open-booking-settings">Booking settings</a>
+            <a class="btn btn-sm btn-outline-primary" asp-controller="Reports" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-reports">Reports</a>
         </div>
         <div class="form-text">Use the "Customer messages (appointments + FAQ + hand-over)" workflow for this client's channels.</div>
     </div>
@@ -135,6 +136,7 @@ else
                 <div class="small mv-subtle">Using the old menu text for now. Open Menu to import it.</div>
             }
             <a class="btn btn-sm btn-outline-primary mt-2" asp-controller="Menu" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-menu">Menu</a>
+            <a class="btn btn-sm btn-outline-primary mt-2" asp-controller="Reports" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-reports">Reports</a>
         </div>
         <div class="col-12 col-md-6">
             <div><strong>Right now:</strong> <span data-testid="hours-status">@(Model.HoursStatus?.StatusText ?? "Opening hours are not set.")</span></div>

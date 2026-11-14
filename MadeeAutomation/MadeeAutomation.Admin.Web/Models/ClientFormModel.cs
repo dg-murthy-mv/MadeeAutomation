@@ -51,6 +51,9 @@ public class ClientFormModel
     [Display(Name = "Message the customer when an order is accepted or cancelled")]
     public bool NotifyCustomerOnOrderStatus { get; set; } = true;
 
+    [Display(Name = "Email last month's report to the staff alert email (1st of each month, 8 AM)")]
+    public bool MonthlyReportEnabled { get; set; } = true;
+
     [EmailAddress, StringLength(256), Display(Name = "Staff alert email")]
     public string? StaffAlertEmail { get; set; }
 

@@ -73,7 +73,8 @@ public class PortalController : Controller
             ClientName = client.ClientName,
             KnowledgeBaseText = client.KnowledgeBaseText,
             StaffAlertEmail = client.StaffAlertEmail,
-            NotifyCustomerOnOrderStatus = client.NotifyCustomerOnOrderStatus
+            NotifyCustomerOnOrderStatus = client.NotifyCustomerOnOrderStatus,
+            MonthlyReportEnabled = client.MonthlyReportEnabled
         });
     }
 
@@ -91,6 +92,7 @@ public class PortalController : Controller
         client.KnowledgeBaseText = string.IsNullOrWhiteSpace(model.KnowledgeBaseText) ? null : model.KnowledgeBaseText.Trim();
         client.StaffAlertEmail = string.IsNullOrWhiteSpace(model.StaffAlertEmail) ? null : model.StaffAlertEmail.Trim();
         client.NotifyCustomerOnOrderStatus = model.NotifyCustomerOnOrderStatus;
+        client.MonthlyReportEnabled = model.MonthlyReportEnabled;
         await _clients.UpdateAsync(client);
 
         _logger.LogInformation("{By} updated the business information of {ClientCode} in the portal", User.Identity?.Name, client.ClientCode);

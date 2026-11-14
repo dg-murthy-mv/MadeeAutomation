@@ -92,6 +92,12 @@ public class ClientConfig
     /// <summary>Send the customer a reminder before a confirmed booking.</summary>
     public bool BookingRemindersEnabled { get; set; } = true;
 
+    /// <summary>Email last month's report to StaffAlertEmail on the 1st of each month (8 AM client time).</summary>
+    public bool MonthlyReportEnabled { get; set; } = true;
+
+    /// <summary>The month ("2026-10") the monthly report email was last sent for, so it goes out once.</summary>
+    public string? MonthlyReportSentFor { get; set; }
+
     public bool MerkaiIntegrationEnabled { get; set; }
     public bool PosFirstIntegrationEnabled { get; set; }
 

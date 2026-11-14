@@ -1,0 +1,152 @@
+@model ClientReportPageModel
+@using MadeeAutomation.Application.Reports
+@using MadeeAutomation.Domain.Regional
+@{
+    var r = Model.Report;
+    var client = r.Client;
+    var c = client.Currency;
+    ViewData["Title"] = $"Reports - {client.ClientName}";
+    string N(int n) => n.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+    var hoursHint = r.HoursConfigured ? null : "Set opening hours to see what came in while you were closed.";
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Reports</h2>
+        <div class="mv-subtle">
+            <partial name="_ClientCrumb" model="client" />
+            &middot; times in <strong>@client.TimeZoneId</strong> &middot; compared with @r.PreviousPeriod.Label
+        </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        @if (Model.EmailTo is not null)
+        {
+            <form asp-action="Email" method="post" class="d-inline" data-testid="report-email-form">
+                @if (!ClientAccess.IsClientUser(User)) { <input type="hidden" name="clientConfigId" value="@client.Id" /> }
+                <input type="hidden" name="period" value="@r.Period.Key" />
+                <input type="hidden" name="from" value="@r.Period.From.ToString("yyyy-MM-dd")" />
+                <input type="hidden" name="to" value="@r.Period.To.ToString("yyyy-MM-dd")" />
+                <button type="submit" class="btn btn-outline-secondary" data-testid="report-email" title="Sends a short summary to @Model.EmailTo">Email this report</button>
+            </form>
+        }
+    </div>
+</div>
+
+<partial name="_PeriodPicker" model="Model.Picker" />
+<partial name="_ReportTiles" model="r.Tiles" />
+
+@if (r.Kind == ClientReportKind.Bookings)
+{
+    <div class="mv-report-grid mb-3">
+        <partial name="_BarChart" model='new ChartModel { TestId = "chart-appointments", Title = "Appointments per day", Points = r.AppointmentsPerDay, Unit = "appointments" }' />
+        <partial name="_BarChart" model='new ChartModel { TestId = "chart-appointment-hours", Title = "Busiest times (appointment start)", Points = r.AppointmentsByHour, Unit = "appointments" }' />
+        <partial name="_BarChart" model='new ChartModel { TestId = "chart-weekdays", Title = "Busiest days of the week", Points = r.AppointmentsByWeekday, Unit = "appointments" }' />
+        <partial name="_RankList" model='new RankModel { TestId = "top-services", Title = "Most booked services", Points = r.TopServices, Footnote = "Value = completed and upcoming appointments (no-shows not counted)." }' />
+    </div>
+
+    <div class="mv-card mb-3" data-testid="staff-table">
+        <div class="mv-card-body pb-2"><h6 class="mb-0">Staff</h6></div>
+        @if (r.StaffLines.Count == 0)
+        {
+            <div class="mv-card-body pt-0 mv-subtle">No appointments in this period.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table mv-table mb-0">
+                    <thead><tr><th>Name</th><th class="text-end">Booked</th><th class="text-end">Completed</th><th class="text-end">No-shows</th><th class="text-end">Revenue</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in r.StaffLines)
+                        {
+                            <tr data-testid="staff-row" data-staff="@s.Name">
+                                <td data-label="Name" class="mv-td-title fw-semibold">@s.Name</td>
+                                <td data-label="Booked" class="text-end">@N(s.Booked)</td>
+                                <td data-label="Completed" class="text-end">@N(s.Completed)</td>
+                                <td data-label="No-shows" class="text-end">@N(s.NoShows)</td>
+                                <td data-label="Revenue" class="text-end">@Money.Format(s.Revenue, c)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <div class="mv-card mv-card-body mb-3" data-testid="booking-facts">
+        <h6>More about these appointments</h6>
+        <dl class="row mb-0 small">
+            <dt class="col-7 col-md-4">Cancelled or declined</dt><dd class="col-5 col-md-2" data-testid="fact-cancelled">@N(r.CancelledOrDeclined)</dd>
+            <dt class="col-7 col-md-4">Walk-ins and phone bookings</dt><dd class="col-5 col-md-2" data-testid="fact-walkins">@N(r.WalkIns)</dd>
+            <dt class="col-7 col-md-4">Home service</dt><dd class="col-5 col-md-2" data-testid="fact-home">@N(r.AtHome)</dd>
+            <dt class="col-7 col-md-4">Still to come (waiting or confirmed)</dt><dd class="col-5 col-md-2">@N(r.Upcoming)</dd>
+        </dl>
+    </div>
+}
+else if (r.Kind == ClientReportKind.Orders)
+{
+    <div class="mv-report-grid mb-3">
+        <partial name="_BarChart" model='new ChartModel { TestId = "chart-orders", Title = "Orders per day", Points = r.OrdersPerDay, Unit = "orders" }' />
+        <partial name="_BarChart" model='new ChartModel { TestId = "chart-order-hours", Title = "Busiest hours (orders)", Points = r.OrdersByHour, Unit = "orders" }' />
+        <partial name="_RankList" model='new RankModel { TestId = "top-items", Title = "Best sellers", Points = r.TopItems, Footnote = "Cancelled orders are not counted." }' />
+    </div>
+}
+
+<h5 class="mt-4 mb-3">Customer messages</h5>
+<div class="mv-report-grid mb-3">
+    <partial name="_BarChart" model='new ChartModel { TestId = "chart-messages", Title = "Messages per day", Points = r.MessagesPerDay, Unit = "messages" }' />
+    <partial name="_BarChart" model='new ChartModel { TestId = "chart-message-hours", Title = "When customers write", Points = r.MessagesByHour, Unit = "messages", Footnote = hoursHint }' />
+    <div class="mv-card mv-card-body" data-testid="message-facts">
+        <h6>About the chats</h6>
+        <dl class="row mb-0 small">
+            <dt class="col-8">Customers</dt><dd class="col-4" data-testid="fact-customers">@N(r.Customers)</dd>
+            <dt class="col-8">New / returning</dt><dd class="col-4" data-testid="fact-new">@N(r.NewCustomers) / @N(r.ReturningCustomers)</dd>
+            <dt class="col-8">Tapped a button / typed</dt><dd class="col-4" data-testid="fact-taps">@N(r.Tapped) / @N(r.Typed)</dd>
+            <dt class="col-8">While you were closed</dt><dd class="col-4" data-testid="fact-afterhours">@(r.AfterHoursMessages is { } ah ? N(ah) : "-")</dd>
+            <dt class="col-8">Handed to your staff</dt><dd class="col-4" data-testid="fact-staff">@N(r.NeededStaff)</dd>
+        </dl>
+    </div>
+    <partial name="_RankList" model='new RankModel { TestId = "channels", Title = "Channels", Points = r.Channels }' />
+    @if (r.Kind != ClientReportKind.MessagesOnly)
+    {
+        <partial name="_RankList" model='new RankModel { TestId = "languages", Title = r.Kind == ClientReportKind.Bookings ? "Languages (chat bookings)" : "Languages (orders)", Points = r.Languages }' />
+    }
+</div>
+
+@if (Model.ShowAiCost)
+{
+    <div class="mv-card mb-3" data-testid="client-ai-cost">
+        <div class="mv-card-body pb-2">
+            <h6 class="mb-0">AI cost for this client <span class="badge text-bg-secondary ms-1">MadeeVision only</span></h6>
+            <div class="mt-1">Total: <strong data-testid="client-ai-total">@AdminReportBuilder.Usd(Model.AiByPurpose.Sum(a => a.CostUsd))</strong> for @N(Model.AiByPurpose.Sum(a => a.Calls)) calls</div>
+            <div class="form-text">The client never sees this part.</div>
+        </div>
+        @if (Model.AiByPurpose.Count == 0)
+        {
+            <div class="mv-card-body pt-0 mv-subtle">No AI calls recorded in this period.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table mv-table mb-0">
+                    <thead><tr><th>What for</th><th class="text-end">Calls</th><th class="text-end">Tokens in / out</th><th class="text-end">Cost</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in Model.AiByPurpose)
+                        {
+                            <tr data-testid="ai-row" data-purpose="@a.Purpose">
+                                <td data-label="What for" class="mv-td-title">@AdminReportBuilder.PurposeText(a.Purpose)@(a.IsTest ? " (Admin tests)" : "")</td>
+                                <td data-label="Calls" class="text-end">@N(a.Calls)</td>
+                                <td data-label="Tokens in / out" class="text-end">@a.InputTokens.ToString("N0") / @a.OutputTokens.ToString("N0")</td>
+                                <td data-label="Cost" class="text-end">@AdminReportBuilder.Usd(a.CostUsd)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+<div class="form-text mb-4">
+    Numbers count customer messages and button taps (not "add friend"). Orders: cancelled orders are left out of the totals.
+    Appointments are counted on the day they take place; "Booked in the chat" counts requests made in this period.
+</div>

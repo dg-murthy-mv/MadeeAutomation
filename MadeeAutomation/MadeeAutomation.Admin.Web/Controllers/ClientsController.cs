@@ -145,6 +145,7 @@ public class ClientsController : Controller
             FallbackReplyText = client.FallbackReplyText,
             StaffAlertEmail = client.StaffAlertEmail,
             NotifyCustomerOnOrderStatus = client.NotifyCustomerOnOrderStatus,
+            MonthlyReportEnabled = client.MonthlyReportEnabled,
             MenuButtonsEnabled = client.MenuButtonsEnabled,
             TaxName = client.TaxName,
             TaxRatePercent = client.TaxRatePercent,
@@ -459,6 +460,7 @@ public class ClientsController : Controller
         client.FallbackReplyText = Clean(model.FallbackReplyText);
         client.StaffAlertEmail = Clean(model.StaffAlertEmail)?.ToLowerInvariant();
         client.NotifyCustomerOnOrderStatus = model.NotifyCustomerOnOrderStatus;
+        client.MonthlyReportEnabled = model.MonthlyReportEnabled;
         client.MenuButtonsEnabled = model.MenuButtonsEnabled;
         client.TaxName = Clean(model.TaxName);
         client.TaxRatePercent = client.TaxName is null ? null : model.TaxRatePercent;

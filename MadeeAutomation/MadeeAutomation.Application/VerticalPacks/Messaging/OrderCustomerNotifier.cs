@@ -1,3 +1,4 @@
+using MadeeAutomation.Application.Common;
 using System.Globalization;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Domain.Entities;
@@ -116,7 +117,9 @@ public class OrderCustomerNotifier
                 $"Translate it into this language: {order.Language}. Keep it short, friendly and natural.\n" +
                 $"Keep the order reference {order.Reference}, item names, numbers, prices and times EXACTLY as written. " +
                 "Do not add or remove any information. Answer with the translated message only - no quotes, no notes.";
-            var translated = (await _claude.CompleteAsync(system, english, cancellationToken)).Trim();
+            string translated;
+            using (AiUsageScope.Begin(order.ClientConfigId, "notice-translate"))
+                translated = (await _claude.CompleteAsync(system, english, cancellationToken)).Trim();
 
             // Safety net: it must still carry the order reference and be a sensible length.
             if (translated.Length is > 0 and <= 900 && translated.Contains(order.Reference, StringComparison.OrdinalIgnoreCase))

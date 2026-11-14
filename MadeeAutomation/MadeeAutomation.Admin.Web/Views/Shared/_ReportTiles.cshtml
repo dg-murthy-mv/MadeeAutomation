@@ -1,0 +1,27 @@
+@model List<MadeeAutomation.Application.Reports.ReportTile>
+@*
+    The numbers at the top of a report. The arrow compares with the period before;
+    for a cost (key "ai") going up is not "good", so it stays grey.
+*@
+<div class="mv-tiles mb-3" data-testid="report-tiles">
+    @foreach (var t in Model)
+    {
+        <div class="mv-tile" data-testid="tile-@t.Key">
+            <div class="mv-tile-label">@t.Label</div>
+            <div class="mv-tile-value" data-testid="tile-@t.Key-value">@t.Value</div>
+            @if (t.ChangePercent is { } change)
+            {
+                var css = t.Key == "ai" || change == 0 ? "mv-change-flat" : change > 0 ? "mv-change-up" : "mv-change-down";
+                <div class="mv-change @css" data-testid="tile-@t.Key-change">@(change > 0 ? "▲" : change < 0 ? "▼" : "•") @Math.Abs(change)% vs period before</div>
+            }
+            else if (t.Previous is 0 && t.Current is > 0)
+            {
+                <div class="mv-change mv-change-flat">New this period</div>
+            }
+            @if (!string.IsNullOrEmpty(t.Note))
+            {
+                <div class="mv-tile-note">@t.Note</div>
+            }
+        </div>
+    }
+</div>

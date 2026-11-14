@@ -74,6 +74,26 @@ public static class BusinessClock
         return new BusinessStatus(true, current is not null, status, week.ToString().TrimEnd(' ', ';'), closedText);
     }
 
+    /// <summary>
+    /// Was the business open at this local moment? Used by the reports ("messages after hours").
+    /// Overnight periods (18:00-02:00) count for the early hours of the next day too.
+    /// </summary>
+    public static bool IsOpenAt(IReadOnlyCollection<OpeningHours> hours, ISet<DateOnly> closed, DateTime local)
+    {
+        var today = DateOnly.FromDateTime(local);
+        var now = TimeOnly.FromDateTime(local);
+        var yesterday = local.AddDays(-1).DayOfWeek;
+        foreach (var h in hours)
+        {
+            var overnight = h.CloseTime <= h.OpenTime;
+            if (h.DayOfWeek == local.DayOfWeek && !closed.Contains(today) && now >= h.OpenTime && (overnight || now < h.CloseTime))
+                return true;
+            if (overnight && h.DayOfWeek == yesterday && !closed.Contains(today.AddDays(-1)) && now < h.CloseTime)
+                return true;
+        }
+        return false;
+    }
+
     /// <summary>The next moment the business opens, in local time (looks up to 2 weeks ahead).</summary>
     public static DateTime? NextOpening(IReadOnlyCollection<OpeningHours> hours, ISet<DateOnly> closed, DateTime local)
     {

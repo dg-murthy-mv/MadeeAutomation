@@ -1,0 +1,130 @@
+@model AdminReportPageModel
+@using MadeeAutomation.Application.Reports
+@{
+    var r = Model.Report;
+    ViewData["Title"] = "Reports - all clients";
+    string N(int n) => n.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+    string Quiet(AdminClientRow row) => row.Activity.LastMessageUtc is null ? "Never"
+        : row.QuietDays == 0 ? "Today" : row.QuietDays == 1 ? "Yesterday" : $"{row.QuietDays} days ago";
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Reports</h2>
+        <div class="mv-subtle">All clients &middot; days in <strong>@Model.TimeZoneId</strong> (change under your account) &middot; compared with @r.PreviousPeriod.Label</div>
+    </div>
+</div>
+
+<partial name="_PeriodPicker" model="Model.Picker" />
+<partial name="_ReportTiles" model="r.Tiles" />
+
+<div class="mv-report-grid mb-3">
+    <partial name="_BarChart" model='new ChartModel { TestId = "chart-all-messages", Title = "Customer messages per day (all clients)", Points = r.MessagesPerDay, Unit = "messages" }' />
+    <partial name="_BarChart" model='new ChartModel { TestId = "chart-ai-cost", Title = "AI cost per day (US$)", Points = r.AiCostPerDay, Unit = "" }' />
+</div>
+
+<div class="mv-card mb-3" data-testid="clients-table">
+    <div class="mv-card-body pb-2">
+        <h6 class="mb-0">Clients</h6>
+        <div class="form-text">Busiest first. <span class="mv-attention">Orange</span> = a trial or active client with no customer message for 7 days or more - worth a call.</div>
+    </div>
+    <div class="table-responsive">
+        <table class="table mv-table mb-0 align-middle">
+            <thead>
+                <tr>
+                    <th>Client</th>
+                    <th class="text-end">Messages</th>
+                    <th class="text-end">Customers</th>
+                    <th class="text-end">Orders</th>
+                    <th class="text-end">Bookings</th>
+                    <th class="text-end">Failed runs</th>
+                    <th class="text-end">AI cost</th>
+                    <th>Last message</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in r.Rows)
+                {
+                    var a = row.Activity;
+                    <tr data-testid="client-row" data-client="@row.Client.ClientCode">
+                        <td data-label="Client" class="mv-td-title">
+                            <a asp-controller="Reports" asp-action="Index" asp-route-clientConfigId="@row.Client.Id" data-testid="client-report-link">@row.Client.ClientName</a>
+                            <div class="small mv-subtle">@AdminReportBuilder.CountryText(row.Client.Country) &middot; @row.TypeText &middot; <partial name="_StatusBadge" model="row.Client.Status" /></div>
+                        </td>
+                        <td data-label="Messages" class="text-end" data-testid="client-messages">
+                            @N(a.Messages)
+                            @if (row.ChangePercent is { } ch)
+                            {
+                                <div class="mv-change @(ch > 0 ? "mv-change-up" : ch < 0 ? "mv-change-down" : "mv-change-flat")">@(ch > 0 ? "▲" : ch < 0 ? "▼" : "•") @Math.Abs(ch)%</div>
+                            }
+                        </td>
+                        <td data-label="Customers" class="text-end">@N(a.Customers)</td>
+                        <td data-label="Orders" class="text-end">@N(a.Orders)</td>
+                        <td data-label="Bookings" class="text-end">@N(a.Bookings)</td>
+                        <td data-label="Failed runs" class="text-end @(a.FailedRuns > 0 ? "text-danger fw-semibold" : "")" data-testid="client-failed">@N(a.FailedRuns)</td>
+                        <td data-label="AI cost" class="text-end" data-testid="client-ai">
+                            @AdminReportBuilder.Usd(a.AiCostUsd)
+                            @if (a.AiCalls > 0) { <div class="small mv-subtle">@N(a.AiCalls) calls</div> }
+                        </td>
+                        <td data-label="Last message" class="@(row.NeedsAttention ? "mv-attention" : "")" data-testid="client-last">@Quiet(row)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="mv-report-grid mb-3">
+    @foreach (var (title, testId, groups) in new[] { ("By country", "by-country", r.ByCountry), ("By type of business", "by-type", r.ByType) })
+    {
+        <div class="mv-card" data-testid="@testId">
+            <div class="mv-card-body pb-2"><h6 class="mb-0">@title</h6></div>
+            <div class="table-responsive">
+                <table class="table mv-table mb-0">
+                    <thead><tr><th></th><th class="text-end">Clients</th><th class="text-end">Messages</th><th class="text-end">Orders + bookings</th><th class="text-end">AI cost</th></tr></thead>
+                    <tbody>
+                        @foreach (var g in groups)
+                        {
+                            <tr data-testid="@testId-row" data-name="@g.Name">
+                                <td data-label="@title" class="fw-semibold mv-td-title">@g.Name</td>
+                                <td data-label="Clients" class="text-end">@N(g.Clients)</td>
+                                <td data-label="Messages" class="text-end">@N(g.Messages)</td>
+                                <td data-label="Orders + bookings" class="text-end">@N(g.Orders + g.Bookings)</td>
+                                <td data-label="AI cost" class="text-end">@AdminReportBuilder.Usd(g.AiCostUsd)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    <div class="mv-card" data-testid="ai-by-purpose">
+        <div class="mv-card-body pb-2">
+            <h6 class="mb-0">AI cost by what it was for</h6>
+            <div class="form-text">Recorded from the day the reports were installed. Prices: Anthropic:PriceInputPerMillion / PriceOutputPerMillion (WebApi).</div>
+        </div>
+        @if (r.AiByPurpose.Count == 0)
+        {
+            <div class="mv-card-body pt-0 mv-subtle">No AI calls recorded in this period.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table mv-table mb-0">
+                    <thead><tr><th>What for</th><th class="text-end">Calls</th><th class="text-end">Cost</th><th class="text-end">Per call</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in r.AiByPurpose)
+                        {
+                            <tr data-testid="ai-purpose-row" data-purpose="@a.Purpose">
+                                <td data-label="What for" class="mv-td-title">@AdminReportBuilder.PurposeText(a.Purpose)@(a.IsTest ? " (Admin tests)" : "")</td>
+                                <td data-label="Calls" class="text-end">@N(a.Calls)</td>
+                                <td data-label="Cost" class="text-end">@AdminReportBuilder.Usd(a.CostUsd)</td>
+                                <td data-label="Per call" class="text-end">@AdminReportBuilder.Usd(a.Calls == 0 ? 0 : a.CostUsd / a.Calls)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
