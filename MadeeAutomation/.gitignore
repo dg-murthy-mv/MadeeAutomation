@@ -2,6 +2,7 @@ bin/
 obj/
 .vs/
 *.user
+*.suo
 appsettings.Development.json
 *.db
 Logs/
