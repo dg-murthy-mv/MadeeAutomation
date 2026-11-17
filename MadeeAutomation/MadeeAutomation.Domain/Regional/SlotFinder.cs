@@ -2,10 +2,18 @@ using MadeeAutomation.Domain.Entities;
 
 namespace MadeeAutomation.Domain.Regional;
 
-/// <summary>One staff member as the slot finder sees them.</summary>
-public sealed record SlotStaff(Guid Id, string Name, string? Gender, int DaysOffMask, bool DoesHomeService, IReadOnlyCollection<Guid> ServiceIds)
+/// <summary>A weekly session of one staff member / doctor.</summary>
+public sealed record SlotSession(DayOfWeek Day, TimeOnly Start, TimeOnly End);
+
+/// <summary>
+/// One staff member as the slot finder sees them. Sessions empty = they work the business's opening
+/// hours; otherwise ONLY their own sessions count (a doctor seeing patients Mon 10-13 and 17-20).
+/// </summary>
+public sealed record SlotStaff(Guid Id, string Name, string? Gender, int DaysOffMask, bool DoesHomeService, IReadOnlyCollection<Guid> ServiceIds,
+    IReadOnlyCollection<SlotSession>? Sessions = null)
 {
     public bool IsOffOn(DayOfWeek day) => (DaysOffMask & (1 << (int)day)) != 0;
+    public bool HasSessions => Sessions is { Count: > 0 };
 }
 
 /// <summary>Time a staff member is already taken (a booking, with its travel and clean-up time).</summary>
@@ -42,9 +50,10 @@ public sealed class SlotQuery
 }
 
 /// <summary>
-/// Works out the start times that can really be booked: inside opening hours (the whole service must
-/// fit before closing), not on a closed date, not too soon, and with at least one suitable staff member
-/// who is working that day and free for the whole time (travel + service + clean-up).
+/// Works out the start times that can really be booked: inside opening hours - or, for someone with their
+/// own sessions (a doctor), inside their session - with the whole service fitting before it ends; not on
+/// a closed date, not too soon, and with at least one suitable staff member who is working that day and
+/// free for the whole time (travel + service + clean-up).
 ///
 /// "Suitable" = can do the service, active (the caller passes only active staff), matches the customer's
 /// preference (female / male / a named person), and does home service when the booking is at home.
@@ -70,23 +79,36 @@ public static class SlotFinder
         var load = candidates.ToDictionary(s => s.Id, s => q.Busy.Count(b => b.StaffId == s.Id &&
             LocalTime.ToLocal(b.FromUtc, q.TimeZoneId).Date == dayStart.Date));
 
-        var seen = new HashSet<DateTime>();
-        foreach (var period in q.Hours.Where(h => h.DayOfWeek == q.Date.DayOfWeek).OrderBy(h => h.OpenTime))
-        {
-            var open = dayStart + period.OpenTime.ToTimeSpan();
-            var close = dayStart + period.CloseTime.ToTimeSpan();
-            if (close <= open) close = close.AddDays(1);   // runs past midnight
+        // The windows each person works that day: their own sessions, or else the opening hours.
+        // Overnight periods (18:00-02:00) end the next day.
+        List<(DateTime Open, DateTime Close)> Windows(IEnumerable<(TimeOnly Open, TimeOnly Close)> periods) =>
+            periods.Select(p =>
+            {
+                var open = dayStart + p.Open.ToTimeSpan();
+                var close = dayStart + p.Close.ToTimeSpan();
+                if (close <= open) close = close.AddDays(1);
+                return (open, close);
+            }).ToList();
+        var businessWindows = Windows(q.Hours.Where(h => h.DayOfWeek == q.Date.DayOfWeek).Select(h => (h.OpenTime, h.CloseTime)));
+        var windows = candidates.ToDictionary(s => s.Id, s => s.HasSessions
+            ? Windows(s.Sessions!.Where(x => x.Day == q.Date.DayOfWeek).Select(x => (x.Start, x.End)))
+            : businessWindows);
 
+        var seen = new HashSet<DateTime>();
+        foreach (var (open, close) in windows.Values.SelectMany(w => w).Distinct().OrderBy(w => w.Item1))
+        {
             for (var start = open; start.AddMinutes(q.DurationMinutes) <= close; start = start.AddMinutes(step))
             {
                 if (!seen.Add(start)) continue;
                 var startUtc = LocalTime.FromLocal(start, q.TimeZoneId).UtcDateTime;
                 if (startUtc < earliestUtc) continue;
 
+                var end = start.AddMinutes(q.DurationMinutes);
                 var busyFrom = startUtc.AddMinutes(-travel);
                 var busyUntil = startUtc.AddMinutes(q.DurationMinutes + Math.Max(0, q.BufferMinutes) + travel);
 
                 var free = candidates
+                    .Where(s => windows[s.Id].Any(w => w.Open <= start && end <= w.Close))
                     .Where(s => !q.Busy.Any(b => b.StaffId == s.Id && b.FromUtc < busyUntil && busyFrom < b.UntilUtc))
                     .OrderBy(s => load[s.Id])
                     .Select(s => s.Id)

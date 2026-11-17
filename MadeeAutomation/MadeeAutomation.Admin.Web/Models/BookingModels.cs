@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Application.Common;
+using MadeeAutomation.Application.VerticalPacks.Beauty;
 using MadeeAutomation.Domain.Entities;
 
 namespace MadeeAutomation.Admin.Web.Models;
@@ -90,6 +92,30 @@ public class StaffFormModel
     public int SortOrder { get; set; }
 
     public List<Guid> ServiceIds { get; set; } = new();
+
+    // ---- Doctor profile (clinics; optional for spas) ----
+
+    [Range(0, 10_000_000, ErrorMessage = "The fee can't be negative.")]
+    [Display(Name = "Consultation fee (instead of the service price)")]
+    public decimal? ConsultationFee { get; set; }
+
+    [StringLength(200)]
+    [Display(Name = "Languages spoken")]
+    public string? Languages { get; set; }
+
+    [StringLength(1000)]
+    [Display(Name = "Short profile (shown to patients)")]
+    public string? Bio { get; set; }
+
+    /// <summary>
+    /// Own weekly sessions: 14 boxes each, index = day * 2 + n (day 0 = Sunday, n = first / second session),
+    /// as "HH:mm". Both empty = no session.
+    /// </summary>
+    public List<string?> SessionStarts { get; set; } = new();
+    public List<string?> SessionEnds { get; set; } = new();
+
+    public string? Start(int day, int n) => SessionStarts.ElementAtOrDefault(day * 2 + n);
+    public string? End(int day, int n) => SessionEnds.ElementAtOrDefault(day * 2 + n);
 }
 
 public class StaffPageModel
@@ -126,6 +152,13 @@ public class BookingsPageModel
     public List<StaffMember> Staff { get; set; } = new();
     public int PendingCount { get; set; }
     public bool StaffChannelSet { get; set; }
+
+    /// <summary>Messages planned for later per booking (2-hour reminder, follow-up, feedback).</summary>
+    public Dictionary<Guid, List<BookingMessage>> Planned { get; set; } = new();
+    public List<FollowUpRow> FollowUps { get; set; } = new();
+    public List<WaitlistEntry> Waitlist { get; set; } = new();
+    public int WaitingCount { get; set; }
+    public BookingTerms Terms => BookingTerms.For(Client);
     public bool IsFiltered => !string.IsNullOrWhiteSpace(Search) || StaffId is not null || (Day is not null && Show != "day");
 }
 
@@ -169,6 +202,14 @@ public class BookingAddModel
     [StringLength(1000)]
     [Display(Name = "Note")]
     public string? CustomerNote { get; set; }
+
+    // Clinics
+    [Range(0, 120, ErrorMessage = "Between 0 and 120.")]
+    [Display(Name = "Age")]
+    public int? PatientAge { get; set; }
+
+    [Display(Name = "Visit")]
+    public string? VisitType { get; set; }
 }
 
 public class BookingAddPageModel
@@ -210,6 +251,44 @@ public class BookingSettingsModel
 
     [Display(Name = "Tell customers when a booking is confirmed, declined or cancelled")]
     public bool NotifyCustomer { get; set; } = true;
+
+    [Display(Name = "Also remind them 2 hours before")]
+    public bool SecondReminderEnabled { get; set; }
+
+    [Display(Name = "Ask for a 1-5 star rating after the visit")]
+    public bool FeedbackEnabled { get; set; }
+
+    [Range(0, 72, ErrorMessage = "Between 0 and 72 hours.")]
+    [Display(Name = "Hours after \"Completed\"")]
+    public int FeedbackDelayHours { get; set; } = 2;
+
+    [Display(Name = "Waitlist: customers can wait for a time when none is free")]
+    public bool WaitlistEnabled { get; set; } = true;
+
+    [StringLength(20)]
+    [RegularExpression(@"^[a-zA-Z]{2,3}(_[a-zA-Z]{2})?$", ErrorMessage = "A language code like en, en_US, hi or fil.")]
+    [Display(Name = "Template language")]
+    public string? TemplateLanguage { get; set; }
+
+    [StringLength(100)]
+    [RegularExpression(@"^[a-z0-9_]+$", ErrorMessage = "Template names use small letters, numbers and _ only.")]
+    [Display(Name = "Reminder template")]
+    public string? TemplateReminder { get; set; }
+
+    [StringLength(100)]
+    [RegularExpression(@"^[a-z0-9_]+$", ErrorMessage = "Template names use small letters, numbers and _ only.")]
+    [Display(Name = "Follow-up template")]
+    public string? TemplateFollowUp { get; set; }
+
+    [StringLength(100)]
+    [RegularExpression(@"^[a-z0-9_]+$", ErrorMessage = "Template names use small letters, numbers and _ only.")]
+    [Display(Name = "Feedback template")]
+    public string? TemplateFeedback { get; set; }
+
+    [StringLength(100)]
+    [RegularExpression(@"^[a-z0-9_]+$", ErrorMessage = "Template names use small letters, numbers and _ only.")]
+    [Display(Name = "Waitlist template")]
+    public string? TemplateWaitlist { get; set; }
 }
 
 public class BookingSettingsPageModel

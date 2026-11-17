@@ -78,4 +78,55 @@ public interface IBookingRepository
 
     /// <summary>Which client a booking belongs to (the reminder worker only has the id).</summary>
     Task<Guid?> GetClientIdAsync(Guid bookingId, CancellationToken cancellationToken = default);
+
+    // ---------------- messages sent later (2-hour reminder, follow-up, feedback) ----------------
+    /// <summary>Plans a message; an unsent one of the same kind for this booking is replaced.</summary>
+    Task ScheduleMessageAsync(Guid clientConfigId, Guid bookingId, string kind, DateTime dueUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>Drops unsent messages for the booking (all kinds, or one).</summary>
+    Task CancelMessagesAsync(Guid bookingId, string? kind = null, CancellationToken cancellationToken = default);
+
+    Task<List<BookingMessage>> GetDueMessagesAsync(DateTime utcNow, int take, CancellationToken cancellationToken = default);
+    Task<bool> TryClaimMessageAsync(Guid messageId, DateTime utcNow, CancellationToken cancellationToken = default);
+    Task SetMessageNoteAsync(Guid messageId, string note, CancellationToken cancellationToken = default);
+    Task<List<BookingMessage>> GetMessagesForAsync(IReadOnlyCollection<Guid> bookingIds, CancellationToken cancellationToken = default);
+
+    // ---------------- clinics ----------------
+    /// <summary>The follow-up the doctor wants (date null = none) and their instructions, sent to the patient as written.</summary>
+    Task SetFollowUpAsync(Guid clientConfigId, Guid bookingId, DateOnly? date, string? note, CancellationToken cancellationToken = default);
+
+    /// <summary>rating set = the stars (1-5); rating null = the comment.</summary>
+    Task<bool> SetFeedbackAsync(Guid clientConfigId, Guid bookingId, int? rating, string? comment, DateTime utcNow, CancellationToken cancellationToken = default);
+
+    /// <summary>Visits with a follow-up on or after fromDate, and the patient's next booking if they made one.</summary>
+    Task<List<FollowUpRow>> GetFollowUpsAsync(Guid clientConfigId, DateOnly fromDate, int take, CancellationToken cancellationToken = default);
+
+    // ---------------- waitlist ----------------
+    Task AddWaitlistAsync(WaitlistEntry entry, CancellationToken cancellationToken = default);
+    Task<WaitlistEntry?> GetWaitlistEntryAsync(Guid clientConfigId, Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>A client's waitlist; openOnly = still waiting or offered.</summary>
+    Task<List<WaitlistEntry>> GetWaitlistAsync(Guid clientConfigId, bool openOnly, CancellationToken cancellationToken = default);
+
+    /// <summary>All clients: entries still waiting for a time (the worker checks these).</summary>
+    Task<List<WaitlistEntry>> GetWaitingAsync(int take, CancellationToken cancellationToken = default);
+
+    Task<bool> IsWaitingAsync(Guid clientConfigId, string channel, string customerId, Guid serviceId, DateOnly? date, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Erases one customer's personal details for this client (a privacy request): on all their bookings
+    /// (matched by chat id or by mobile), their waitlist entries, their chat state and the text of their
+    /// messages. Bookings stay (as "(erased)") so the reports still add up.
+    /// </summary>
+    Task<EraseResult> EraseCustomerAsync(Guid clientConfigId, string? channel, string? customerId, string? phone, CancellationToken cancellationToken = default);
+
+    /// <summary>onlyIf: change it only when it still has that status (so an offer is sent once).</summary>
+    Task<bool> SetWaitlistStatusAsync(Guid id, WaitlistStatus status, string? note, DateTime? offeredAtUtc = null, WaitlistStatus? onlyIf = null,
+        CancellationToken cancellationToken = default);
 }
+
+/// <summary>What "Erase personal details" changed.</summary>
+public sealed record EraseResult(int Bookings, int WaitlistEntries, int Messages);
+
+/// <summary>A visit the doctor wants a follow-up for, and the patient's next booking (null = not booked yet).</summary>
+public sealed record FollowUpRow(Booking Visit, Booking? NextBooking);

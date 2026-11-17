@@ -1,16 +1,20 @@
 @model BookingsPageModel
 @{
     var client = Model.Client;
-    ViewData["Title"] = $"Bookings - {client.ClientName}";
+    ViewData["Title"] = $"{(Model.Terms.Clinic ? "Appointments" : "Bookings")} - {client.ClientName}";
     var here = Context.Request.Path + Context.Request.QueryString;
-    (string key, string label)[] tabs = { ("todo", $"To confirm ({Model.PendingCount})"), ("upcoming", "Upcoming"), ("day", "Day"), ("past", "Past"), ("all", "All") };
+    var terms = Model.Terms;
+    var tabList = new List<(string key, string label)> { ("todo", $"To confirm ({Model.PendingCount})"), ("upcoming", "Upcoming"), ("day", "Day"), ("past", "Past"), ("all", "All") };
+    if (terms.Clinic) tabList.Add(("followups", "Follow-ups"));
+    if (client.BookingWaitlistEnabled || Model.WaitingCount > 0) tabList.Add(("waitlist", $"Waitlist ({Model.WaitingCount})"));
+    var tabs = tabList.ToArray();
     var baseRoute = new Dictionary<string, string?>(Model.Pager.Route);
     string DayLink(DateOnly d) => Url.Action("Index", "Bookings", new Dictionary<string, string?>(baseRoute) { ["show"] = "day", ["day"] = d.ToString("yyyy-MM-dd") })!;
 }
 
 <div class="mv-page-header">
     <div>
-        <h2>Bookings</h2>
+        <h2>@(terms.Clinic ? "Appointments" : "Bookings")</h2>
         <div class="mv-subtle"><partial name="_ClientCrumb" model="client" /> &middot; times in <strong>@client.TimeZoneId</strong></div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
@@ -41,7 +45,7 @@
             <input type="date" class="form-control" id="bk-day" name="day" value="@(Model.Day?.ToString("yyyy-MM-dd"))" data-testid="bookings-day" />
         </div>
         <div class="col-6 col-md-3">
-            <label class="form-label" for="bk-staff">Staff</label>
+            <label class="form-label" for="bk-staff">@terms.People</label>
             <select class="form-select" id="bk-staff" name="staff" data-testid="bookings-staff">
                 <option value="">Everyone</option>
                 @foreach (var m in Model.Staff) { <option value="@m.Id" selected="@(Model.StaffId == m.Id)">@m.Name</option> }
@@ -73,7 +77,95 @@
     </div>
 }
 
-@if (Model.Bookings.Items.Count == 0)
+@if (Model.Show == "followups")
+{
+    <div class="mv-card mb-3" data-testid="followups">
+        <div class="mv-card-body pb-2">
+            <h6 class="mb-0">Follow-ups the doctors asked for</h6>
+            <div class="form-text">Set on a completed visit ("Follow-up in N days"). The patient is messaged 2 days before with a "Book follow-up" button.</div>
+        </div>
+        @if (Model.FollowUps.Count == 0)
+        {
+            <div class="mv-card-body pt-0 mv-subtle" data-testid="followups-empty">No follow-ups planned.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table mv-table mb-0 align-middle">
+                    <thead><tr><th>Patient</th><th>Visit</th><th>Follow-up around</th><th>Booked?</th></tr></thead>
+                    <tbody>
+                    @foreach (var f in Model.FollowUps)
+                    {
+                        var v = f.Visit;
+                        var overdue = f.NextBooking is null && v.FollowUpDate < Model.Today;
+                        <tr data-testid="followup-row" data-booking-ref="@v.Reference">
+                            <td data-label="Patient" class="mv-td-title"><span dir="auto">@(v.CustomerName ?? "-")</span>
+                                @if (!string.IsNullOrWhiteSpace(v.CustomerPhone)) { <span class="small">&middot; <a href="tel:@v.CustomerPhone">@v.CustomerPhone</a></span> }</td>
+                            <td data-label="Visit">@v.Reference &middot; @v.ServiceName &middot; @v.StaffName <div class="small mv-subtle">@v.LocalDate.ToString("ddd d MMM")</div></td>
+                            <td data-label="Follow-up around" class="@(overdue ? "text-danger fw-semibold" : "")">@v.FollowUpDate?.ToString("ddd d MMM yyyy")
+                                @if (!string.IsNullOrWhiteSpace(v.FollowUpNote)) { <div class="small mv-subtle" dir="auto">"@v.FollowUpNote"</div> }</td>
+                            <td data-label="Booked?" data-testid="followup-booked">
+                                @if (f.NextBooking is { } nb) { <span class="badge bg-success">@nb.Reference &middot; @nb.LocalDate.ToString("d MMM")</span> }
+                                else if (overdue) { <span class="badge bg-danger">Not booked - call them</span> }
+                                else { <span class="badge bg-light text-dark border">Not yet</span> }
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+else if (Model.Show == "waitlist")
+{
+    <div class="mv-card mb-3" data-testid="waitlist">
+        <div class="mv-card-body pb-2">
+            <h6 class="mb-0">Waitlist</h6>
+            <div class="form-text">Customers who found no free time. When a time opens up (a cancellation, a decline, a moved booking), they get a message with the free times - the first to tap gets it.</div>
+        </div>
+        @if (Model.Waitlist.Count == 0)
+        {
+            <div class="mv-card-body pt-0 mv-subtle" data-testid="waitlist-empty">Nobody is waiting.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table mv-table mb-0 align-middle">
+                    <thead><tr><th>Customer</th><th>Wants</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var w in Model.Waitlist)
+                    {
+                        var (wb, wl) = w.Status switch
+                        {
+                            WaitlistStatus.Waiting => ("bg-warning text-dark", "Waiting"),
+                            WaitlistStatus.Offered => ("bg-info text-dark", "Offered"),
+                            WaitlistStatus.Booked => ("bg-success", "Booked"),
+                            _ => ("bg-secondary", "Closed")
+                        };
+                        <tr data-testid="waitlist-row" data-status="@w.Status">
+                            <td data-label="Customer" class="mv-td-title"><span dir="auto">@(w.CustomerName ?? "-")</span> <span class="small mv-subtle">&middot; @Channels.DisplayName(w.Channel)</span></td>
+                            <td data-label="Wants">@w.ServiceName@(w.StaffName is null ? "" : $" with {w.StaffName}") &middot; @(w.LocalDate?.ToString("ddd d MMM") ?? "first free day")</td>
+                            <td data-label="Status"><span class="badge @wb" data-testid="waitlist-status">@wl</span>
+                                @if (!string.IsNullOrWhiteSpace(w.Note)) { <div class="small mv-subtle" data-testid="waitlist-note">@w.Note</div> }</td>
+                            <td class="text-nowrap">
+                                @if (w.Status is WaitlistStatus.Waiting or WaitlistStatus.Offered)
+                                {
+                                    <form asp-action="RemoveWaitlist" method="post" class="d-inline">
+                                        <input type="hidden" name="clientConfigId" value="@client.Id" /><input type="hidden" name="id" value="@w.Id" />
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" data-testid="waitlist-remove">Remove</button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+else if (Model.Bookings.Items.Count == 0)
 {
     <div class="mv-card mv-card-body mv-subtle" data-testid="bookings-empty">
         @(Model.IsFiltered ? "No bookings match this search." : Model.Show switch
@@ -90,7 +182,7 @@ else
 {
     @foreach (var b in Model.Bookings.Items)
     {
-        <partial name="_BookingCard" model="(b, client, here)" />
+        <partial name="_BookingCard" model="(b, client, here, Model.Planned.GetValueOrDefault(b.Id) ?? new List<BookingMessage>())" />
     }
     <div class="mv-card"><partial name="_Pager" model="Model.Pager" /></div>
 }

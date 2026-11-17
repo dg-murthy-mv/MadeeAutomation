@@ -83,6 +83,10 @@ public static class World
     public static SeededClient Spa { get; private set; } = null!;
     public const string SpaPortalEmail = "owner@glowspa.test";
     public static readonly string SpaStaffLineId = "U" + new string('w', 32);
+    // Clinic: a Bengaluru clinic with three doctors, each with their own sessions
+    public static SeededClient Clinic { get; private set; } = null!;
+    public const string ClinicPortalEmail = "owner@smileclinic.test";
+    public static readonly string ClinicStaffLineId = "U" + new string('k', 32);
     public static readonly string TaxStaffLineId = "U" + new string('e', 32);
     public static readonly string ButtonCafeStaffLineId = "U" + new string('d', 32);
 
@@ -329,6 +333,28 @@ public static class World
         await AddStaffAsync(db, Spa.Id, "Liza", "F", "Stylist", home: false, sort: 3, haircut);
         await AddAdminAsync(db, SpaPortalEmail, "Spa Owner", PortalPassword, Spa.Id);
 
+        // ---- Clinic: Smile Clinic (Bengaluru), open 09:00-20:00 every day; each doctor has their own sessions ----
+        Clinic = await AddClientAsync(db, "smileclinic", "E2E Smile Clinic", ClientStatus.Active, Encrypted(Line("smileclinic-secret", "smileclinic-token")),
+            "smileclinic-secret", withWorkflow: false, kb: "Address: 4 MG Road, Bengaluru. Parking in the basement.", staffEmail: ClinicPortalEmail,
+            country: "IN", currency: "INR", timeZone: "Asia/Kolkata", staffLine: ClinicStaffLineId);
+        await db.ExecAsync(@"UPDATE dbo.ClientConfigs SET Vertical = 6, BookingSlotMinutes = 15, BookingMinNoticeMinutes = 60, BookingDaysAhead = 14,
+                                 BookingSecondReminderEnabled = 1, BookingFeedbackEnabled = 1, BookingFeedbackDelayHours = 0, BookingWaitlistEnabled = 1 WHERE Id = @id;", ("@id", Clinic.Id));
+        await db.ExecAsync(@"
+            INSERT INTO dbo.WorkflowDefinitions (Id, ClientConfigId, Name, HandlerKey, Vertical, TriggerType, Channel, TriggerConfigJson, IsEnabled, CreatedAtUtc, RetryAttempt)
+            VALUES (NEWID(), @c, 'LINE patients', 'clinic-message', 6, 3, 'line', '{}', 1, SYSUTCDATETIME(), 0);", ("@c", Clinic.Id));
+        for (var d = 0; d < 7; d++) await AddHoursAsync(db, Clinic.Id, d, "09:00", "20:00");
+        var checkUp = await AddServiceAsync(db, Clinic.Id, "Dental check-up", "Dental", 30, 300m, home: false, buffer: 0, sort: 0);
+        var rootCanal = await AddServiceAsync(db, Clinic.Id, "Root canal consultation", "Dental", 30, 300m, home: false, buffer: 0, sort: 1);
+        var general = await AddServiceAsync(db, Clinic.Id, "General consultation", "General", 15, 300m, home: false, buffer: 0, sort: 0);
+        var skin = await AddServiceAsync(db, Clinic.Id, "Skin consultation", "Skin", 20, 300m, home: false, buffer: 0, sort: 0);
+        var priya = await AddStaffAsync(db, Clinic.Id, "Dr Priya Sharma", "F", "BDS - Dentist", home: false, sort: 0, checkUp, rootCanal);
+        await DoctorAsync(db, priya, 500m, "English, Hindi, Kannada", "12 years' experience; root canal treatment.", new[] { 1, 2, 3, 4, 5, 6 }, "10:00-13:00", "17:00-20:00");
+        var arjun = await AddStaffAsync(db, Clinic.Id, "Dr Arjun Rao", "M", "MBBS - General physician", home: false, sort: 1, general);
+        await DoctorAsync(db, arjun, 400m, "English, Hindi", "Family doctor.", new[] { 0, 1, 2, 3, 4, 5, 6 }, "09:00-12:00");
+        var meera = await AddStaffAsync(db, Clinic.Id, "Dr Meera Iyer", "F", "MD - Dermatologist", home: false, sort: 2, skin);
+        await DoctorAsync(db, meera, 700m, "English, Tamil", "Acne, eczema and hair loss.", new[] { 2, 4, 6 }, "14:00-18:00");
+        await AddAdminAsync(db, ClinicPortalEmail, "Clinic Owner", PortalPassword, Clinic.Id);
+
         // Old rows hold plain JSON - the app must still read them (and encrypt on the next save).
         Legacy = await AddClientAsync(db, "legacy", "E2E Legacy", ClientStatus.Active,
             Line("legacy-secret", "legacy-token").ToJson(), "legacy-secret", withWorkflow: true);
@@ -373,7 +399,7 @@ public static class World
         return id;
     }
 
-    private static async Task AddStaffAsync(TestDatabase db, Guid clientId, string name, string gender, string title, bool home, int sort,
+    private static async Task<Guid> AddStaffAsync(TestDatabase db, Guid clientId, string name, string gender, string title, bool home, int sort,
         params Guid[] services)
     {
         var id = Guid.NewGuid();
@@ -383,6 +409,21 @@ public static class World
             ("@id", id), ("@c", clientId), ("@name", name), ("@title", title), ("@g", gender), ("@home", home), ("@sort", sort));
         foreach (var s in services)
             await db.ExecAsync("INSERT INTO dbo.StaffServices (StaffMemberId, ServiceItemId) VALUES (@m, @s);", ("@m", id), ("@s", s));
+        return id;
+    }
+
+    /// <summary>A doctor's profile and weekly sessions ("10:00-13:00") on the given days (0 = Sunday).</summary>
+    private static async Task DoctorAsync(TestDatabase db, Guid staffId, decimal fee, string languages, string bio, int[] days, params string[] sessions)
+    {
+        await db.ExecAsync("UPDATE dbo.StaffMembers SET ConsultationFee = @f, Languages = @l, Bio = @b WHERE Id = @id;",
+            ("@f", fee), ("@l", languages), ("@b", bio), ("@id", staffId));
+        foreach (var d in days)
+            foreach (var session in sessions)
+            {
+                var parts = session.Split('-');
+                await db.ExecAsync("INSERT INTO dbo.StaffSessions (Id, StaffMemberId, DayOfWeek, StartTime, EndTime) VALUES (NEWID(), @m, @d, @s, @e);",
+                    ("@m", staffId), ("@d", d), ("@s", TimeSpan.Parse(parts[0])), ("@e", TimeSpan.Parse(parts[1])));
+            }
     }
 
     private static Task AddChannelWorkflowAsync(TestDatabase db, Guid clientId, string name, string channel) =>

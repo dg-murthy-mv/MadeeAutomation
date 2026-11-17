@@ -63,10 +63,58 @@
         <input asp-for="Form.RemindersEnabled" class="form-check-input" data-testid="set-reminders" />
         <label asp-for="Form.RemindersEnabled" class="form-check-label"></label>
     </div>
+    <div class="form-check mb-1 ms-4">
+        <input asp-for="Form.SecondReminderEnabled" class="form-check-input" data-testid="set-reminder2" />
+        <label asp-for="Form.SecondReminderEnabled" class="form-check-label"></label>
+    </div>
     <div class="form-text mb-3">
         The reminder goes out a day before (2 hours before for bookings made later), with "I'll be there", "Reschedule" and "Cancel" buttons.
-        WhatsApp and Messenger only let a business message a customer within 24 hours of the customer's last message: when a reminder
-        can't be sent, the booking shows it with the customer's mobile number so you can text them. LINE has no such limit.
+        Clinics usually also send the 2-hour one.
+    </div>
+    <div class="row g-2 align-items-end mb-1">
+        <div class="col-12 col-md-7">
+            <div class="form-check">
+                <input asp-for="Form.FeedbackEnabled" class="form-check-input" data-testid="set-feedback" />
+                <label asp-for="Form.FeedbackEnabled" class="form-check-label"></label>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <label asp-for="Form.FeedbackDelayHours" class="form-label small mb-1"></label>
+            <input asp-for="Form.FeedbackDelayHours" class="form-control form-control-sm" type="number" min="0" max="72" data-testid="set-feedback-hours" />
+            <span asp-validation-for="Form.FeedbackDelayHours" class="text-danger small"></span>
+        </div>
+    </div>
+    <div class="form-text mb-3">Sent when you press "Completed". Low ratings (1-2 stars) are sent to your staff alert at once; all ratings are in Reports.</div>
+    <div class="form-check mb-1">
+        <input asp-for="Form.WaitlistEnabled" class="form-check-input" data-testid="set-waitlist" />
+        <label asp-for="Form.WaitlistEnabled" class="form-check-label"></label>
+    </div>
+    <div class="form-text mb-3">When nothing is free, the customer can tap "Join waitlist". When a time opens up, everyone waiting for it gets a message - the first to tap gets it.</div>
+
+    <h5 class="mv-section-title mt-4">WhatsApp templates</h5>
+    <div class="form-text mb-2">
+        WhatsApp only lets a business message a customer within 24 hours of the customer's last message. Reminders, follow-ups,
+        feedback questions and waitlist offers usually come later, so on WhatsApp they need <strong>message templates approved by Meta</strong>
+        (WhatsApp Manager &rarr; Message templates; see SETUP for the exact texts). Type the names here once they are approved.
+        Empty = a normal message is tried; if WhatsApp refuses it, the booking shows it so you can text the customer.
+        LINE has no such limit, and Messenger has no templates yet.
+    </div>
+    <div class="row g-2 mb-3" data-testid="set-templates">
+        <div class="col-6 col-md-4">
+            <label asp-for="Form.TemplateLanguage" class="form-label small mb-1"></label>
+            <input asp-for="Form.TemplateLanguage" class="form-control form-control-sm" placeholder="en" data-testid="set-tpl-language" />
+            <span asp-validation-for="Form.TemplateLanguage" class="text-danger small"></span>
+        </div>
+        @foreach (var (field, id, example) in new[] { ("TemplateReminder", "set-tpl-reminder", "appointment_reminder"), ("TemplateFollowUp", "set-tpl-followup", "follow_up_reminder"),
+                                                       ("TemplateFeedback", "set-tpl-feedback", "visit_feedback"), ("TemplateWaitlist", "set-tpl-waitlist", "waitlist_offer") })
+        {
+            <div class="col-6 col-md-4">
+                <label class="form-label small mb-1" for="Form_@field">@(field switch { "TemplateReminder" => "Reminder template", "TemplateFollowUp" => "Follow-up template", "TemplateFeedback" => "Feedback template", _ => "Waitlist template" })</label>
+                <input class="form-control form-control-sm" id="Form_@field" name="Form.@field" value="@(field switch { "TemplateReminder" => Model.Form.TemplateReminder, "TemplateFollowUp" => Model.Form.TemplateFollowUp, "TemplateFeedback" => Model.Form.TemplateFeedback, _ => Model.Form.TemplateWaitlist })"
+                       placeholder="@example" data-testid="@id" />
+                <span class="text-danger small" data-valmsg-for="Form.@field" data-valmsg-replace="true">@(ViewData.ModelState[$"Form.{field}"]?.Errors.FirstOrDefault()?.ErrorMessage)</span>
+            </div>
+        }
     </div>
 
     <button type="submit" class="btn btn-primary" data-testid="save-settings">Save</button>

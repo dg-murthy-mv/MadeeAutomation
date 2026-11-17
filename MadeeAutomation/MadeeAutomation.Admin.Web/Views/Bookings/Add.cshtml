@@ -64,8 +64,24 @@
             <label asp-for="Form.CustomerPhone" class="form-label"></label>
             <input asp-for="Form.CustomerPhone" class="form-control" type="tel" inputmode="tel" data-testid="add-phone" />
         </div>
-        <div class="col-12">
-            <label asp-for="Form.CustomerNote" class="form-label"></label>
+        @if (Model.Client.Vertical == VerticalPack.Clinic)
+        {
+            <div class="col-5 col-md-3">
+                <label asp-for="Form.PatientAge" class="form-label"></label>
+                <input asp-for="Form.PatientAge" class="form-control" type="number" min="0" max="120" inputmode="numeric" data-testid="add-age" />
+                <span asp-validation-for="Form.PatientAge" class="text-danger small"></span>
+            </div>
+            <div class="col-7 col-md-3">
+                <label asp-for="Form.VisitType" class="form-label"></label>
+                <select asp-for="Form.VisitType" class="form-select" data-testid="add-visit">
+                    <option value="">-</option>
+                    <option value="@Booking.FirstVisit">First visit</option>
+                    <option value="@Booking.FollowUpVisit">Follow-up</option>
+                </select>
+            </div>
+        }
+        <div class="col-12 @(Model.Client.Vertical == VerticalPack.Clinic ? "col-md-6" : "")">
+            <label asp-for="Form.CustomerNote" class="form-label">@(Model.Client.Vertical == VerticalPack.Clinic ? "Reason (a few words)" : "Note")</label>
             <input asp-for="Form.CustomerNote" class="form-control" dir="auto" data-testid="add-note" />
         </div>
     </div>

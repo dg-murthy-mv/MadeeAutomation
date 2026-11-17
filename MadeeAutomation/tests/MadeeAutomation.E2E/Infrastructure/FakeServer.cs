@@ -308,6 +308,45 @@ public sealed class FakeServer : IAsyncDisposable
 
         // Beauty & wellness: the booking assistant. Finds a service named in SERVICES, "tomorrow"/"bukas",
         // and a time like "3pm"; Taglish words ("pwede", "po", "bukas") -> language "tl".
+        if (system.StartsWith("BOOKING ASSISTANT - CLINIC RECEPTIONIST"))
+        {
+            var lang = Regex.IsMatch(text, @"\b(kya|hai|kal|chahiye|sahab|milega)\b") ? "hi" : "en";
+            var today = DateOnly.ParseExact(Regex.Match(system, @"Local date: (\d{4}-\d{2}-\d{2})").Groups[1].Value, "yyyy-MM-dd");
+            object Reply(string intent, string reply, bool canAnswer = true, bool needsHuman = false, string? service = null, string? doctor = null,
+                string? date = null, string? time = null) =>
+                new { intent, language = lang, reply, canAnswer, needsHuman, service, doctor, date, time };
+
+            var servicesPart = Regex.Match(system, @"SERVICES:\n(.*?)\nDOCTORS:", RegexOptions.Singleline).Groups[1].Value;
+            var doctorsPart = Regex.Match(system, @"DOCTORS:\n(.*?)\nCLINIC INFORMATION:", RegexOptions.Singleline).Groups[1].Value;
+            var services = Regex.Matches(servicesPart, @"^- ([^:\n]+):", RegexOptions.Multiline).Select(m => m.Groups[1].Value.Trim()).ToList();
+            var doctors = Regex.Matches(doctorsPart, @"^- ([^(;\n]+)", RegexOptions.Multiline).Select(m => m.Groups[1].Value.Trim()).ToList();
+
+            if (text.Contains("collapsed"))   // not in our own word list: the AI is the second net
+                return Json(Reply("emergency", "Please call the emergency number now.", false, true));
+            if (Regex.IsMatch(text, @"\b(medicine|tablet|dose|is it serious|antibiotic)\b"))
+                return Json(Reply("question", "Our clinic team will get back to you. You can also book a consultation.", false, true));
+            if (text.Contains("my appointment") || text.Contains("cancel my"))
+                return Json(Reply("my_bookings", "Here are your appointments."));
+            if (text.Contains("which doctors") || text.Contains("your doctors"))
+                return Json(Reply("doctors", "Here are our doctors."));
+            if (Regex.IsMatch(text, @"\b(book|appointment|available|milega|chahiye)\b"))
+            {
+                var service = services.FirstOrDefault(n => text.Contains(n.ToLowerInvariant()));
+                var doctor = doctors.FirstOrDefault(n => n.ToLowerInvariant().Replace("dr ", "").Split(' ').Any(w => w.Length > 2 && Regex.IsMatch(text, $@"\b{w}\b")));
+                string? date = text.Contains("tomorrow") || Regex.IsMatch(text, @"\bkal\b") ? today.AddDays(1).ToString("yyyy-MM-dd") : null;
+                var tm = Regex.Match(text, @"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b");
+                string? time = tm.Success
+                    ? $"{int.Parse(tm.Groups[1].Value) % 12 + (tm.Groups[3].Value == "pm" ? 12 : 0):00}:{(tm.Groups[2].Success ? tm.Groups[2].Value : "00")}"
+                    : null;
+                return Json(Reply("book", lang == "hi" ? "Zaroor! Aapke liye time dekhte hain." : "Sure! Let's find you a time.", service: service, doctor: doctor, date: date, time: time));
+            }
+            if (text.Contains("fee") || text.Contains("timing"))
+                return Json(Reply("question", "The fees and timings are in our list."));
+            if (Regex.IsMatch(text, @"\b(hello|hi|namaste|good morning)\b"))
+                return Json(Reply("greeting", "Hello! Welcome to our clinic."));
+            return Json(Reply("other", "Thanks for your message!"));
+        }
+
         if (system.StartsWith("BOOKING ASSISTANT"))
         {
             var lang = Regex.IsMatch(text, @"\b(pwede|po|bukas|magkano|ba)\b") ? "tl" : "en";

@@ -57,7 +57,7 @@ public static class MetaMessageBuilder
             .ToList();
 
     private static string CardLine(ChatCard c) =>
-        $"- {c.Title}" + (string.IsNullOrWhiteSpace(c.Subtitle) ? "" : $": {c.Subtitle}") + (string.IsNullOrWhiteSpace(c.Note) ? "" : $" ({c.Note})");
+        $"- {c.Title}" + (string.IsNullOrWhiteSpace(c.Subtitle) ? "" : $": {c.Subtitle}") + (string.IsNullOrWhiteSpace(c.Note) ? "" : $" ({c.Note})") + (string.IsNullOrWhiteSpace(c.Details) ? "" : $"\n  {c.Details.Replace("\n", "\n  ")}");
 
     // =====================================================================
     // WhatsApp
@@ -86,7 +86,7 @@ public static class MetaMessageBuilder
             var rows = inList.Select(c =>
             {
                 var first = Tappable(c.Buttons)[0];
-                var description = string.Join(" · ", new[] { c.Subtitle, c.Note, c.Title.Length > WaRowTitle ? c.Title : null }
+                var description = string.Join(" · ", new[] { c.Subtitle, c.Note, c.Details?.Split('\n')[0], c.Title.Length > WaRowTitle ? c.Title : null }
                     .Where(x => !string.IsNullOrWhiteSpace(x)));
                 return Row(first.Data, c.Title, description);
             }).ToList();
@@ -173,6 +173,41 @@ public static class MetaMessageBuilder
         }
     };
 
+    /// <summary>
+    /// A template message. Values may not contain new lines, tabs or more than 4 spaces in a row (Meta
+    /// refuses them), and may not be empty - so they are cleaned here.
+    /// </summary>
+    public static object WaTemplate(string to, MadeeAutomation.Application.Abstractions.MessageTemplate template)
+    {
+        static string Clean(string? v)
+        {
+            var t = System.Text.RegularExpressions.Regex.Replace((v ?? "").Replace("\r", " ").Replace("\n", " - ").Replace("\t", " "), " {2,}", " ").Trim();
+            if (t.Length == 0) t = "-";
+            return t.Length > 900 ? t[..900] : t;
+        }
+
+        var components = new List<object>();
+        if (template.BodyParameters.Count > 0)
+            components.Add(new { type = "body", parameters = template.BodyParameters.Select(p => new { type = "text", text = Clean(p) }).ToArray() });
+        for (var i = 0; i < template.QuickReplyPayloads.Count; i++)
+            components.Add(new
+            {
+                type = "button",
+                sub_type = "quick_reply",
+                index = i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                parameters = new[] { new { type = "payload", payload = template.QuickReplyPayloads[i] } }
+            });
+
+        return new
+        {
+            messaging_product = "whatsapp",
+            recipient_type = "individual",
+            to,
+            type = "template",
+            template = new { name = template.Name.Trim(), language = new { code = string.IsNullOrWhiteSpace(template.Language) ? "en" : template.Language.Trim() }, components }
+        };
+    }
+
     public static object WaText(string to, string text) => new
     {
         messaging_product = "whatsapp",
@@ -235,7 +270,7 @@ public static class MetaMessageBuilder
     private static object Element(ChatCard card)
     {
         var element = new Dictionary<string, object?> { ["title"] = Cut(card.Title, FbTitle) };
-        var subtitle = string.Join(" · ", new[] { card.Subtitle, card.Note }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        var subtitle = string.Join(" · ", new[] { card.Subtitle, card.Note, card.Details?.Split('\n')[0] }.Where(x => !string.IsNullOrWhiteSpace(x)));
         if (subtitle.Length > 0) element["subtitle"] = Cut(subtitle, FbTitle);
 
         var buttons = Tappable(card.Buttons).Take(3).ToList();

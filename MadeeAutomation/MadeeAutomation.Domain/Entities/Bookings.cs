@@ -65,12 +65,39 @@ public class StaffMember
     public int SortOrder { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
+    // ---- Clinics (doctors). Optional for spas and salons. ----
+
+    /// <summary>The doctor's own consultation fee. When set, it is the price instead of the service's price.</summary>
+    public decimal? ConsultationFee { get; set; }
+
+    /// <summary>Languages they speak, as patients read it ("English, Hindi, Tamil").</summary>
+    public string? Languages { get; set; }
+
+    /// <summary>A short profile shown to patients (experience, special interests). No contact details.</summary>
+    public string? Bio { get; set; }
+
     /// <summary>The services this person can do.</summary>
     public List<StaffService> Services { get; set; } = new();
+
+    /// <summary>
+    /// The weekly times this person sees customers (Dr Sharma: Mon 10:00-13:00 and 17:00-20:00...).
+    /// Empty = they work the business's opening hours (as at a spa).
+    /// </summary>
+    public List<StaffSession> Sessions { get; set; } = new();
 
     public bool IsOffOn(DayOfWeek day) => (DaysOffMask & (1 << (int)day)) != 0;
 
     public static int Mask(IEnumerable<DayOfWeek> days) => days.Aggregate(0, (mask, d) => mask | (1 << (int)d));
+}
+
+/// <summary>One weekly session of a staff member / doctor: a day and a time range (may run past midnight).</summary>
+public class StaffSession
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid StaffMemberId { get; set; }
+    public DayOfWeek DayOfWeek { get; set; }
+    public TimeOnly StartTime { get; set; }
+    public TimeOnly EndTime { get; set; }
 }
 
 /// <summary>Who can do what: one row per staff member + service.</summary>
@@ -159,6 +186,27 @@ public class Booking
     /// <summary>The customer tapped "I'll be there" on the reminder.</summary>
     public DateTime? CustomerConfirmedAtUtc { get; set; }
 
+    // ---- Clinics: a few booking details about the patient (no medical records). ----
+
+    /// <summary>The patient's age in years, when given.</summary>
+    public int? PatientAge { get; set; }
+
+    /// <summary>"first" (first visit), "follow" (follow-up visit) or null.</summary>
+    public string? VisitType { get; set; }
+    public const string FirstVisit = "first";
+    public const string FollowUpVisit = "follow";
+
+    /// <summary>The day the doctor wants to see the patient again (set by staff after the visit).</summary>
+    public DateOnly? FollowUpDate { get; set; }
+
+    /// <summary>Instructions the doctor typed or approved - sent to the patient exactly as written.</summary>
+    public string? FollowUpNote { get; set; }
+
+    /// <summary>After the visit: 1-5 stars and an optional comment from the customer.</summary>
+    public int? FeedbackRating { get; set; }
+    public string? FeedbackComment { get; set; }
+    public DateTime? FeedbackAtUtc { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
     public static string OwnReference(int number) => $"BK-{number:0000}";
@@ -167,4 +215,68 @@ public class Booking
     public static readonly BookingStatus[] Holding = { BookingStatus.Pending, BookingStatus.Confirmed };
 
     public bool IsHolding => Status is BookingStatus.Pending or BookingStatus.Confirmed;
+}
+
+/// <summary>
+/// A message the system sends about a booking later: the second reminder (2 hours before), the follow-up
+/// reminder ("Dr Sharma asked to see you again around 5 Dec") and the feedback question after the visit.
+/// Each is claimed before sending, so two WebApi copies never send it twice.
+/// </summary>
+public class BookingMessage
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ClientConfigId { get; set; }
+    public Guid BookingId { get; set; }
+
+    /// <summary>KindReminder2, KindFollowUp or KindFeedback.</summary>
+    public string Kind { get; set; } = string.Empty;
+    public const string KindReminder2 = "reminder2";
+    public const string KindFollowUp = "followup";
+    public const string KindFeedback = "feedback";
+
+    public DateTime DueUtc { get; set; }
+    public DateTime? SentAtUtc { get; set; }
+
+    /// <summary>"sent", or why it could not be sent (for staff to see).</summary>
+    public string? Note { get; set; }
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+}
+
+public enum WaitlistStatus
+{
+    Waiting = 1,    // no time free yet
+    Offered = 2,    // a time opened up and the customer was told
+    Booked = 3,     // they booked from the offer
+    Closed = 4      // removed by staff or the customer, or the day has passed
+}
+
+/// <summary>
+/// A customer waiting for a time: a service (and maybe a doctor / staff member) on one day, or any day.
+/// When a time opens up (a cancellation, a decline, a moved booking) they get a message with the free
+/// times; the first to tap one gets it.
+/// </summary>
+public class WaitlistEntry
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ClientConfigId { get; set; }
+    public Guid ServiceItemId { get; set; }
+    public string ServiceName { get; set; } = string.Empty;
+
+    /// <summary>"any", "F", "M" or "staff" (StaffMemberId set).</summary>
+    public string Preference { get; set; } = "any";
+    public Guid? StaffMemberId { get; set; }
+    public string? StaffName { get; set; }
+
+    /// <summary>The day they want, or null = the first free day.</summary>
+    public DateOnly? LocalDate { get; set; }
+
+    public string Channel { get; set; } = string.Empty;
+    public string CustomerId { get; set; } = string.Empty;
+    public string? CustomerName { get; set; }
+    public string? Language { get; set; }
+
+    public WaitlistStatus Status { get; set; } = WaitlistStatus.Waiting;
+    public DateTime? OfferedAtUtc { get; set; }
+    public string? Note { get; set; }
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }

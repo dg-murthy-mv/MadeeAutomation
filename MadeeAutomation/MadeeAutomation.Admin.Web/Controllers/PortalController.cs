@@ -40,7 +40,7 @@ public class PortalController : Controller
         if (client is null) return NotFound();
 
         // A spa / salon's day starts with its bookings.
-        if (client.Vertical == VerticalPack.BeautyWellness) return RedirectToAction("Index", "Bookings");
+        if (client.Vertical.UsesBookings()) return RedirectToAction("Index", "Bookings");
 
         var utcNow = DateTime.UtcNow;
         var localNow = LocalTime.ToLocal(utcNow, client.TimeZoneId);

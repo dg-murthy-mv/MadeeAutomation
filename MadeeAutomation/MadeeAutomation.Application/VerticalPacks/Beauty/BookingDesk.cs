@@ -46,7 +46,42 @@ public sealed class BookingCatalog
     public bool HomeServiceFor(ServiceItem service) =>
         Client.HomeServiceEnabled && service.HomeServiceAllowed && StaffFor(service, true).Count > 0;
 
-    public bool HoursConfigured => Hours.Count > 0;
+    /// <summary>Times can be offered: opening hours are set, or at least one person has their own sessions.</summary>
+    public bool HoursConfigured => Hours.Count > 0 || Staff.Any(m => m.Sessions.Count > 0);
+
+    /// <summary>A clinic (doctors, patients) rather than a spa / salon.</summary>
+    public bool IsClinic => ForceClinic || Client.Vertical == VerticalPack.Clinic;
+
+    /// <summary>Set by the clinic chat, so a clinic workflow behaves as a clinic whatever the client's type.</summary>
+    public bool ForceClinic { get; set; }
+}
+
+/// <summary>
+/// The words the appointment chat and pages use, so one booking engine serves spas ("Anyone available",
+/// "Staff") and clinics ("Any doctor", "Doctors"). English only - our side is English.
+/// </summary>
+public sealed record BookingTerms(
+    bool Clinic,
+    string Person,          // "staff member" / "doctor"
+    string People,          // "Staff" / "Doctors"
+    string AnyPerson,       // "Anyone available" / "Any doctor"
+    string Female,          // "Female" / "Female doctor"
+    string Male,
+    string ChoosePerson,    // "Choose a person" / "Choose a doctor"
+    string WhoQuestion,     // "Who would you like?" / "Which doctor would you like?"
+    string Booking,         // "booking" / "appointment"
+    string AtPlace,         // "At the spa" / "At the clinic"
+    string AtHome,          // "Home service" / "Home visit"
+    string Customer,        // "Customer" / "Patient"
+    string Services)        // "Services" / "Services"
+{
+    public static readonly BookingTerms Spa = new(false, "staff member", "Staff", "Anyone available", "Female", "Male", "Choose a person",
+        "Who would you like?", "booking", "At the spa", "Home service", "Customer", "Services");
+
+    public static readonly BookingTerms ClinicTerms = new(true, "doctor", "Doctors", "Any doctor", "Female doctor", "Male doctor", "Choose a doctor",
+        "Which doctor would you like?", "appointment", "At the clinic", "Home visit", "Patient", "Services");
+
+    public static BookingTerms For(ClientConfig client) => client.Vertical == VerticalPack.Clinic ? ClinicTerms : Spa;
 }
 
 /// <summary>
@@ -101,7 +136,8 @@ public class BookingDesk
         Hours = cat.Hours,
         ClosedDates = cat.ClosedDates,
         Staff = cat.Staff.Select(m => new SlotStaff(m.Id, m.Name, m.Gender, m.DaysOffMask, m.DoesHomeService,
-            m.Services.Select(x => x.ServiceItemId).ToList())).ToList(),
+            m.Services.Select(x => x.ServiceItemId).ToList(),
+            m.Sessions.Select(x => new SlotSession(x.DayOfWeek, x.StartTime, x.EndTime)).ToList())).ToList(),
         Busy = busy,
         TimeZoneId = cat.Client.TimeZoneId,
         UtcNow = cat.UtcNow,
@@ -214,6 +250,7 @@ public class BookingDesk
         var (from, until) = SlotFinder.BusyWindow(slot.StartUtc, service.DurationMinutes, service.BufferMinutes, choice.AtHome,
             cat.Client.HomeServiceTravelMinutes);
         var fee = choice.AtHome ? cat.Client.HomeServiceFee : null;
+        var price = PriceFor(service, staff);
         return new Booking
         {
             Id = d.Id,
@@ -234,9 +271,11 @@ public class BookingDesk
             ServiceName = service.Name,
             DurationMinutes = service.DurationMinutes,
             Currency = cat.Client.Currency is { Length: 3 } c ? c.ToUpperInvariant() : null,
-            Price = service.Price,
+            Price = price,
             HomeServiceFee = fee,
-            Total = service.Price is { } p ? p + (fee ?? 0) : null,
+            Total = price is { } p ? p + (fee ?? 0) : null,
+            PatientAge = d.PatientAge,
+            VisitType = d.VisitType,
             StaffMemberId = staff.Id,
             StaffName = staff.Name,
             StaffPreference = choice.Preference,
@@ -249,9 +288,33 @@ public class BookingDesk
         };
     }
 
+    /// <summary>The price for this person: a doctor's own consultation fee, else the service's price.</summary>
+    public static decimal? PriceFor(ServiceItem service, StaffMember? staff) => staff?.ConsultationFee ?? service.Price;
+
     // ---------------------------------------------------------------------
     // Reminders
     // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// The second reminder, 2 hours before - only when switched on, there is a chat, there is still time,
+    /// and the first reminder is not already the 2-hour one (booked less than a day ahead).
+    /// </summary>
+    public static DateTime? SecondReminderDue(Booking booking, ClientConfig client, DateTime utcNow)
+    {
+        if (!client.BookingSecondReminderEnabled || !client.BookingRemindersEnabled ||
+            string.IsNullOrWhiteSpace(booking.CustomerId) || string.IsNullOrWhiteSpace(booking.Channel))
+            return null;
+        var twoHours = booking.StartUtc.AddHours(-2);
+        if (twoHours <= utcNow.AddMinutes(10)) return null;
+        return ReminderDue(booking, client, utcNow) == twoHours ? null : twoHours;
+    }
+
+    /// <summary>When the follow-up message goes out: 9 AM (client time) two days before the follow-up date, or soon if that has passed.</summary>
+    public static DateTime FollowUpDue(DateOnly followUpDate, ClientConfig client, DateTime utcNow)
+    {
+        var at = LocalTime.FromLocal(followUpDate.AddDays(-2).ToDateTime(new TimeOnly(9, 0)), client.TimeZoneId).UtcDateTime;
+        return at > utcNow ? at : utcNow.AddMinutes(1);
+    }
 
     /// <summary>
     /// When the reminder goes out: a day before; if the booking is sooner than that, 2 hours before;
@@ -299,14 +362,51 @@ public class BookingDesk
         sb.AppendLine($"{headline} {b.Reference} - {client.ClientName}");
         sb.AppendLine($"{b.ServiceName} ({Duration(b.DurationMinutes)})");
         sb.AppendLine($"When: {When(local, client.Country)}");
-        sb.AppendLine($"Staff: {b.StaffName ?? "-"}" + (b.StaffPreference switch { "F" => " (asked for female)", "M" => " (asked for male)", "staff" => " (asked for this person)", _ => "" }));
+        var terms = BookingTerms.For(client);
+        sb.AppendLine($"{(terms.Clinic ? "Doctor" : "Staff")}: {b.StaffName ?? "-"}" + (b.StaffPreference switch { "F" => " (asked for female)", "M" => " (asked for male)", "staff" => " (asked for this person)", _ => "" }));
         if (b.AtHome) sb.AppendLine($"HOME SERVICE: {b.HomeAddress ?? "(no address)"}");
-        sb.AppendLine($"Customer: {b.CustomerName ?? "-"}" + (string.IsNullOrWhiteSpace(b.CustomerPhone) ? "" : $", {b.CustomerPhone}") +
+        sb.AppendLine($"{terms.Customer}: {b.CustomerName ?? "-"}" + (string.IsNullOrWhiteSpace(b.CustomerPhone) ? "" : $", {b.CustomerPhone}") +
                       (string.IsNullOrWhiteSpace(b.Channel) ? "" : $" ({Channels.DisplayName(b.Channel)})"));
         if (b.Total is { } t) sb.AppendLine($"Price: {Money.Format(t, b.Currency)}" + (b.HomeServiceFee is > 0 ? $" (incl. home service {Money.Format(b.HomeServiceFee.Value, b.Currency)})" : ""));
-        if (!string.IsNullOrWhiteSpace(b.CustomerNote)) sb.AppendLine($"Note: {b.CustomerNote}");
+        if (b.PatientAge is { } age) sb.AppendLine($"Age: {age}");
+        if (b.VisitType is { } vt) sb.AppendLine(vt == Booking.FollowUpVisit ? "Follow-up visit" : "First visit");
+        if (!string.IsNullOrWhiteSpace(b.CustomerNote)) sb.AppendLine($"{(client.Vertical == VerticalPack.Clinic ? "Reason" : "Note")}: {b.CustomerNote}");
         if (!string.IsNullOrWhiteSpace(b.StatusReason)) sb.AppendLine($"Reason: {b.StatusReason}");
         if (b.Status == BookingStatus.Pending) sb.AppendLine("Please confirm or decline it on the Bookings page.");
         return sb.ToString().TrimEnd();
+    }
+}
+
+/// <summary>A doctor's weekly sessions as patients read them: "Mon, Wed 10:00 AM-1:00 PM; Fri 5:00-8:00 PM".</summary>
+public static class DoctorSessions
+{
+    private static readonly DayOfWeek[] Week =
+        { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday };
+
+    public static string Text(IEnumerable<StaffSession> sessions, string? country)
+    {
+        string T(TimeOnly t) => BookingDesk.Time(DateTime.Today.Add(t.ToTimeSpan()), country);
+        // Days with exactly the same times are written together.
+        var byDay = Week
+            .Select(d => (Day: d, Times: string.Join(" & ", sessions.Where(x => x.DayOfWeek == d).OrderBy(x => x.StartTime).Select(x => $"{T(x.StartTime)}-{T(x.EndTime)}"))))
+            .Where(x => x.Times.Length > 0)
+            .ToList();
+        return string.Join("; ", byDay.GroupBy(x => x.Times).Select(g => $"{Days(g.Select(x => x.Day).ToList())} {g.Key}"));
+    }
+
+    /// <summary>"Mon-Sat", "Tue, Thu, Sat", "Mon-Wed, Fri" - three or more days in a row are written as a range.</summary>
+    public static string Days(IReadOnlyList<DayOfWeek> days)
+    {
+        var idx = days.Select(d => Array.IndexOf(Week, d)).OrderBy(i => i).ToList();
+        var parts = new List<string>();
+        for (var i = 0; i < idx.Count;)
+        {
+            var j = i;
+            while (j + 1 < idx.Count && idx[j + 1] == idx[j] + 1) j++;
+            if (j - i >= 2) parts.Add($"{BusinessClock.Short(Week[idx[i]])}-{BusinessClock.Short(Week[idx[j]])}");
+            else for (var k = i; k <= j; k++) parts.Add(BusinessClock.Short(Week[idx[k]]));
+            i = j + 1;
+        }
+        return string.Join(", ", parts);
     }
 }

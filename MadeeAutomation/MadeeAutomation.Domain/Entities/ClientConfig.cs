@@ -92,6 +92,31 @@ public class ClientConfig
     /// <summary>Send the customer a reminder before a confirmed booking.</summary>
     public bool BookingRemindersEnabled { get; set; } = true;
 
+    // ---- Appointments: extra messages (clinics turn these on; spas may too) ----
+
+    /// <summary>A second reminder 2 hours before the appointment (the first is the day before).</summary>
+    public bool BookingSecondReminderEnabled { get; set; }
+
+    /// <summary>Ask the customer for 1-5 stars after a completed visit.</summary>
+    public bool BookingFeedbackEnabled { get; set; }
+
+    /// <summary>How long after the visit is marked Completed the feedback question goes out.</summary>
+    public int BookingFeedbackDelayHours { get; set; } = 2;
+
+    /// <summary>Customers can join a waitlist when no time is free, and are offered a time when one opens up.</summary>
+    public bool BookingWaitlistEnabled { get; set; } = true;
+
+    // ---- WhatsApp message templates (approved in Meta) for messages the business starts ----
+    // WhatsApp only allows free-form messages within 24 hours of the customer's last message.
+    // Reminders, follow-ups, feedback and waitlist offers are sent with these templates when set.
+
+    /// <summary>Template language code exactly as approved in Meta ("en", "en_US", "hi", "fil"...).</summary>
+    public string? WhatsAppTemplateLanguage { get; set; }
+    public string? WhatsAppTemplateReminder { get; set; }
+    public string? WhatsAppTemplateFollowUp { get; set; }
+    public string? WhatsAppTemplateFeedback { get; set; }
+    public string? WhatsAppTemplateWaitlist { get; set; }
+
     /// <summary>Email last month's report to StaffAlertEmail on the 1st of each month (8 AM client time).</summary>
     public bool MonthlyReportEnabled { get; set; } = true;
 

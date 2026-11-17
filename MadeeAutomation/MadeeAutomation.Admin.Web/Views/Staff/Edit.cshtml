@@ -2,13 +2,17 @@
 @{
     var client = Model.Client;
     var isNew = Model.Form.Id == Guid.Empty;
-    ViewData["Title"] = isNew ? "Add staff" : $"Edit {Model.Form.Name}";
+    var clinic = client.Vertical == VerticalPack.Clinic;
+    var people = clinic ? "Doctors" : "Staff";
+    var one = clinic ? "doctor" : "staff";
+    ViewData["Title"] = isNew ? $"Add {one}" : $"Edit {Model.Form.Name}";
+    var week = new[] { 1, 2, 3, 4, 5, 6, 0 };   // Monday first
 }
 
 <div class="mv-page-header">
     <div>
-        <h2>@(isNew ? "Add staff" : "Edit staff")</h2>
-        <div class="mv-subtle"><a asp-action="Index" asp-route-clientConfigId="@client.Id">Staff</a> &middot; @client.ClientName</div>
+        <h2>@(isNew ? $"Add {one}" : $"Edit {one}")</h2>
+        <div class="mv-subtle"><a asp-action="Index" asp-route-clientConfigId="@client.Id">@people</a> &middot; @client.ClientName</div>
     </div>
 </div>
 
@@ -17,13 +21,22 @@
     <div class="row g-2 mb-3">
         <div class="col-12 col-md-5">
             <label asp-for="Form.Name" class="form-label"></label>
-            <input asp-for="Form.Name" class="form-control" dir="auto" placeholder="Joy" data-testid="staff-name" />
+            <input asp-for="Form.Name" class="form-control" dir="auto" placeholder="@(clinic ? "Dr Priya Sharma" : "Joy")" data-testid="staff-name" />
             <span asp-validation-for="Form.Name" class="text-danger small" data-testid="staff-name-error"></span>
         </div>
         <div class="col-7 col-md-4">
             <label asp-for="Form.Title" class="form-label"></label>
-            <input asp-for="Form.Title" class="form-control" dir="auto" placeholder="Therapist" list="staff-titles" data-testid="staff-title" />
-            <datalist id="staff-titles"><option value="Therapist"></option><option value="Nail technician"></option><option value="Stylist"></option><option value="Aesthetician"></option></datalist>
+            <input asp-for="Form.Title" class="form-control" dir="auto" placeholder="@(clinic ? "BDS, MDS - Dentist" : "Therapist")" list="staff-titles" data-testid="staff-title" />
+            <datalist id="staff-titles">
+                @if (clinic)
+                {
+                    <option value="General physician"></option><option value="Dentist"></option><option value="Dermatologist"></option><option value="Physiotherapist"></option><option value="Paediatrician"></option>
+                }
+                else
+                {
+                    <option value="Therapist"></option><option value="Nail technician"></option><option value="Stylist"></option><option value="Aesthetician"></option>
+                }
+            </datalist>
         </div>
         <div class="col-5 col-md-3">
             <label asp-for="Form.Gender" class="form-label"></label>
@@ -34,6 +47,26 @@
             </select>
         </div>
     </div>
+
+    @if (clinic)
+    {
+        <div class="row g-2 mb-3">
+            <div class="col-6 col-md-4">
+                <label asp-for="Form.ConsultationFee" class="form-label">Consultation fee (@client.Currency)</label>
+                <input asp-for="Form.ConsultationFee" class="form-control" type="number" step="0.01" min="0" inputmode="decimal" data-testid="staff-fee" />
+                <span asp-validation-for="Form.ConsultationFee" class="text-danger small"></span>
+            </div>
+            <div class="col-6 col-md-8">
+                <label asp-for="Form.Languages" class="form-label"></label>
+                <input asp-for="Form.Languages" class="form-control" dir="auto" placeholder="English, Hindi, Tamil" data-testid="staff-languages" />
+            </div>
+            <div class="col-12">
+                <label asp-for="Form.Bio" class="form-label"></label>
+                <textarea asp-for="Form.Bio" class="form-control" rows="2" dir="auto" maxlength="1000" placeholder="12 years' experience; special interest in root canal treatment and children's dentistry." data-testid="staff-bio"></textarea>
+                <div class="form-text">Shown to patients in the chat. No phone numbers or personal details. Leave the fee empty to use each service's price.</div>
+            </div>
+        </div>
+    }
 
     <div class="form-label mb-1">Working days</div>
     <div class="form-text mt-0 mb-2">Untick their weekly day off.</div>
@@ -49,9 +82,37 @@
     <span asp-validation-for="Form.WorkingDays" class="text-danger small d-block" data-testid="staff-days-error"></span>
     <div class="mb-3"></div>
 
+    <div class="form-label mb-1">@(clinic ? "Sessions (when this doctor sees patients)" : "Own hours (optional)")</div>
+    <div class="form-text mt-0 mb-2">
+        @(clinic
+            ? "For example Mon 10:00-13:00 and 17:00-20:00. Patients are only offered times inside these sessions. Leave all empty to use the clinic's opening hours. Session 2 is for a second sitting the same day (for example evenings)."
+            : "Only if this person works different hours from the shop. Leave all empty to use the opening hours.")
+        An end time earlier than the start runs past midnight.
+    </div>
+    @* One line per day; on phones the second session drops under the first instead of hiding off-screen. *@
+    <div class="mb-1" data-testid="staff-sessions" style="max-width: 640px">
+        @foreach (var d in week)
+        {
+            <div class="d-flex flex-wrap align-items-center gap-2 py-2 border-bottom">
+                <div class="fw-semibold" style="width: 2.75rem">@BusinessClock.Short((DayOfWeek)d)</div>
+                @for (var n = 0; n < 2; n++)
+                {
+                    var i = d * 2 + n;
+                    <div class="d-flex gap-1 align-items-center" style="flex: 1 1 15rem; max-width: 17rem">
+                        <span class="small mv-subtle" style="width: 1.1rem">@(n + 1).</span>
+                        <input type="time" class="form-control form-control-sm" name="Form.SessionStarts[@i]" value="@Model.Form.Start(d, n)" aria-label="@BusinessClock.Short((DayOfWeek)d) session @(n + 1) start" data-testid="session-start-@d-@n" />
+                        <span>-</span>
+                        <input type="time" class="form-control form-control-sm" name="Form.SessionEnds[@i]" value="@Model.Form.End(d, n)" aria-label="@BusinessClock.Short((DayOfWeek)d) session @(n + 1) end" data-testid="session-end-@d-@n" />
+                    </div>
+                }
+            </div>
+        }
+    </div>
+    <span asp-validation-for="Form.SessionStarts" class="text-danger small d-block mb-3" data-testid="staff-sessions-error"></span>
+
     <div class="form-check mb-1">
         <input asp-for="Form.DoesHomeService" class="form-check-input" data-testid="staff-home" />
-        <label asp-for="Form.DoesHomeService" class="form-check-label"></label>
+        <label asp-for="Form.DoesHomeService" class="form-check-label">@(clinic ? "Does home visits" : "Does home service")</label>
     </div>
     @if (!isNew)
     {

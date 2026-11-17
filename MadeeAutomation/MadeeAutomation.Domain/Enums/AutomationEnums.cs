@@ -47,7 +47,10 @@ public enum VerticalPack
     CustomerSupport = 4,
 
     /// <summary>Spa, massage, nails, hair, beauty: customers book appointments (services + staff + time slots).</summary>
-    BeautyWellness = 5
+    BeautyWellness = 5,
+
+    /// <summary>Clinics (dental, skin, physio, general practice): patients book with a doctor in the doctor's own sessions.</summary>
+    Clinic = 6
 }
 
 public enum ClientStatus
@@ -56,4 +59,10 @@ public enum ClientStatus
     Active = 2,
     Paused = 3,
     Cancelled = 4
+}
+
+public static class VerticalPackExtensions
+{
+    /// <summary>Spas, salons and clinics work with appointments (Bookings, Services, Staff / Doctors) instead of orders and a menu.</summary>
+    public static bool UsesBookings(this VerticalPack vertical) => vertical is VerticalPack.BeautyWellness or VerticalPack.Clinic;
 }

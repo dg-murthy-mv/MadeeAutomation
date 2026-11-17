@@ -1,7 +1,15 @@
-@model (Booking Booking, ClientConfig Client, string ReturnUrl)
+@model (Booking Booking, ClientConfig Client, string ReturnUrl, List<BookingMessage> Planned)
 @{
     var b = Model.Booking;
     var c = Model.Client;
+    var terms = BookingTerms.For(c);
+    string PlannedName(string kind) => kind switch
+    {
+        BookingMessage.KindReminder2 => "2-hour reminder",
+        BookingMessage.KindFollowUp => "Follow-up message",
+        BookingMessage.KindFeedback => "Feedback question",
+        _ => kind
+    };
     var start = LocalTime.ToLocal(b.StartUtc, c.TimeZoneId);
     var end = LocalTime.ToLocal(b.EndUtc, c.TimeZoneId);
     var (badge, label) = b.Status switch
@@ -19,7 +27,9 @@
         <div>
             <span class="fw-semibold" data-testid="booking-ref">@b.Reference</span>
             <span class="badge @badge" data-testid="booking-status">@label</span>
-            @if (b.AtHome) { <span class="badge bg-info text-dark">Home service</span> }
+            @if (b.AtHome) { <span class="badge bg-info text-dark">@(terms.Clinic ? "Home visit" : "Home service")</span> }
+            @if (b.VisitType == Booking.FollowUpVisit) { <span class="badge bg-light text-dark border" data-testid="booking-visit-type">Follow-up visit</span> }
+            else if (b.VisitType == Booking.FirstVisit) { <span class="badge bg-light text-dark border" data-testid="booking-visit-type">First visit</span> }
             @if (b.Source == Booking.SourceStaff) { <span class="badge bg-light text-dark border">Added by staff</span> }
             <div class="mv-subtle small">@(string.IsNullOrWhiteSpace(b.Channel) ? "Walk-in / phone" : Channels.DisplayName(b.Channel)) &middot; booked @LocalTime.ToLocal(b.CreatedAtUtc, c.TimeZoneId).ToString("d MMM, HH:mm")</div>
         </div>
@@ -30,12 +40,19 @@
     </div>
     <div class="mt-2">
         <div><span dir="auto" data-testid="booking-service">@b.ServiceName</span> <span class="mv-subtle">(@BookingDesk.Duration(b.DurationMinutes))</span></div>
-        <div><strong>Staff:</strong> <span data-testid="booking-staff">@(b.StaffName ?? "-")</span>
-            @(b.Source == Booking.SourceStaff ? "" : b.StaffPreference switch { "F" => "(customer asked for female)", "M" => "(customer asked for male)", "staff" => "(customer chose this person)", _ => "" })</div>
-        <div><strong>Customer:</strong> <span dir="auto" data-testid="booking-customer">@(b.CustomerName ?? "-")</span>
+        <div><strong>@(terms.Clinic ? "Doctor" : "Staff"):</strong> <span data-testid="booking-staff">@(b.StaffName ?? "-")</span>
+            @(b.Source == Booking.SourceStaff ? "" : b.StaffPreference switch
+            {
+                "F" => terms.Clinic ? "(patient asked for a female doctor)" : "(customer asked for female)",
+                "M" => terms.Clinic ? "(patient asked for a male doctor)" : "(customer asked for male)",
+                "staff" => terms.Clinic ? "(patient chose this doctor)" : "(customer chose this person)",
+                _ => ""
+            })</div>
+        <div><strong>@terms.Customer:</strong> <span dir="auto" data-testid="booking-customer">@(b.CustomerName ?? "-")</span>
+            @if (b.PatientAge is int age) { <span data-testid="booking-age">&middot; age @age</span> }
             @if (!string.IsNullOrWhiteSpace(b.CustomerPhone)) { <span>&middot; <a href="tel:@b.CustomerPhone" data-testid="booking-phone">@b.CustomerPhone</a></span> }</div>
         @if (b.AtHome) { <div><strong>Address:</strong> <span dir="auto" data-testid="booking-address">@b.HomeAddress</span></div> }
-        @if (!string.IsNullOrWhiteSpace(b.CustomerNote)) { <div><strong>Note:</strong> <span dir="auto">@b.CustomerNote</span></div> }
+        @if (!string.IsNullOrWhiteSpace(b.CustomerNote)) { <div><strong>@(terms.Clinic ? "Reason" : "Note"):</strong> <span dir="auto" data-testid="booking-note">@b.CustomerNote</span></div> }
         @if (!string.IsNullOrWhiteSpace(b.StatusReason)) { <div class="small"><strong>Reason:</strong> @b.StatusReason</div> }
         @if (b.CustomerConfirmedAtUtc is not null) { <div class="small text-success" data-testid="booking-customer-confirmed">Customer replied "I'll be there".</div> }
         @if (b.CustomerNoticeSent == false) { <div class="small text-danger" data-testid="booking-notice-failed">Customer not told: @b.CustomerNoticeNote</div> }
@@ -47,7 +64,48 @@
         {
             <div class="small mv-subtle" data-testid="booking-reminder-due">Reminder goes out @LocalTime.ToLocal(due, c.TimeZoneId).ToString("ddd d MMM, HH:mm")</div>
         }
+        @foreach (var m in Model.Planned)
+        {
+            var ok = m.Note is null || m.Note.StartsWith("sent") || m.Note.StartsWith("not sent -");
+            <div class="small @(ok ? "mv-subtle" : "text-danger")" data-testid="booking-planned-@m.Kind">
+                @PlannedName(m.Kind): @(m.SentAtUtc is null ? $"goes out {LocalTime.ToLocal(m.DueUtc, c.TimeZoneId):ddd d MMM, HH:mm}" : m.Note ?? "sending...")
+            </div>
+        }
+        @if (b.FeedbackRating is int stars)
+        {
+            <div class="small" data-testid="booking-feedback">
+                <span class="@(stars <= 2 ? "text-danger fw-semibold" : "")">Feedback: @(new string('★', stars))@(new string('☆', 5 - stars)) (@stars/5)</span>
+                @if (!string.IsNullOrWhiteSpace(b.FeedbackComment)) { <span dir="auto">&middot; "@b.FeedbackComment"</span> }
+            </div>
+        }
+        @if (b.FollowUpDate is DateOnly fu)
+        {
+            <div class="small" data-testid="booking-followup">Follow-up around <strong>@fu.ToString("ddd d MMM yyyy")</strong>
+                @if (!string.IsNullOrWhiteSpace(b.FollowUpNote)) { <span dir="auto">&middot; "@b.FollowUpNote"</span> }</div>
+        }
     </div>
+    @if (terms.Clinic && b.Status == BookingStatus.Completed)
+    {
+        <form asp-controller="Bookings" asp-action="FollowUp" method="post" class="mt-3 border-top pt-2" data-testid="followup-form">
+            <input type="hidden" name="clientConfigId" value="@c.Id" /><input type="hidden" name="id" value="@b.Id" />
+            <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+            <div class="row g-2 align-items-end">
+                <div class="col-5 col-md-2">
+                    <label class="form-label small mb-1" for="fu-days-@b.Id">Follow-up in (days)</label>
+                    <input type="number" min="0" max="730" class="form-control form-control-sm" id="fu-days-@b.Id" name="days"
+                           value="@(b.FollowUpDate is DateOnly f ? f.DayNumber - b.LocalDate.DayNumber : null)" placeholder="e.g. 14" data-testid="followup-days" />
+                </div>
+                <div class="col-12 col-md-7">
+                    <label class="form-label small mb-1" for="fu-note-@b.Id">Doctor's instructions for the patient (optional, sent as written)</label>
+                    <input type="text" maxlength="1000" class="form-control form-control-sm" id="fu-note-@b.Id" name="note" value="@b.FollowUpNote" dir="auto"
+                           placeholder="Please bring your X-ray. Continue the mouthwash until the visit." data-testid="followup-note" />
+                </div>
+                <div class="col-7 col-md-3">
+                    <button type="submit" class="btn btn-sm btn-outline-primary w-100" data-testid="followup-save">@(b.FollowUpDate is null ? "Set follow-up" : "Update (0 = remove)")</button>
+                </div>
+            </div>
+        </form>
+    }
     @if (b.IsHolding)
     {
         <div class="d-flex flex-wrap gap-2 mt-3 align-items-center">
@@ -75,9 +133,17 @@
                 <input type="hidden" name="clientConfigId" value="@c.Id" /><input type="hidden" name="id" value="@b.Id" />
                 <input type="hidden" name="status" value="@(b.Status == BookingStatus.Pending ? BookingStatus.Declined : BookingStatus.Cancelled)" />
                 <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
-                <input type="text" name="reason" class="form-control form-control-sm" style="max-width: 16rem" maxlength="300" placeholder="Reason for the customer (optional)" data-testid="booking-reason" />
+                <input type="text" name="reason" class="form-control form-control-sm" style="max-width: 16rem" maxlength="300" placeholder="Reason for the @terms.Customer.ToLowerInvariant() (optional)" data-testid="booking-reason" />
                 <button type="submit" class="btn btn-sm btn-outline-danger" data-testid="booking-decline">@(b.Status == BookingStatus.Pending ? "Decline" : "Cancel booking")</button>
             </form>
         </div>
+    }
+    @if (!b.IsHolding && b.CustomerName != "(erased)")
+    {
+        <form asp-controller="Bookings" asp-action="EraseCustomer" method="post" class="mt-2 text-end" onsubmit="return confirm(this.dataset.confirm)"
+              data-confirm="Erase @(b.CustomerName ?? "this customer")'s personal details from ALL their bookings, waitlist and chat messages? This can't be undone.">
+            <input type="hidden" name="clientConfigId" value="@c.Id" /><input type="hidden" name="id" value="@b.Id" />
+            <button type="submit" class="btn btn-sm btn-link text-danger p-0" data-testid="booking-erase">Erase personal details</button>
+        </form>
     }
 </div>

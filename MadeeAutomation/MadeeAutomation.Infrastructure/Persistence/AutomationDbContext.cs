@@ -28,6 +28,9 @@ public class AutomationDbContext : DbContext
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
     public DbSet<StaffService> StaffServices => Set<StaffService>();
     public DbSet<Booking> Bookings => Set<Booking>();
+    public DbSet<StaffSession> StaffSessions => Set<StaffSession>();
+    public DbSet<BookingMessage> BookingMessages => Set<BookingMessage>();
+    public DbSet<WaitlistEntry> WaitlistEntries => Set<WaitlistEntry>();
     public DbSet<AiUsageRecord> AiUsage => Set<AiUsageRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -40,6 +43,11 @@ public class AutomationDbContext : DbContext
             entity.Property(c => c.TaxRatePercent).HasPrecision(5, 2);
             entity.Property(c => c.HomeServiceFee).HasPrecision(18, 2);
             entity.Property(c => c.MonthlyReportSentFor).HasMaxLength(7);
+            entity.Property(c => c.WhatsAppTemplateLanguage).HasMaxLength(20);
+            entity.Property(c => c.WhatsAppTemplateReminder).HasMaxLength(100);
+            entity.Property(c => c.WhatsAppTemplateFollowUp).HasMaxLength(100);
+            entity.Property(c => c.WhatsAppTemplateFeedback).HasMaxLength(100);
+            entity.Property(c => c.WhatsAppTemplateWaitlist).HasMaxLength(100);
             entity.ToTable("ClientConfigs");
             entity.HasIndex(c => c.ClientCode).IsUnique();
             entity.Property(c => c.ClientName).HasMaxLength(200).IsRequired();
@@ -140,7 +148,41 @@ public class AutomationDbContext : DbContext
             entity.Property(s => s.Name).HasMaxLength(100).IsRequired();
             entity.Property(s => s.Title).HasMaxLength(100);
             entity.Property(s => s.Gender).HasMaxLength(1);
+            entity.Property(s => s.ConsultationFee).HasPrecision(18, 2);
+            entity.Property(s => s.Languages).HasMaxLength(200);
+            entity.Property(s => s.Bio).HasMaxLength(1000);
             entity.HasMany(s => s.Services).WithOne().HasForeignKey(x => x.StaffMemberId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(s => s.Sessions).WithOne().HasForeignKey(x => x.StaffMemberId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<StaffSession>(entity =>
+        {
+            entity.ToTable("StaffSessions");
+            entity.HasIndex(x => x.StaffMemberId);
+        });
+
+        modelBuilder.Entity<BookingMessage>(entity =>
+        {
+            entity.ToTable("BookingMessages");
+            entity.HasIndex(m => new { m.SentAtUtc, m.DueUtc });
+            entity.HasIndex(m => new { m.BookingId, m.Kind });
+            entity.Property(m => m.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(m => m.Note).HasMaxLength(300);
+        });
+
+        modelBuilder.Entity<WaitlistEntry>(entity =>
+        {
+            entity.ToTable("WaitlistEntries");
+            entity.HasIndex(w => new { w.ClientConfigId, w.Status });
+            entity.HasIndex(w => w.Status);
+            entity.Property(w => w.ServiceName).HasMaxLength(200).IsRequired();
+            entity.Property(w => w.Preference).HasMaxLength(10).IsRequired();
+            entity.Property(w => w.StaffName).HasMaxLength(100);
+            entity.Property(w => w.Channel).HasMaxLength(20).IsRequired();
+            entity.Property(w => w.CustomerId).HasMaxLength(200).IsRequired();
+            entity.Property(w => w.CustomerName).HasMaxLength(200);
+            entity.Property(w => w.Language).HasMaxLength(40);
+            entity.Property(w => w.Note).HasMaxLength(300);
         });
 
         modelBuilder.Entity<StaffService>(entity =>
@@ -168,6 +210,9 @@ public class AutomationDbContext : DbContext
             entity.Property(b => b.ServiceName).HasMaxLength(200).IsRequired();
             entity.Property(b => b.Currency).HasMaxLength(3);
             entity.Property(b => b.Price).HasPrecision(18, 2);
+            entity.Property(b => b.VisitType).HasMaxLength(10);
+            entity.Property(b => b.FollowUpNote).HasMaxLength(1000);
+            entity.Property(b => b.FeedbackComment).HasMaxLength(1000);
             entity.Property(b => b.HomeServiceFee).HasPrecision(18, 2);
             entity.Property(b => b.Total).HasPrecision(18, 2);
             entity.Property(b => b.StaffName).HasMaxLength(100);

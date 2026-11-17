@@ -6,9 +6,10 @@
     {
         ("Bookings", "Index", "Bookings", "bookings"),
         ("Services", "Index", "Services", "services"),
-        ("Staff", "Index", "Staff", "staff"),
+        ("Staff", "Index", c.Vertical == VerticalPack.Clinic ? "Doctors" : "Staff", "staff"),
         ("Hours", "Index", "Opening hours", "hours"),
-        ("Bookings", "Settings", "Booking settings", "settings")
+        ("Bookings", "Settings", "Booking settings", "settings"),
+        ("Reports", "Index", "Reports", "reports")
     };
 }
 <div class="d-flex gap-2 flex-wrap" data-testid="beauty-links">

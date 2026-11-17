@@ -1,7 +1,9 @@
 @model StaffPageModel
 @{
     var client = Model.Client;
-    ViewData["Title"] = $"Staff - {client.ClientName}";
+    var clinic = client.Vertical == VerticalPack.Clinic;
+    var people = clinic ? "Doctors" : "Staff";
+    ViewData["Title"] = $"{people} - {client.ClientName}";
     string DaysOff(StaffMember m)
     {
         var days = Enumerable.Range(0, 7).Where(d => m.IsOffOn((DayOfWeek)d)).Select(d => BusinessClock.Short((DayOfWeek)d)).ToList();
@@ -16,11 +18,11 @@
 
 <div class="mv-page-header">
     <div>
-        <h2>Staff</h2>
-        <div class="mv-subtle"><partial name="_ClientCrumb" model="client" /> &middot; the people customers book with &middot; <span data-testid="staff-total">@Model.Staff.Count person(s)</span></div>
+        <h2>@people</h2>
+        <div class="mv-subtle"><partial name="_ClientCrumb" model="client" /> &middot; @(clinic ? "the doctors patients book with" : "the people customers book with") &middot; <span data-testid="staff-total">@Model.Staff.Count person(s)</span></div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-        <a class="btn btn-primary btn-sm" asp-action="Create" asp-route-clientConfigId="@client.Id" data-testid="add-staff">+ Add staff</a>
+        <a class="btn btn-primary btn-sm" asp-action="Create" asp-route-clientConfigId="@client.Id" data-testid="add-staff">+ Add @(clinic ? "doctor" : "staff")</a>
         <partial name="_BeautyLinks" model='(client, "staff")' />
     </div>
 </div>
@@ -28,7 +30,7 @@
 <div class="mv-card">
     @if (Model.Staff.Count == 0)
     {
-        <div class="mv-card-body mv-subtle" data-testid="staff-empty">No staff yet. Add the therapists, nail technicians and stylists customers can book.</div>
+        <div class="mv-card-body mv-subtle" data-testid="staff-empty">@(clinic ? "No doctors yet. Add each doctor with their sessions and fee." : "No staff yet. Add the therapists, nail technicians and stylists customers can book.")</div>
     }
     else
     {
@@ -44,7 +46,9 @@
                             <span class="fw-semibold" dir="auto">@m.Name</span>
                             @if (!string.IsNullOrWhiteSpace(m.Title)) { <span class="small mv-subtle">&middot; @m.Title</span> }
                             @if (m.Gender is "F" or "M") { <span class="badge bg-light text-dark border ms-1">@(m.Gender == "F" ? "Female" : "Male")</span> }
-                            @if (m.DoesHomeService) { <span class="badge bg-info text-dark ms-1">Home service</span> }
+                            @if (m.DoesHomeService) { <span class="badge bg-info text-dark ms-1">@(clinic ? "Home visits" : "Home service")</span> }
+                            @if (m.ConsultationFee is decimal fee) { <div class="small" data-testid="staff-fee-shown">Fee @Money.Format(fee, client.Currency)</div> }
+                            @if (m.Sessions.Count > 0) { <div class="small mv-subtle" data-testid="staff-sessions-shown">@DoctorSessions.Text(m.Sessions, client.Country)</div> }
                         </td>
                         <td data-label="Day off" data-testid="staff-days-off">
                             @if (m.DaysOffMask == 127)
@@ -75,4 +79,4 @@
         </div>
     }
 </div>
-<div class="form-text mt-2">Each person serves one customer at a time. The bot never offers a time when nobody suitable is free, and never on their day off. Untick "Working" when someone is on leave.</div>
+<div class="form-text mt-2">@(clinic ? "Each doctor sees one patient at a time. Patients are only offered times inside the doctor's sessions." : "") Each person serves one customer at a time. The bot never offers a time when nobody suitable is free, and never on their day off. Untick "Working" when someone is on leave.</div>

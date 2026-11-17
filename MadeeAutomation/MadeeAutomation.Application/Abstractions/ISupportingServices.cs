@@ -289,7 +289,8 @@ public class ChatCard
 {
     public string Title { get; set; } = string.Empty;
     public string? Subtitle { get; set; }                  // the price
-    public string? Note { get; set; }                      // "Sold out today", "3 left today"
+    public string? Note { get; set; }                      // "Sold out today", "3 left today" (shown as a warning)
+    public string? Details { get; set; }                   // plain extra lines: a doctor's fee, languages, timings, bio
     public List<ChatButton> Buttons { get; set; } = new();
 }
 
@@ -323,6 +324,27 @@ public class OutboundMessage
 
     /// <summary>LINE only: reply with this token first (free); falls back to a push message if it fails.</summary>
     public string? ReplyToken { get; set; }
+
+    /// <summary>
+    /// WhatsApp only: send this approved template instead of Text / Rich. Needed for messages the business
+    /// starts more than 24 hours after the customer's last message (reminders, follow-ups...).
+    /// </summary>
+    public MessageTemplate? Template { get; set; }
+}
+
+/// <summary>A WhatsApp message template approved in Meta, with its values.</summary>
+public class MessageTemplate
+{
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>The language code it was approved in ("en", "en_US", "hi"...).</summary>
+    public string Language { get; set; } = "en";
+
+    /// <summary>The values for {{1}}, {{2}}... in the template's body, in order.</summary>
+    public List<string> BodyParameters { get; set; } = new();
+
+    /// <summary>What each quick-reply button of the template sends back, in the template's button order.</summary>
+    public List<string> QuickReplyPayloads { get; set; } = new();
 }
 
 public class MessageSendResult

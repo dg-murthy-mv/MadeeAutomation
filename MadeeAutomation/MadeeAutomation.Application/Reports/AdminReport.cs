@@ -56,6 +56,7 @@ public class AdminReportBuilder
     {
         VerticalPack.FnBRetail => "Food & retail",
         VerticalPack.BeautyWellness => "Beauty & wellness",
+        VerticalPack.Clinic => "Clinics",
         VerticalPack.CrmSales => "CRM & sales",
         VerticalPack.FinanceChit => "Finance",
         VerticalPack.CustomerSupport => "Customer support",
@@ -67,6 +68,7 @@ public class AdminReportBuilder
     {
         "customer-message" => "Customer chat (orders)",
         "booking-message" => "Customer chat (bookings)",
+        "clinic-message" => "Patient chat (clinic)",
         "order-parser" => "Orders only",
         "faq-responder" => "FAQ answers",
         "notice-translate" => "Translating order / booking notices",

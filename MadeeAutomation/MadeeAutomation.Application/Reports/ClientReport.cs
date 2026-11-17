@@ -82,6 +82,14 @@ public sealed class ClientReport
     public List<StaffLine> StaffLines { get; } = new();
     public List<Booking> BookingList { get; } = new();
 
+    // ---- Feedback (any business with ratings switched on) ----
+    public int Ratings { get; set; }
+    public decimal? AverageRating { get; set; }
+    public List<ReportPoint> RatingSpread { get; } = new();
+    public List<(Booking Visit, int Stars, string? Comment)> RecentFeedback { get; } = new();
+
+    public bool IsClinic => Client.Vertical == MadeeAutomation.Domain.Enums.VerticalPack.Clinic;
+
     public int? NoShowRatePercent => Completed + NoShows > 0 ? (int)Math.Round(NoShows * 100m / (Completed + NoShows)) : null;
 }
 

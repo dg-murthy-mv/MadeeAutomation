@@ -24,6 +24,8 @@ public static class HandlerCatalog
             "Recommended for LINE / WhatsApp / Messenger. Takes orders from the menu, answers questions from the knowledge base, hands anything else to staff. Replies in the customer's language.", true),
         new("booking-message", "Customer messages (appointments + FAQ + hand-over)", VerticalPack.BeautyWellness, TriggerType.MessageReceived,
             "For spas, salons, nails and beauty: customers book a service with buttons (service, staff, day, free times), see and cancel their bookings, and get answers from the knowledge base. Replies in the customer's language.", true),
+        new("clinic-message", "Patient messages (appointments + FAQ + hand-over)", VerticalPack.Clinic, TriggerType.MessageReceived,
+            "For clinics: patients book with a doctor in the doctor's own sessions (doctor, day, free times, age, first visit or follow-up, reason), see and move their appointments, and get answers about fees, timings and doctors. Never gives medical advice; possible emergencies are told to call the emergency number and staff are alerted.", true),
         new("order-parser", "Orders only", VerticalPack.FnBRetail, TriggerType.MessageReceived,
             "Creates a POSFirst order when the message is an order; otherwise asks the customer to send their order.", true),
         new("faq-responder", "FAQ only", VerticalPack.CustomerSupport, TriggerType.MessageReceived,

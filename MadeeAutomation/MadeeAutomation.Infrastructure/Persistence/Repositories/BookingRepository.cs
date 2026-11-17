@@ -85,21 +85,41 @@ public class BookingRepository : IBookingRepository
     // =====================================================================
 
     public Task<List<StaffMember>> GetStaffAsync(Guid clientConfigId, bool activeOnly = false, CancellationToken cancellationToken = default) =>
-        _db.StaffMembers.AsNoTracking().Include(s => s.Services)
+        _db.StaffMembers.AsNoTracking().Include(s => s.Services).Include(s => s.Sessions)
             .Where(s => s.ClientConfigId == clientConfigId && (!activeOnly || s.IsActive))
             .OrderBy(s => s.SortOrder).ThenBy(s => s.Name)
+            .AsSplitQuery()
             .ToListAsync(cancellationToken);
 
     public Task<StaffMember?> GetStaffMemberAsync(Guid id, CancellationToken cancellationToken = default) =>
-        _db.StaffMembers.AsNoTracking().Include(s => s.Services).FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+        _db.StaffMembers.AsNoTracking().Include(s => s.Services).Include(s => s.Sessions).AsSplitQuery()
+            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
 
     public async Task AddStaffAsync(StaffMember staff, IEnumerable<Guid> serviceIds, CancellationToken cancellationToken = default)
     {
         _db.ChangeTracker.Clear();
+        var sessions = staff.Sessions.ToList();
         staff.Services = new List<StaffService>();
+        staff.Sessions = new List<StaffSession>();
         _db.StaffMembers.Add(staff);
         await _db.SaveChangesAsync(cancellationToken);
         await SetStaffServicesAsync(staff, serviceIds, cancellationToken);
+        await SetSessionsAsync(staff.Id, sessions, cancellationToken);
+        staff.Sessions = sessions;
+    }
+
+    /// <summary>Replaces the person's weekly sessions (plain delete + insert, nothing tracked is touched).</summary>
+    private async Task SetSessionsAsync(Guid staffId, IEnumerable<StaffSession> sessions, CancellationToken cancellationToken)
+    {
+        await _db.StaffSessions.Where(x => x.StaffMemberId == staffId).ExecuteDeleteAsync(cancellationToken);
+        var rows = sessions.Select(x => new StaffSession
+        {
+            Id = Guid.NewGuid(), StaffMemberId = staffId, DayOfWeek = x.DayOfWeek, StartTime = x.StartTime, EndTime = x.EndTime
+        }).ToList();
+        if (rows.Count == 0) return;
+        _db.StaffSessions.AddRange(rows);
+        await _db.SaveChangesAsync(cancellationToken);
+        _db.ChangeTracker.Clear();
     }
 
     public async Task UpdateStaffAsync(StaffMember staff, IEnumerable<Guid> serviceIds, CancellationToken cancellationToken = default)
@@ -116,8 +136,13 @@ public class BookingRepository : IBookingRepository
         row.DoesHomeService = staff.DoesHomeService;
         row.IsActive = staff.IsActive;
         row.SortOrder = staff.SortOrder;
+        row.ConsultationFee = staff.ConsultationFee;
+        row.Languages = staff.Languages;
+        row.Bio = staff.Bio;
+        var sessions = staff.Sessions.ToList();
         await _db.SaveChangesAsync(cancellationToken);
         await SetStaffServicesAsync(row, serviceIds, cancellationToken);
+        await SetSessionsAsync(row.Id, sessions, cancellationToken);
     }
 
     private async Task SetStaffServicesAsync(StaffMember staff, IEnumerable<Guid> serviceIds, CancellationToken cancellationToken)
@@ -240,6 +265,10 @@ public class BookingRepository : IBookingRepository
                             .SetProperty(b => b.ReminderSentAtUtc, (DateTime?)null)
                             .SetProperty(b => b.ReminderNote, (string?)null)
                             .SetProperty(b => b.CustomerConfirmedAtUtc, (DateTime?)null), cancellationToken);
+                    // The 2-hour reminder was for the old time: it is set again when staff confirm the new one.
+                    if (changed == 1)
+                        await _db.BookingMessages.Where(m => m.BookingId == bookingId && m.Kind == BookingMessage.KindReminder2 && m.SentAtUtc == null)
+                            .ExecuteDeleteAsync(cancellationToken);
                     await tx.CommitAsync(cancellationToken);
                     return changed == 1;
                 });
@@ -370,5 +399,189 @@ public class BookingRepository : IBookingRepository
         var cut = note.Length > 300 ? note[..300] : note;
         return _db.Bookings.Where(b => b.Id == bookingId)
             .ExecuteUpdateAsync(s => s.SetProperty(b => b.ReminderNote, cut), cancellationToken);
+    }
+
+    // =====================================================================
+    // Messages sent later (2-hour reminder, follow-up, feedback)
+    // =====================================================================
+
+    public async Task ScheduleMessageAsync(Guid clientConfigId, Guid bookingId, string kind, DateTime dueUtc, CancellationToken cancellationToken = default)
+    {
+        await _db.BookingMessages.Where(m => m.BookingId == bookingId && m.Kind == kind && m.SentAtUtc == null)
+            .ExecuteDeleteAsync(cancellationToken);
+        _db.ChangeTracker.Clear();
+        _db.BookingMessages.Add(new BookingMessage { ClientConfigId = clientConfigId, BookingId = bookingId, Kind = kind, DueUtc = dueUtc });
+        await _db.SaveChangesAsync(cancellationToken);
+        _db.ChangeTracker.Clear();
+    }
+
+    public Task CancelMessagesAsync(Guid bookingId, string? kind = null, CancellationToken cancellationToken = default) =>
+        _db.BookingMessages.Where(m => m.BookingId == bookingId && m.SentAtUtc == null && (kind == null || m.Kind == kind))
+            .ExecuteDeleteAsync(cancellationToken);
+
+    public Task<List<BookingMessage>> GetDueMessagesAsync(DateTime utcNow, int take, CancellationToken cancellationToken = default) =>
+        _db.BookingMessages.AsNoTracking()
+            .Where(m => m.SentAtUtc == null && m.DueUtc <= utcNow)
+            .OrderBy(m => m.DueUtc)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
+    public async Task<bool> TryClaimMessageAsync(Guid messageId, DateTime utcNow, CancellationToken cancellationToken = default) =>
+        await _db.BookingMessages.Where(m => m.Id == messageId && m.SentAtUtc == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.SentAtUtc, utcNow), cancellationToken) == 1;
+
+    public Task SetMessageNoteAsync(Guid messageId, string note, CancellationToken cancellationToken = default)
+    {
+        var cut = note.Length > 300 ? note[..300] : note;
+        return _db.BookingMessages.Where(m => m.Id == messageId).ExecuteUpdateAsync(s => s.SetProperty(m => m.Note, cut), cancellationToken);
+    }
+
+    public async Task<List<BookingMessage>> GetMessagesForAsync(IReadOnlyCollection<Guid> bookingIds, CancellationToken cancellationToken = default)
+    {
+        if (bookingIds.Count == 0) return new List<BookingMessage>();
+        var ids = bookingIds.Distinct().ToList();
+        return await _db.BookingMessages.AsNoTracking().Where(m => ids.Contains(m.BookingId)).OrderBy(m => m.DueUtc).ToListAsync(cancellationToken);
+    }
+
+    // =====================================================================
+    // Clinics: follow-up and feedback
+    // =====================================================================
+
+    public Task SetFollowUpAsync(Guid clientConfigId, Guid bookingId, DateOnly? date, string? note, CancellationToken cancellationToken = default)
+    {
+        var cut = string.IsNullOrWhiteSpace(note) ? null : note.Trim().Length > 1000 ? note.Trim()[..1000] : note.Trim();
+        return _db.Bookings.Where(b => b.Id == bookingId && b.ClientConfigId == clientConfigId)
+            .ExecuteUpdateAsync(s => s.SetProperty(b => b.FollowUpDate, date).SetProperty(b => b.FollowUpNote, cut), cancellationToken);
+    }
+
+    public async Task<bool> SetFeedbackAsync(Guid clientConfigId, Guid bookingId, int? rating, string? comment, DateTime utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        var rows = _db.Bookings.Where(b => b.Id == bookingId && b.ClientConfigId == clientConfigId);
+        if (rating is { } r)
+        {
+            int? stars = Math.Clamp(r, 1, 5);
+            DateTime? at = utcNow;
+            return await rows.ExecuteUpdateAsync(s => s.SetProperty(b => b.FeedbackRating, stars).SetProperty(b => b.FeedbackAtUtc, at),
+                cancellationToken) == 1;
+        }
+        var cut = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim().Length > 1000 ? comment.Trim()[..1000] : comment.Trim();
+        return await rows.ExecuteUpdateAsync(s => s.SetProperty(b => b.FeedbackComment, cut), cancellationToken) == 1;
+    }
+
+    public async Task<List<FollowUpRow>> GetFollowUpsAsync(Guid clientConfigId, DateOnly fromDate, int take, CancellationToken cancellationToken = default)
+    {
+        var visits = await _db.Bookings.AsNoTracking()
+            .Where(b => b.ClientConfigId == clientConfigId && b.FollowUpDate != null && b.FollowUpDate >= fromDate)
+            .OrderBy(b => b.FollowUpDate)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+        var result = new List<FollowUpRow>();
+        foreach (var v in visits)
+        {
+            var channel = v.Channel;
+            var customer = v.CustomerId;
+            var phone = v.CustomerPhone;
+            var after = v.StartUtc;
+            var next = await _db.Bookings.AsNoTracking()
+                .Where(b => b.ClientConfigId == clientConfigId && b.Id != v.Id && b.StartUtc > after &&
+                            (b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed || b.Status == BookingStatus.Completed) &&
+                            ((customer != null && b.Channel == channel && b.CustomerId == customer) || (phone != null && b.CustomerPhone == phone)))
+                .OrderBy(b => b.StartUtc)
+                .FirstOrDefaultAsync(cancellationToken);
+            result.Add(new FollowUpRow(v, next));
+        }
+        return result;
+    }
+
+    // =====================================================================
+    // Waitlist
+    // =====================================================================
+
+    public async Task AddWaitlistAsync(WaitlistEntry entry, CancellationToken cancellationToken = default)
+    {
+        _db.ChangeTracker.Clear();
+        _db.WaitlistEntries.Add(entry);
+        await _db.SaveChangesAsync(cancellationToken);
+        _db.ChangeTracker.Clear();
+    }
+
+    public Task<WaitlistEntry?> GetWaitlistEntryAsync(Guid clientConfigId, Guid id, CancellationToken cancellationToken = default) =>
+        _db.WaitlistEntries.AsNoTracking().FirstOrDefaultAsync(w => w.Id == id && w.ClientConfigId == clientConfigId, cancellationToken);
+
+    public Task<List<WaitlistEntry>> GetWaitlistAsync(Guid clientConfigId, bool openOnly, CancellationToken cancellationToken = default) =>
+        _db.WaitlistEntries.AsNoTracking()
+            .Where(w => w.ClientConfigId == clientConfigId && (!openOnly || w.Status == WaitlistStatus.Waiting || w.Status == WaitlistStatus.Offered))
+            .OrderBy(w => w.LocalDate).ThenBy(w => w.CreatedAtUtc)
+            .Take(200)
+            .ToListAsync(cancellationToken);
+
+    public Task<List<WaitlistEntry>> GetWaitingAsync(int take, CancellationToken cancellationToken = default) =>
+        _db.WaitlistEntries.AsNoTracking()
+            .Where(w => w.Status == WaitlistStatus.Waiting)
+            .OrderBy(w => w.CreatedAtUtc)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
+    public Task<bool> IsWaitingAsync(Guid clientConfigId, string channel, string customerId, Guid serviceId, DateOnly? date,
+        CancellationToken cancellationToken = default) =>
+        _db.WaitlistEntries.AnyAsync(w => w.ClientConfigId == clientConfigId && w.Channel == channel && w.CustomerId == customerId &&
+                                          w.ServiceItemId == serviceId && w.LocalDate == date &&
+                                          (w.Status == WaitlistStatus.Waiting || w.Status == WaitlistStatus.Offered), cancellationToken);
+
+    public async Task<bool> SetWaitlistStatusAsync(Guid id, WaitlistStatus status, string? note, DateTime? offeredAtUtc = null, WaitlistStatus? onlyIf = null,
+        CancellationToken cancellationToken = default)
+    {
+        var cut = string.IsNullOrWhiteSpace(note) ? null : note.Length > 300 ? note[..300] : note;
+        var rows = _db.WaitlistEntries.Where(w => w.Id == id && (onlyIf == null || w.Status == onlyIf));
+        return offeredAtUtc is { } at
+            ? await rows.ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, status).SetProperty(w => w.Note, cut).SetProperty(w => w.OfferedAtUtc, at), cancellationToken) == 1
+            : await rows.ExecuteUpdateAsync(s => s.SetProperty(w => w.Status, status).SetProperty(w => w.Note, cut), cancellationToken) == 1;
+    }
+
+    // =====================================================================
+    // Privacy: erase one customer's personal details
+    // =====================================================================
+
+    public async Task<EraseResult> EraseCustomerAsync(Guid clientConfigId, string? channel, string? customerId, string? phone,
+        CancellationToken cancellationToken = default)
+    {
+        var hasChat = !string.IsNullOrWhiteSpace(channel) && !string.IsNullOrWhiteSpace(customerId);
+        var hasPhone = !string.IsNullOrWhiteSpace(phone);
+        if (!hasChat && !hasPhone) return new EraseResult(0, 0, 0);
+
+        var bookings = await _db.Bookings
+            .Where(b => b.ClientConfigId == clientConfigId &&
+                        ((hasChat && b.Channel == channel && b.CustomerId == customerId) || (hasPhone && b.CustomerPhone == phone)))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(b => b.CustomerName, "(erased)")
+                .SetProperty(b => b.CustomerPhone, (string?)null)
+                .SetProperty(b => b.CustomerId, (string?)null)
+                .SetProperty(b => b.HomeAddress, (string?)null)
+                .SetProperty(b => b.CustomerNote, (string?)null)
+                .SetProperty(b => b.PatientAge, (int?)null)
+                .SetProperty(b => b.FollowUpNote, (string?)null)
+                .SetProperty(b => b.FeedbackComment, (string?)null)
+                .SetProperty(b => b.Language, (string?)null)
+                .SetProperty(b => b.CustomerNoticeNote, (string?)null), cancellationToken);
+
+        var waitlist = 0;
+        var messages = 0;
+        if (hasChat)
+        {
+            waitlist = await _db.WaitlistEntries
+                .Where(w => w.ClientConfigId == clientConfigId && w.Channel == channel && w.CustomerId == customerId)
+                .ExecuteDeleteAsync(cancellationToken);
+            await _db.Conversations
+                .Where(c => c.ClientConfigId == clientConfigId && c.Channel == channel && c.CustomerId == customerId)
+                .ExecuteDeleteAsync(cancellationToken);
+            messages = await _db.InboundEvents
+                .Where(e => e.ClientConfigId == clientConfigId && e.Channel == channel && e.CustomerId == customerId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(e => e.MessageText, "(erased)")
+                    .SetProperty(e => e.CustomerName, (string?)null)
+                    .SetProperty(e => e.CustomerId, (string?)null), cancellationToken);
+        }
+        return new EraseResult(bookings, waitlist, messages);
     }
 }

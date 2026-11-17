@@ -106,20 +106,20 @@
     </div>
 </div>
 
-@if (client.Vertical == VerticalPack.BeautyWellness)
+@if (client.Vertical.UsesBookings())
 {
     <div class="mv-card mv-card-body mb-4" data-testid="beauty-card">
         <h5 class="mv-section-title">Appointments</h5>
-        <div class="mb-2">Customers book services with staff in the chat. Right now: <span data-testid="hours-status">@(Model.HoursStatus?.StatusText ?? "Opening hours are not set.")</span></div>
+        <div class="mb-2">@(client.Vertical == VerticalPack.Clinic ? "Patients book with doctors in the chat." : "Customers book services with staff in the chat.") Right now: <span data-testid="hours-status">@(Model.HoursStatus?.StatusText ?? "Opening hours are not set.")</span></div>
         <div class="d-flex flex-wrap gap-2">
             <a class="btn btn-sm btn-primary" asp-controller="Bookings" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-bookings">Bookings</a>
             <a class="btn btn-sm btn-outline-primary" asp-controller="Services" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-services">Services</a>
-            <a class="btn btn-sm btn-outline-primary" asp-controller="Staff" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-staff">Staff</a>
+            <a class="btn btn-sm btn-outline-primary" asp-controller="Staff" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-staff">@(client.Vertical == VerticalPack.Clinic ? "Doctors" : "Staff")</a>
             <a class="btn btn-sm btn-outline-primary" asp-controller="Hours" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-hours">Opening hours</a>
             <a class="btn btn-sm btn-outline-primary" asp-controller="Bookings" asp-action="Settings" asp-route-clientConfigId="@client.Id" data-testid="open-booking-settings">Booking settings</a>
             <a class="btn btn-sm btn-outline-primary" asp-controller="Reports" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-reports">Reports</a>
         </div>
-        <div class="form-text">Use the "Customer messages (appointments + FAQ + hand-over)" workflow for this client's channels.</div>
+        <div class="form-text">Use the @(client.Vertical == VerticalPack.Clinic ? "\"Patient messages (appointments + FAQ + hand-over)\"" : "\"Customer messages (appointments + FAQ + hand-over)\"") workflow for this client's channels.</div>
     </div>
 }
 else

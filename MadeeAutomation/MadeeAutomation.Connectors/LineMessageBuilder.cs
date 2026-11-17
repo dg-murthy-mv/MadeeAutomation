@@ -73,6 +73,8 @@ public static class LineMessageBuilder
             body.Add(new { type = "text", text = Cut(card.Subtitle, 60), size = "sm", color = "#555555" });
         if (!string.IsNullOrWhiteSpace(card.Note))
             body.Add(new { type = "text", text = Cut(card.Note, 80), size = "xs", color = "#C0392B", wrap = true });
+        if (!string.IsNullOrWhiteSpace(card.Details))
+            body.Add(new { type = "text", text = Cut(card.Details, 400), size = "xs", color = "#555555", wrap = true });
 
         var bubble = new Dictionary<string, object?>
         {
@@ -110,7 +112,7 @@ public static class LineMessageBuilder
         if (rich is null || rich.Cards.Count == 0) return text;
 
         var lines = rich.Cards.Select(c =>
-            $"- {c.Title}" + (string.IsNullOrWhiteSpace(c.Subtitle) ? "" : $": {c.Subtitle}") + (string.IsNullOrWhiteSpace(c.Note) ? "" : $" ({c.Note})"));
+            $"- {c.Title}" + (string.IsNullOrWhiteSpace(c.Subtitle) ? "" : $": {c.Subtitle}") + (string.IsNullOrWhiteSpace(c.Note) ? "" : $" ({c.Note})") + (string.IsNullOrWhiteSpace(c.Details) ? "" : $"\n  {c.Details.Replace("\n", "\n  ")}"));
         var all = text + "\n" + string.Join("\n", lines);
         return all.Length > MaxText ? all[..MaxText] : all;
     }

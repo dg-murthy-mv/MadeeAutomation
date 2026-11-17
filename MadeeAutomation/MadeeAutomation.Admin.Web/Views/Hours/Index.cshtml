@@ -14,7 +14,7 @@
         </div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-        @if (client.Vertical == VerticalPack.BeautyWellness)
+        @if (client.Vertical.UsesBookings())
         {
             <a class="btn btn-outline-secondary" asp-controller="Services" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="hours-open-services">Services</a>
             <a class="btn btn-outline-secondary" asp-controller="Bookings" asp-action="Index" asp-route-clientConfigId="@client.Id">Bookings</a>

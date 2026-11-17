@@ -158,6 +158,14 @@ public class MessagingConnector : IMessagingConnector
         }
 
         var path = $"{settings.WhatsAppPhoneNumberId!.Trim()}/messages";
+
+        // An approved template: works outside the 24-hour window (no fallback - a refused template is reported).
+        if (message.Template is { } template && !string.IsNullOrWhiteSpace(template.Name))
+        {
+            var sent = await PostGraphAsync(path, settings.WhatsAppAccessToken!, MetaMessageBuilder.WaTemplate(message.To, template), "WhatsApp", cancellationToken);
+            return sent.Success ? MessageSendResult.Ok("template") : MessageSendResult.Fail("template", sent.Error ?? "failed");
+        }
+
         var parts = MetaMessageBuilder.WhatsApp(message.To, message.Text, message.Rich);
         var result = await SendPartsAsync(parts, p => PostGraphAsync(path, settings.WhatsAppAccessToken!, p, "WhatsApp", cancellationToken));
 

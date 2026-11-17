@@ -26,9 +26,9 @@ public class ReportBuilder
 
     public static ClientReportKind KindFor(ClientConfig client) => client.Vertical switch
     {
-        VerticalPack.BeautyWellness => ClientReportKind.Bookings,
+        VerticalPack.BeautyWellness or VerticalPack.Clinic => ClientReportKind.Bookings,
         VerticalPack.FnBRetail => ClientReportKind.Orders,
-        _ => client.Workflows.Any(w => w.HandlerKey == "booking-message") ? ClientReportKind.Bookings
+        _ => client.Workflows.Any(w => w.HandlerKey is "booking-message" or "clinic-message") ? ClientReportKind.Bookings
             : client.Workflows.Any(w => w.HandlerKey is "customer-message" or "order-parser") ? ClientReportKind.Orders
             : ClientReportKind.MessagesOnly
     };
@@ -155,6 +155,17 @@ public class ReportBuilder
                 .OrderByDescending(s => s.Booked).ThenBy(s => s.Name));
             Languages(report, live.Where(b => b.Source == Booking.SourceChat).Select(b => b.Language));
             report.BookingList.AddRange(appointments.OrderBy(b => b.StartUtc));
+
+            var rated = appointments.Where(b => b.FeedbackRating is >= 1 and <= 5).ToList();
+            report.Ratings = rated.Count;
+            if (rated.Count > 0)
+            {
+                report.AverageRating = Math.Round((decimal)rated.Average(b => b.FeedbackRating!.Value), 1);
+                for (var stars = 5; stars >= 1; stars--)
+                    report.RatingSpread.Add(new ReportPoint($"{stars} ★", rated.Count(b => b.FeedbackRating == stars)));
+                report.RecentFeedback.AddRange(rated.OrderByDescending(b => b.FeedbackAtUtc ?? b.StartUtc).Take(10)
+                    .Select(b => (b, b.FeedbackRating!.Value, b.FeedbackComment)));
+            }
         }
 
         AddTiles(report);
@@ -176,6 +187,8 @@ public class ReportBuilder
                 r.NoShowRatePercent is { } rate ? $"{rate}% of finished appointments" : "None finished yet"));
             r.Tiles.Add(new ReportTile("requests", "Booked in the chat", N(r.ChatRequests),
                 r.AfterHoursRequests is { } ah ? $"{N(ah)} while you were closed" : "Set opening hours to see after-hours"));
+            if (r.AverageRating is { } avg)
+                r.Tiles.Add(new ReportTile("rating", "Average rating", $"{avg.ToString("0.0", CultureInfo.InvariantCulture)} / 5", $"from {N(r.Ratings)} rating(s)"));
         }
         else if (r.Kind == ClientReportKind.Orders)
         {
