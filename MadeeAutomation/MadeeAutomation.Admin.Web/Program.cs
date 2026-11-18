@@ -6,7 +6,15 @@ using MadeeAutomation.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Serilog;
+
+// On Azure App Service the app folder can be read-only, so log files go to /home/LogFiles/Application
+// (kept between deployments, readable in Kudu / "Log stream"). On your PC they stay in the Logs folder.
+static string LogFolder() =>
+    Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME") is { Length: > 0 } && Environment.GetEnvironmentVariable("HOME") is { Length: > 0 } home
+        ? Path.Combine(home, "LogFiles", "Application")
+        : "Logs";
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
@@ -15,7 +23,7 @@ Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
     .WriteTo.Console()
     .WriteTo.File(
-        path: "Logs/adminweb-.log",
+        path: Path.Combine(LogFolder(), "adminweb-.log"),
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 14,
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
@@ -89,7 +97,18 @@ try
         client.Timeout = TimeSpan.FromSeconds(90);   // the test run waits for the AI
     });
 
+    // Azure App Service sits in front of the app and passes the real https / client address in X-Forwarded-* headers.
+    // Without this, the app thinks every request is plain http (wrong links, https redirect loops on Linux).
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+    });
+
     var app = builder.Build();
+
+    app.UseForwardedHeaders();
 
     if (app.Environment.IsDevelopment())
     {

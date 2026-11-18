@@ -71,7 +71,7 @@ public sealed class AppHost : IAsyncDisposable
     private void Start(string root, string project, string configuration, Dictionary<string, string> env, string logName)
     {
         var projectDir = Path.Combine(root, project);
-        var dll = Path.Combine(projectDir, "bin", configuration, "net8.0", project + ".dll");
+        var dll = Path.Combine(projectDir, "bin", configuration, "net10.0", project + ".dll");
         if (!File.Exists(dll))
             throw new InvalidOperationException($"{dll} not found. Build the whole solution ({configuration}) before running the E2E tests.");
 

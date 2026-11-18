@@ -316,8 +316,10 @@ public sealed class FakeServer : IAsyncDisposable
                 string? date = null, string? time = null) =>
                 new { intent, language = lang, reply, canAnswer, needsHuman, service, doctor, date, time };
 
-            var servicesPart = Regex.Match(system, @"SERVICES:\n(.*?)\nDOCTORS:", RegexOptions.Singleline).Groups[1].Value;
-            var doctorsPart = Regex.Match(system, @"DOCTORS:\n(.*?)\nCLINIC INFORMATION:", RegexOptions.Singleline).Groups[1].Value;
+            // The prompt text comes from C# source files, which have Windows line endings (\r\n) on a Windows PC.
+            var prompt = system.Replace("\r\n", "\n");
+            var servicesPart = Regex.Match(prompt, @"SERVICES:\n(.*?)\nDOCTORS:", RegexOptions.Singleline).Groups[1].Value;
+            var doctorsPart = Regex.Match(prompt, @"DOCTORS:\n(.*?)\nCLINIC INFORMATION:", RegexOptions.Singleline).Groups[1].Value;
             var services = Regex.Matches(servicesPart, @"^- ([^:\n]+):", RegexOptions.Multiline).Select(m => m.Groups[1].Value.Trim()).ToList();
             var doctors = Regex.Matches(doctorsPart, @"^- ([^(;\n]+)", RegexOptions.Multiline).Select(m => m.Groups[1].Value.Trim()).ToList();
 
