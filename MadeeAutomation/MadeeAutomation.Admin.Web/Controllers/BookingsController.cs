@@ -133,7 +133,7 @@ public class BookingsController : ClientScopedController
         else if (status == BookingStatus.Completed)
         {
             await _bookings.CancelMessagesAsync(id, BookingMessage.KindReminder2);
-            if (client.BookingFeedbackEnabled && hasChat)
+            if (client.UsesFeedback && hasChat)
                 await _bookings.ScheduleMessageAsync(clientConfigId, id, BookingMessage.KindFeedback,
                     utcNow.AddHours(Math.Clamp(client.BookingFeedbackDelayHours, 0, 72)));
         }
@@ -351,10 +351,10 @@ public class BookingsController : ClientScopedController
                 HomeServiceTravelMinutes = client.HomeServiceTravelMinutes,
                 RemindersEnabled = client.BookingRemindersEnabled,
                 NotifyCustomer = client.NotifyCustomerOnOrderStatus,
-                SecondReminderEnabled = client.BookingSecondReminderEnabled,
-                FeedbackEnabled = client.BookingFeedbackEnabled,
+                SecondReminderEnabled = client.UsesSecondReminder,
+                FeedbackEnabled = client.UsesFeedback,
                 FeedbackDelayHours = client.BookingFeedbackDelayHours,
-                WaitlistEnabled = client.BookingWaitlistEnabled,
+                WaitlistEnabled = client.UsesWaitlist,
                 TemplateLanguage = client.WhatsAppTemplateLanguage,
                 TemplateReminder = client.WhatsAppTemplateReminder,
                 TemplateFollowUp = client.WhatsAppTemplateFollowUp,
@@ -382,10 +382,12 @@ public class BookingsController : ClientScopedController
         client.HomeServiceTravelMinutes = model.HomeServiceTravelMinutes;
         client.BookingRemindersEnabled = model.RemindersEnabled;
         client.NotifyCustomerOnOrderStatus = model.NotifyCustomer;
-        client.BookingSecondReminderEnabled = model.SecondReminderEnabled;
-        client.BookingFeedbackEnabled = model.FeedbackEnabled;
+        // Options the plan doesn't include are shown locked (not posted): keep what was saved, so an upgrade brings them back.
+        var plan = MadeeAutomation.Domain.Billing.PlanCatalog.For(client.Plan);
+        if (plan.SecondReminder) client.BookingSecondReminderEnabled = model.SecondReminderEnabled;
+        if (plan.Feedback) client.BookingFeedbackEnabled = model.FeedbackEnabled;
         client.BookingFeedbackDelayHours = model.FeedbackDelayHours;
-        client.BookingWaitlistEnabled = model.WaitlistEnabled;
+        if (plan.Waitlist) client.BookingWaitlistEnabled = model.WaitlistEnabled;
         static string? T(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
         client.WhatsAppTemplateLanguage = T(model.TemplateLanguage);
         client.WhatsAppTemplateReminder = T(model.TemplateReminder);

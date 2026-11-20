@@ -4,6 +4,8 @@ using MadeeAutomation.Admin.Web.Services;
 using MadeeAutomation.Connectors;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Application.Common;
+using MadeeAutomation.Application.Billing;
+using MadeeAutomation.Domain.Billing;
 using MadeeAutomation.Domain.Entities;
 using MadeeAutomation.Domain.Enums;
 using MadeeAutomation.Domain.Regional;
@@ -82,11 +84,15 @@ public class ClientsController : Controller
         ValidateMarket(model);
         if (!ModelState.IsValid) return View("Form", model);
 
+        var now = DateTime.UtcNow;
         var client = new ClientConfig
         {
             Id = Guid.NewGuid(),
-            CreatedAtUtc = DateTime.UtcNow,
-            IntegrationSettingsJson = "{}"
+            CreatedAtUtc = now,
+            IntegrationSettingsJson = "{}",
+            // Every new client starts on the free trial; change it under Billing -> Plan.
+            Plan = PlanTier.Trial,
+            PlanEndsAtUtc = PlanCatalog.TrialEnd(now)
         };
         CopyBasics(model, client);
 
@@ -332,6 +338,12 @@ public class ClientsController : Controller
             if (clash is not null)
             {
                 TempData["Error"] = ClashMessage(clash);
+                return RedirectToAction(nameof(Details), new { id = workflow.ClientConfigId });
+            }
+            if (client is not null && workflow.TriggerType == TriggerType.MessageReceived &&
+                PlanRules.ChannelLimitError(client, SubscriptionService.ChannelsInUse(client, workflow.Id, workflow.Channel)) is { } limit)
+            {
+                TempData["Error"] = limit;
                 return RedirectToAction(nameof(Details), new { id = workflow.ClientConfigId });
             }
         }
@@ -589,6 +601,9 @@ public class ClientsController : Controller
         {
             var clash = FindChannelClash(client, model.Id, model.TriggerType, string.IsNullOrEmpty(model.Channel) ? null : model.Channel);
             if (clash is not null) ModelState.AddModelError(nameof(model.Channel), ClashMessage(clash));
+            else if (model.TriggerType == TriggerType.MessageReceived &&
+                     PlanRules.ChannelLimitError(client, SubscriptionService.ChannelsInUse(client, model.Id, model.Channel)) is { } limit)
+                ModelState.AddModelError(nameof(model.Channel), limit);
         }
     }
 

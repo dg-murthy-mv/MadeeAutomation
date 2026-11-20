@@ -5,6 +5,8 @@ using MadeeAutomation.Domain.Entities;
 using MadeeAutomation.Domain.Regional;
 using Microsoft.AspNetCore.Mvc;
 
+using MadeeAutomation.Domain.Billing;
+
 namespace MadeeAutomation.Admin.Web.Controllers;
 
 /// <summary>
@@ -62,10 +64,12 @@ public class StaffController : ClientScopedController
         model.ClientConfigId = client.Id;
         CheckWorkingDays(model);
         var sessions = ReadSessions(model);
+        var existing = await _bookings.GetStaffAsync(client.Id);
+        if (PlanRules.StaffLimitError(client, existing.Count(x => x.IsActive) + 1) is { } limit)
+            ModelState.AddModelError("", limit);
         if (!ModelState.IsValid)
             return View("Edit", new StaffEditModel { Client = client, Form = model, Services = await _bookings.GetServicesAsync(client.Id) });
 
-        var existing = await _bookings.GetStaffAsync(client.Id);
         var staff = new StaffMember { ClientConfigId = client.Id, SortOrder = existing.Count == 0 ? 0 : existing.Max(s => s.SortOrder) + 1 };
         Apply(model, staff);
         staff.Sessions = sessions;
@@ -111,6 +115,11 @@ public class StaffController : ClientScopedController
         model.ClientConfigId = staff.ClientConfigId;
         CheckWorkingDays(model);
         var sessions = ReadSessions(model);
+        if (model.IsActive && !staff.IsActive)
+        {
+            var working = (await _bookings.GetStaffAsync(client.Id, activeOnly: true)).Count;
+            if (PlanRules.StaffLimitError(client, working + 1) is { } limit) ModelState.AddModelError("", limit);
+        }
         if (!ModelState.IsValid)
             return View(new StaffEditModel { Client = client, Form = model, Services = await _bookings.GetServicesAsync(client.Id) });
 

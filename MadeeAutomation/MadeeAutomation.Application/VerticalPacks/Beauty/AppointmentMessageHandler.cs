@@ -965,7 +965,7 @@ public class AppointmentMessageHandler : IHandler
 
     /// <summary>The waitlist is on, this is a real chat, and we are not moving an existing booking.</summary>
     private static bool CanWait(Turn turn) =>
-        turn.Client.BookingWaitlistEnabled && turn.Buttons && turn.Draft.RescheduleId is null && turn.Draft.ServiceId is not null;
+        turn.Client.UsesWaitlist && turn.Buttons && turn.Draft.RescheduleId is null && turn.Draft.ServiceId is not null;
 
     private static RichContent SkipOr(string action)
     {

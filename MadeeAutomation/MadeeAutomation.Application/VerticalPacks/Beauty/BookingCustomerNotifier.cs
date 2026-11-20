@@ -1,6 +1,7 @@
 using MadeeAutomation.Application.Common;
 using MadeeAutomation.Application.Abstractions;
 using MadeeAutomation.Application.VerticalPacks.Messaging;
+using MadeeAutomation.Domain.Billing;
 using MadeeAutomation.Domain.Entities;
 using MadeeAutomation.Domain.Enums;
 using MadeeAutomation.Domain.Regional;
@@ -95,6 +96,8 @@ public class BookingCustomerNotifier
         var booking = await _bookings.GetAsync(clientConfigId, bookingId, cancellationToken);
         var client = await _clients.GetClientAsync(clientConfigId, cancellationToken);
         if (booking is null || client is null) return "booking not found";
+        if (SubscriptionStatus.Of(client, DateTime.UtcNow).IsPaused) return "Not sent (plan paused - not renewed).";
+        if (second && !client.UsesSecondReminder) return "Not sent (the plan does not include the 2-hour reminder).";
         if (booking.Status != BookingStatus.Confirmed || booking.StartUtc <= DateTime.UtcNow) return $"not sent - the booking is {booking.Status}";
         if (string.IsNullOrWhiteSpace(booking.CustomerId) || string.IsNullOrWhiteSpace(booking.Channel))
             return "No chat to send it to - call or text the customer.";
@@ -130,6 +133,13 @@ public class BookingCustomerNotifier
     /// </summary>
     public async Task<string> SendPlannedAsync(BookingMessage message, CancellationToken cancellationToken = default)
     {
+        // Follow-ups and ratings stop while the plan is paused, and ratings need a plan that includes them.
+        if (message.Kind != BookingMessage.KindReminder2 && await _clients.GetClientAsync(message.ClientConfigId, cancellationToken) is { } owner)
+        {
+            if (SubscriptionStatus.Of(owner, DateTime.UtcNow).IsPaused) return "Not sent (plan paused - not renewed).";
+            if (message.Kind == BookingMessage.KindFeedback && !owner.UsesFeedback) return "Not sent (the plan does not include ratings).";
+        }
+
         switch (message.Kind)
         {
             case BookingMessage.KindReminder2:
@@ -436,7 +446,7 @@ public class BookingReminderRunner
                 if (!catalogs.TryGetValue(entry.ClientConfigId, out var cat))
                 {
                     var client = await _clients.GetClientAsync(entry.ClientConfigId, cancellationToken);
-                    cat = client is { BookingWaitlistEnabled: true } ? await _desk.LoadAsync(client, cancellationToken) : null;
+                    cat = client is { UsesWaitlist: true } && !SubscriptionStatus.Of(client, DateTime.UtcNow).IsPaused ? await _desk.LoadAsync(client, cancellationToken) : null;
                     catalogs[entry.ClientConfigId] = cat;
                 }
                 if (cat is null) continue;

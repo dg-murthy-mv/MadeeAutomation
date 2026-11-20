@@ -1,0 +1,58 @@
+@model (ClientConfig Client, bool CanAsk)
+@*
+    The three paid plans side by side, in the client's currency. CanAsk = show "I'd like this plan" buttons (Plan page).
+*@
+@{
+    var client = Model.Client;
+    var currency = client.Currency;
+    string Price(PlanTier tier, BillingCycle cycle) =>
+        PlanCatalog.ListPrice(tier, currency, cycle) is { } p ? Money.Format(p, currency) : "Ask us";
+    string Yes(bool on) => on ? "✓" : "-";
+}
+<div class="table-responsive">
+    <table class="table mv-table align-middle mb-0" data-testid="plan-table">
+        <thead>
+            <tr>
+                <th></th>
+                @foreach (var p in PlanCatalog.Paid)
+                {
+                    <th class="text-center" data-testid="plan-col-@p.Tier">
+                        @p.Name
+                        @if (client.Plan == p.Tier) { <span class="badge text-bg-primary ms-1">Your plan</span> }
+                    </th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td data-label="" class="mv-td-title">Per month</td>@foreach (var p in PlanCatalog.Paid) { <td data-label="@p.Name" class="text-center fw-semibold" data-testid="price-@p.Tier">@Price(p.Tier, BillingCycle.Monthly)</td> }</tr>
+            <tr><td data-label="" class="mv-td-title">Per year (2 months free)</td>@foreach (var p in PlanCatalog.Paid) { <td data-label="@p.Name" class="text-center">@Price(p.Tier, BillingCycle.Yearly)</td> }</tr>
+            <tr><td data-label="" class="mv-td-title">Messaging channels</td>@foreach (var p in PlanCatalog.Paid) { <td data-label="@p.Name" class="text-center">@(p.MaxChannels is 1 ? "Messenger or WhatsApp" : p.MaxChannels is { } c ? $"{c} (Messenger + WhatsApp)" : "All")</td> }</tr>
+            <tr><td data-label="" class="mv-td-title">Working staff</td>@foreach (var p in PlanCatalog.Paid) { <td data-label="@p.Name" class="text-center">@PlanDefinition.Limit(p.MaxStaff)</td> }</tr>
+            <tr><td data-label="" class="mv-td-title">Customer chats a month</td>@foreach (var p in PlanCatalog.Paid) { <td data-label="@p.Name" class="text-center">@PlanDefinition.Limit(p.MonthlyChats)</td> }</tr>
+            <tr><td data-label="" class="mv-td-title">AI booking assistant, reminders, reports</td>@foreach (var p in PlanCatalog.Paid) { <td data-label="@p.Name" class="text-center">✓</td> }</tr>
+            <tr><td data-label="" class="mv-td-title">2-hour reminder</td>@foreach (var p in PlanCatalog.Paid) { <td data-label="@p.Name" class="text-center">@Yes(p.SecondReminder)</td> }</tr>
+            <tr><td data-label="" class="mv-td-title">Waitlist</td>@foreach (var p in PlanCatalog.Paid) { <td data-label="@p.Name" class="text-center">@Yes(p.Waitlist)</td> }</tr>
+            <tr><td data-label="" class="mv-td-title">Ratings after the visit</td>@foreach (var p in PlanCatalog.Paid) { <td data-label="@p.Name" class="text-center">@Yes(p.Feedback)</td> }</tr>
+            <tr><td data-label="" class="mv-td-title">Priority support</td>@foreach (var p in PlanCatalog.Paid) { <td data-label="@p.Name" class="text-center">@Yes(p.PrioritySupport)</td> }</tr>
+            @if (Model.CanAsk)
+            {
+                <tr>
+                    <td data-label=""></td>
+                    @foreach (var p in PlanCatalog.Paid)
+                    {
+                        <td data-label="@p.Name" class="text-center">
+                            <form asp-controller="Plan" asp-action="Ask" method="post" class="d-inline">
+                                @if (!ClientAccess.IsClientUser(User)) { <input type="hidden" name="clientConfigId" value="@client.Id" /> }
+                                <input type="hidden" name="plan" value="@p.Tier" />
+                                <input type="hidden" name="cycle" value="Monthly" />
+                                <button type="submit" class="btn btn-sm @(p.Tier == PlanTier.Business ? "btn-primary" : "btn-outline-primary")" data-testid="ask-@p.Tier">
+                                    @(client.Plan == p.Tier ? "Renew" : "I'd like this plan")
+                                </button>
+                            </form>
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

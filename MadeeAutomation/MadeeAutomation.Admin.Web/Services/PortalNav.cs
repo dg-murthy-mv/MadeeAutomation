@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using MadeeAutomation.Admin.Web.Security;
 using MadeeAutomation.Application.Abstractions;
+using MadeeAutomation.Domain.Billing;
+using MadeeAutomation.Domain.Entities;
 using MadeeAutomation.Domain.Enums;
 
 namespace MadeeAutomation.Admin.Web.Services;
@@ -12,18 +14,25 @@ namespace MadeeAutomation.Admin.Web.Services;
 public class PortalNav
 {
     private readonly IClientRepository _clients;
-    private VerticalPack? _vertical;
+    private ClientConfig? _client;
+    private bool _loaded;
 
     public PortalNav(IClientRepository clients) => _clients = clients;
 
-    private async Task<VerticalPack?> VerticalAsync(ClaimsPrincipal user)
+    private async Task<ClientConfig?> ClientAsync(ClaimsPrincipal user)
     {
-        if (_vertical is { } known) return known;
+        if (_loaded) return _client;
         var id = ClientAccess.ClientId(user);
-        var client = id is { } g ? await _clients.GetWithWorkflowsAsync(g) : null;
-        _vertical = client?.Vertical;
-        return _vertical;
+        _client = id is { } g ? await _clients.GetWithWorkflowsAsync(g) : null;
+        _loaded = true;
+        return _client;
     }
+
+    private async Task<VerticalPack?> VerticalAsync(ClaimsPrincipal user) => (await ClientAsync(user))?.Vertical;
+
+    /// <summary>The portal user's plan, for the banner at the top of every page (null for MadeeVision staff).</summary>
+    public async Task<SubscriptionStatus?> PlanAsync(ClaimsPrincipal user) =>
+        await ClientAsync(user) is { } client ? SubscriptionStatus.Of(client, DateTime.UtcNow) : null;
 
     /// <summary>Appointments (spa, salon, clinic) rather than orders and a menu.</summary>
     public async Task<bool> IsBeautyAsync(ClaimsPrincipal user) => (await VerticalAsync(user))?.UsesBookings() == true;

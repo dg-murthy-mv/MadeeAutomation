@@ -1,3 +1,4 @@
+using MadeeAutomation.Domain.Billing;
 using MadeeAutomation.Domain.Enums;
 
 namespace MadeeAutomation.Domain.Entities;
@@ -122,6 +123,29 @@ public class ClientConfig
 
     /// <summary>The month ("2026-10") the monthly report email was last sent for, so it goes out once.</summary>
     public string? MonthlyReportSentFor { get; set; }
+
+    // ---- Plan / subscription (see Domain/Billing/Plans.cs) ----
+
+    /// <summary>New clients start on a 15-day trial. Clients from before plans existed are Demo (no limits).</summary>
+    public PlanTier Plan { get; set; } = PlanTier.Trial;
+
+    public BillingCycle? BillingCycle { get; set; }
+
+    /// <summary>When the trial or the paid period ends. A 3-day grace follows, then the assistant pauses.</summary>
+    public DateTime? PlanEndsAtUtc { get; set; }
+
+    /// <summary>The price agreed with this client per billing cycle (null = list price for their currency).</summary>
+    public decimal? PlanPrice { get; set; }
+
+    /// <summary>A note for MadeeVision only (discount reason, who agreed it...).</summary>
+    public string? PlanNote { get; set; }
+
+    /// <summary>The 2-hour reminder runs only when switched on AND the plan includes it.</summary>
+    public bool UsesSecondReminder => BookingSecondReminderEnabled && PlanCatalog.For(Plan).SecondReminder;
+
+    public bool UsesFeedback => BookingFeedbackEnabled && PlanCatalog.For(Plan).Feedback;
+
+    public bool UsesWaitlist => BookingWaitlistEnabled && PlanCatalog.For(Plan).Waitlist;
 
     public bool MerkaiIntegrationEnabled { get; set; }
     public bool PosFirstIntegrationEnabled { get; set; }

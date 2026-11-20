@@ -1,0 +1,25 @@
+@model MyPlanPageModel
+@{
+    var client = Model.Client;
+    ViewData["Title"] = $"Your plan - {client.ClientName}";
+    var plan = Model.Usage.Status.Plan;
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Your plan</h2>
+        <div class="mv-subtle"><partial name="_ClientCrumb" model="client" />@if (Model.Price is { } price) { <text> &middot; @plan.Name: @Money.Format(price, client.Currency) per @(client.BillingCycle == BillingCycle.Yearly ? "year" : "month")</text> }</div>
+    </div>
+    @if (!ClientAccess.IsClientUser(User))
+    {
+        <a class="btn btn-outline-secondary" asp-controller="Billing" asp-action="Client" asp-route-id="@client.Id">Billing (MadeeVision)</a>
+    }
+</div>
+
+<partial name="_PlanUsage" model="Model.Usage" />
+
+<h5 class="mt-4 mb-2">Plans</h5>
+<p class="mv-subtle mb-3">Tap the plan you'd like - MadeeVision gets your request and sends the payment details (bank transfer or GCash). Pay yearly and get 2 months free.</p>
+<div class="mv-card mb-4">
+    <partial name="_PlanTable" model="(client, true)" />
+</div>

@@ -1,0 +1,154 @@
+@model ClientPlanPageModel
+@{
+    var client = Model.Client;
+    ViewData["Title"] = $"Plan - {client.ClientName}";
+    var currency = client.Currency;
+    string Local(DateTime utc) => LocalTime.ToLocal(utc, client.TimeZoneId).ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Plan &amp; payments</h2>
+        <div class="mv-subtle"><a asp-controller="Clients" asp-action="Details" asp-route-id="@client.Id">@client.ClientName</a> &middot; @client.Country &middot; prices in @currency</div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-secondary" asp-action="Index">All clients</a>
+        <a class="btn btn-outline-secondary" asp-controller="Plan" asp-action="Index" asp-route-clientConfigId="@client.Id" data-testid="open-client-plan-page">What the client sees</a>
+    </div>
+</div>
+
+<partial name="_PlanUsage" model="Model.Usage" />
+
+<div class="mv-report-grid mb-3">
+    <form asp-action="RecordPayment" method="post" class="mv-card mv-card-body" data-testid="payment-form">
+        <h5 class="mv-section-title">Record a payment</h5>
+        <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+        <input type="hidden" asp-for="Payment.ClientConfigId" />
+        <div class="row g-2">
+            <div class="col-6">
+                <label asp-for="Payment.Plan" class="form-label"></label>
+                <select asp-for="Payment.Plan" class="form-select" data-testid="pay-plan">
+                    @foreach (var p in PlanCatalog.Paid) { <option value="@p.Tier">@p.Name</option> }
+                </select>
+                <span asp-validation-for="Payment.Plan" class="text-danger small"></span>
+            </div>
+            <div class="col-6">
+                <label asp-for="Payment.Cycle" class="form-label"></label>
+                <select asp-for="Payment.Cycle" class="form-select" data-testid="pay-cycle">
+                    <option value="Monthly">Monthly</option>
+                    <option value="Yearly">Yearly</option>
+                </select>
+            </div>
+            <div class="col-6">
+                <label asp-for="Payment.Amount" class="form-label"></label>
+                <div class="input-group">
+                    <span class="input-group-text">@currency</span>
+                    <input asp-for="Payment.Amount" class="form-control" type="number" step="0.01" min="0" data-testid="pay-amount" />
+                </div>
+                <span asp-validation-for="Payment.Amount" class="text-danger small"></span>
+            </div>
+            <div class="col-6">
+                <label asp-for="Payment.Cycles" class="form-label"></label>
+                <input asp-for="Payment.Cycles" class="form-control" type="number" min="1" max="24" data-testid="pay-cycles" />
+                <span asp-validation-for="Payment.Cycles" class="text-danger small"></span>
+            </div>
+            <div class="col-6">
+                <label asp-for="Payment.PaidOn" class="form-label"></label>
+                <input asp-for="Payment.PaidOn" class="form-control" type="date" data-testid="pay-date" />
+                <span asp-validation-for="Payment.PaidOn" class="text-danger small"></span>
+            </div>
+            <div class="col-6">
+                <label asp-for="Payment.Method" class="form-label"></label>
+                <select asp-for="Payment.Method" class="form-select" data-testid="pay-method">
+                    @foreach (var m in PaymentForm.Methods) { <option value="@m">@m</option> }
+                </select>
+                <span asp-validation-for="Payment.Method" class="text-danger small"></span>
+            </div>
+            <div class="col-12">
+                <label asp-for="Payment.Reference" class="form-label"></label>
+                <input asp-for="Payment.Reference" class="form-control" data-testid="pay-reference" />
+            </div>
+            <div class="col-12">
+                <label asp-for="Payment.Note" class="form-label"></label>
+                <input asp-for="Payment.Note" class="form-control" data-testid="pay-note" />
+            </div>
+        </div>
+        <div class="form-text my-2">
+            Extends the plan by the periods paid: from today for a trial or an ended plan, otherwise from the current end date.
+            An amount different from the list price is kept as this client's agreed price.
+        </div>
+        <button type="submit" class="btn btn-primary" data-testid="pay-save">Record payment</button>
+    </form>
+
+    <form asp-action="ChangePlan" method="post" class="mv-card mv-card-body" data-testid="plan-form">
+        <h5 class="mv-section-title">Change plan or dates</h5>
+        <input type="hidden" asp-for="Change.ClientConfigId" />
+        <div class="row g-2">
+            <div class="col-6">
+                <label asp-for="Change.Plan" class="form-label"></label>
+                <select asp-for="Change.Plan" class="form-select" data-testid="plan-tier">
+                    @foreach (var p in PlanCatalog.All) { <option value="@p.Tier">@p.Name</option> }
+                </select>
+            </div>
+            <div class="col-6">
+                <label asp-for="Change.Cycle" class="form-label"></label>
+                <select asp-for="Change.Cycle" class="form-select" data-testid="plan-cycle">
+                    <option value="Monthly">Monthly</option>
+                    <option value="Yearly">Yearly</option>
+                </select>
+            </div>
+            <div class="col-6">
+                <label asp-for="Change.EndsOn" class="form-label"></label>
+                <input asp-for="Change.EndsOn" class="form-control" type="date" data-testid="plan-ends" />
+                <span asp-validation-for="Change.EndsOn" class="text-danger small"></span>
+            </div>
+            <div class="col-6">
+                <label asp-for="Change.Price" class="form-label small"></label>
+                <input asp-for="Change.Price" class="form-control" type="number" step="0.01" min="0" data-testid="plan-price" />
+            </div>
+            <div class="col-12">
+                <label asp-for="Change.Note" class="form-label"></label>
+                <input asp-for="Change.Note" class="form-control" data-testid="plan-note" />
+            </div>
+        </div>
+        <div class="form-text my-2">
+            For a longer trial, a free month or a correction. Demo = no limits and no end (your own demo clients).
+            Lowering the plan doesn't switch anything off - you'll be told if they are over a limit.
+        </div>
+        <button type="submit" class="btn btn-outline-primary" data-testid="plan-save">Save plan</button>
+    </form>
+</div>
+
+<div class="mv-card mb-3">
+    <div class="mv-card-body pb-2"><h6 class="mb-0">Payments</h6></div>
+    @if (Model.Payments.Count == 0)
+    {
+        <div class="mv-card-body pt-0 mv-subtle" data-testid="payments-empty">No payments recorded yet.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table mv-table mb-0" data-testid="payments-table">
+                <thead><tr><th>Paid on</th><th class="text-end">Amount</th><th>Plan</th><th>Covers</th><th>Method</th><th>Recorded by</th></tr></thead>
+                <tbody>
+                    @foreach (var p in Model.Payments)
+                    {
+                        <tr data-testid="payment-row">
+                            <td data-label="Paid on" class="mv-td-title">@p.PaidOn.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)</td>
+                            <td data-label="Amount" class="text-end fw-semibold">@Money.Format(p.Amount, p.Currency)</td>
+                            <td data-label="Plan">@PlanCatalog.For(p.Plan).Name, @p.Cycles @(p.Cycle == BillingCycle.Yearly ? (p.Cycles == 1 ? "year" : "years") : (p.Cycles == 1 ? "month" : "months"))</td>
+                            <td data-label="Covers">@Local(p.PeriodFromUtc) - @Local(p.PeriodToUtc)</td>
+                            <td data-label="Method">@p.Method@(string.IsNullOrEmpty(p.Reference) ? "" : $" ({p.Reference})")</td>
+                            <td data-label="Recorded by" class="small">@p.RecordedBy</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<h5 class="mt-4 mb-3">List prices</h5>
+<div class="mv-card mb-4">
+    <partial name="_PlanTable" model="(client, false)" />
+</div>

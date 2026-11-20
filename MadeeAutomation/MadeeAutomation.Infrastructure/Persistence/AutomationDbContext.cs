@@ -32,6 +32,8 @@ public class AutomationDbContext : DbContext
     public DbSet<BookingMessage> BookingMessages => Set<BookingMessage>();
     public DbSet<WaitlistEntry> WaitlistEntries => Set<WaitlistEntry>();
     public DbSet<AiUsageRecord> AiUsage => Set<AiUsageRecord>();
+    public DbSet<SubscriptionPayment> SubscriptionPayments => Set<SubscriptionPayment>();
+    public DbSet<SubscriptionNotice> SubscriptionNotices => Set<SubscriptionNotice>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -54,6 +56,11 @@ public class AutomationDbContext : DbContext
             entity.Property(c => c.ClientCode).HasMaxLength(50).IsRequired();
             entity.Ignore(c => c.CanRunWorkflows);
             entity.Ignore(c => c.EffectiveFallbackReply);
+            entity.Ignore(c => c.UsesSecondReminder);
+            entity.Ignore(c => c.UsesFeedback);
+            entity.Ignore(c => c.UsesWaitlist);
+            entity.Property(c => c.PlanPrice).HasPrecision(18, 2);
+            entity.Property(c => c.PlanNote).HasMaxLength(500);
             entity.Property(c => c.FallbackReplyText).HasMaxLength(1000);
             entity.Property(c => c.StaffAlertEmail).HasMaxLength(256);
             entity.Property(c => c.StaffAlertLineUserId).HasMaxLength(100);
@@ -224,6 +231,27 @@ public class AutomationDbContext : DbContext
             entity.Property(b => b.Language).HasMaxLength(40);
             entity.Property(b => b.CustomerNoticeNote).HasMaxLength(500);
             entity.Property(b => b.ReminderNote).HasMaxLength(300);
+        });
+
+        // ---- Plans ----
+        modelBuilder.Entity<SubscriptionPayment>(entity =>
+        {
+            entity.ToTable("SubscriptionPayments");
+            entity.HasIndex(p => new { p.ClientConfigId, p.PaidOn });
+            entity.HasIndex(p => p.PaidOn);
+            entity.Property(p => p.Amount).HasPrecision(18, 2);
+            entity.Property(p => p.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(p => p.Method).HasMaxLength(50).IsRequired();
+            entity.Property(p => p.Reference).HasMaxLength(100);
+            entity.Property(p => p.Note).HasMaxLength(500);
+            entity.Property(p => p.RecordedBy).HasMaxLength(256).IsRequired();
+        });
+
+        modelBuilder.Entity<SubscriptionNotice>(entity =>
+        {
+            entity.ToTable("SubscriptionNotices");
+            entity.HasIndex(n => new { n.ClientConfigId, n.NoticeKey }).IsUnique();
+            entity.Property(n => n.NoticeKey).HasMaxLength(200).IsRequired();
         });
 
         // ---- Reports ----

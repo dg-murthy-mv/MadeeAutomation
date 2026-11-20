@@ -2,6 +2,8 @@
 @{
     var client = Model.Client;
     ViewData["Title"] = $"Booking settings - {client.ClientName}";
+    var plan = MadeeAutomation.Domain.Billing.PlanCatalog.For(client.Plan);
+    var upgradeText = $"Not in the {plan.Name} plan";
 }
 
 <div class="mv-page-header">
@@ -64,8 +66,9 @@
         <label asp-for="Form.RemindersEnabled" class="form-check-label"></label>
     </div>
     <div class="form-check mb-1 ms-4">
-        <input asp-for="Form.SecondReminderEnabled" class="form-check-input" data-testid="set-reminder2" />
-        <label asp-for="Form.SecondReminderEnabled" class="form-check-label"></label>
+        <fieldset class="d-inline" disabled="@(!plan.SecondReminder)"><input asp-for="Form.SecondReminderEnabled" class="form-check-input" data-testid="set-reminder2" />
+        <label asp-for="Form.SecondReminderEnabled" class="form-check-label"></label></fieldset>
+        @if (!plan.SecondReminder) { <span class="badge text-bg-secondary ms-1" data-testid="plan-lock-reminder2">@upgradeText</span> }
     </div>
     <div class="form-text mb-3">
         The reminder goes out a day before (2 hours before for bookings made later), with "I'll be there", "Reschedule" and "Cancel" buttons.
@@ -74,8 +77,9 @@
     <div class="row g-2 align-items-end mb-1">
         <div class="col-12 col-md-7">
             <div class="form-check">
-                <input asp-for="Form.FeedbackEnabled" class="form-check-input" data-testid="set-feedback" />
-                <label asp-for="Form.FeedbackEnabled" class="form-check-label"></label>
+                <fieldset class="d-inline" disabled="@(!plan.Feedback)"><input asp-for="Form.FeedbackEnabled" class="form-check-input" data-testid="set-feedback" />
+                <label asp-for="Form.FeedbackEnabled" class="form-check-label"></label></fieldset>
+                @if (!plan.Feedback) { <span class="badge text-bg-secondary ms-1" data-testid="plan-lock-feedback">@upgradeText</span> }
             </div>
         </div>
         <div class="col-6 col-md-3">
@@ -86,8 +90,9 @@
     </div>
     <div class="form-text mb-3">Sent when you press "Completed". Low ratings (1-2 stars) are sent to your staff alert at once; all ratings are in Reports.</div>
     <div class="form-check mb-1">
-        <input asp-for="Form.WaitlistEnabled" class="form-check-input" data-testid="set-waitlist" />
-        <label asp-for="Form.WaitlistEnabled" class="form-check-label"></label>
+        <fieldset class="d-inline" disabled="@(!plan.Waitlist)"><input asp-for="Form.WaitlistEnabled" class="form-check-input" data-testid="set-waitlist" />
+        <label asp-for="Form.WaitlistEnabled" class="form-check-label"></label></fieldset>
+        @if (!plan.Waitlist) { <span class="badge text-bg-secondary ms-1" data-testid="plan-lock-waitlist">@upgradeText</span> }
     </div>
     <div class="form-text mb-3">When nothing is free, the customer can tap "Join waitlist". When a time opens up, everyone waiting for it gets a message - the first to tap gets it.</div>
 

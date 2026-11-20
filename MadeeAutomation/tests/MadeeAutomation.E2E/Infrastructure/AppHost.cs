@@ -30,6 +30,8 @@ public sealed class AppHost : IAsyncDisposable
             ["InternalApi__Key"] = E2ESettings.InternalApiKey,
             ["Email__PickupDirectory"] = Mailbox.Folder,
             ["Email__FromAddress"] = "noreply@madeeautomation.test",
+            // Plans: MadeeVision gets a copy of plan emails and the clients' plan requests.
+            ["Billing__NotifyEmail"] = World.BillingEmail,
         };
 
         var webApi = new Dictionary<string, string>(common)
@@ -50,6 +52,7 @@ public sealed class AppHost : IAsyncDisposable
             ["Scheduler__PollSeconds"] = "1",
             ["Scheduler__RetryDelaysMinutes"] = "0.05,0.05",
             ["Bookings__ReminderPollSeconds"] = "1",
+            ["Billing__PollSeconds"] = "1",
         };
 
         var admin = new Dictionary<string, string>(common)

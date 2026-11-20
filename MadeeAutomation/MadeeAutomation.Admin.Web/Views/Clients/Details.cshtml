@@ -29,7 +29,8 @@
 <div class="mv-page-header">
     <div>
         <h2>@client.ClientName</h2>
-        <div class="mv-subtle"><code>@client.ClientCode</code> &middot; @client.Country &middot; @client.Vertical &middot; <partial name="_StatusBadge" model="client.Status" /></div>
+        <div class="mv-subtle"><code>@client.ClientCode</code> &middot; @client.Country &middot; @client.Vertical &middot; <partial name="_StatusBadge" model="client.Status" />
+            &middot; Plan: <a asp-controller="Billing" asp-action="Client" asp-route-id="@client.Id" data-testid="client-plan-link">@SubscriptionStatus.Of(client, DateTime.UtcNow).Label</a></div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
         <a class="btn btn-outline-secondary" asp-action="Edit" asp-route-id="@client.Id" data-testid="edit-client">Edit client &amp; credentials</a>

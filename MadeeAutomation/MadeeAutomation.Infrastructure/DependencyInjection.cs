@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<IBookingRepository, BookingRepository>();
         services.AddScoped<IConversationRepository, ConversationRepository>();
         services.AddScoped<IReportRepository, ReportRepository>();
+        services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<IAiUsageRecorder, AiUsageRecorder>();
         // Email: Resend when Resend:ApiKey is set; otherwise the pickup folder (tests) or SMTP.
         services.AddSingleton<SmtpEmailSender>();

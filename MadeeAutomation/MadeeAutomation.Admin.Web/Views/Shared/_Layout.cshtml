@@ -59,11 +59,13 @@
                             <a class="nav-link" asp-controller="Reports" asp-action="Index" data-testid="nav-reports">Reports</a>
                             <a class="nav-link" asp-controller="Hours" asp-action="Index" data-testid="nav-hours">Opening hours</a>
                             <a class="nav-link" asp-controller="Portal" asp-action="BusinessInfo" data-testid="nav-business-info">Business info</a>
+                            <a class="nav-link" asp-controller="Plan" asp-action="Index" data-testid="nav-plan">Plan</a>
                         }
                         else
                         {
                             <a class="nav-link" asp-controller="Clients" asp-action="Index">Clients</a>
                             <a class="nav-link" asp-controller="AdminReports" asp-action="Index" data-testid="nav-admin-reports">Reports</a>
+                            <a class="nav-link" asp-controller="Billing" asp-action="Index" data-testid="nav-billing">Billing</a>
                             <a class="nav-link" asp-controller="AdminUsers" asp-action="Index" data-testid="nav-admins">Admin users</a>
                         }
                         <a class="nav-link mv-nav-user" asp-controller="Account" asp-action="MyAccount" data-testid="nav-user">@User.Identity.Name</a>
@@ -78,6 +80,28 @@
     </nav>
 
     <div class="mv-page">
+        @if (User.Identity?.IsAuthenticated == true && ClientAccess.IsClientUser(User) && await PortalNav.PlanAsync(User) is { } planStatus &&
+             (planStatus.State is SubscriptionState.Trial or SubscriptionState.Grace or SubscriptionState.Paused || planStatus.DaysLeft is <= 7))
+        {
+            var bannerCss = planStatus.State switch { SubscriptionState.Paused => "alert-danger", SubscriptionState.Grace => "alert-warning", _ when planStatus.DaysLeft is <= 3 => "alert-warning", _ => "alert-info" };
+            <div class="alert @bannerCss d-flex flex-wrap justify-content-between align-items-center gap-2" role="status" data-testid="plan-banner" data-state="@planStatus.State">
+                <span>
+                    @switch (planStatus.State)
+                    {
+                        case SubscriptionState.Paused:
+                            <text><strong>Your booking assistant is paused</strong> - your plan was not renewed. Customers only get a short "we'll reply soon" message.</text>
+                            break;
+                        case SubscriptionState.Grace:
+                            <text><strong>Your plan has ended.</strong> Everything keeps working for a few more days - renew to keep your booking assistant running.</text>
+                            break;
+                        default:
+                            <text><strong>@planStatus.Label.</strong> Choose a plan to keep your booking assistant running.</text>
+                            break;
+                    }
+                </span>
+                <a class="btn btn-sm btn-light" asp-controller="Plan" asp-action="Index" data-testid="plan-banner-link">See plans</a>
+            </div>
+        }
         @if (TempData["Success"] is string successMessage)
         {
             <div class="alert alert-success" role="alert" data-testid="alert-success">@successMessage</div>

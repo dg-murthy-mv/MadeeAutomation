@@ -6,7 +6,7 @@
     var terms = Model.Terms;
     var tabList = new List<(string key, string label)> { ("todo", $"To confirm ({Model.PendingCount})"), ("upcoming", "Upcoming"), ("day", "Day"), ("past", "Past"), ("all", "All") };
     if (terms.Clinic) tabList.Add(("followups", "Follow-ups"));
-    if (client.BookingWaitlistEnabled || Model.WaitingCount > 0) tabList.Add(("waitlist", $"Waitlist ({Model.WaitingCount})"));
+    if (client.UsesWaitlist || Model.WaitingCount > 0) tabList.Add(("waitlist", $"Waitlist ({Model.WaitingCount})"));
     var tabs = tabList.ToArray();
     var baseRoute = new Dictionary<string, string?>(Model.Pager.Route);
     string DayLink(DateOnly d) => Url.Action("Index", "Bookings", new Dictionary<string, string?>(baseRoute) { ["show"] = "day", ["day"] = d.ToString("yyyy-MM-dd") })!;

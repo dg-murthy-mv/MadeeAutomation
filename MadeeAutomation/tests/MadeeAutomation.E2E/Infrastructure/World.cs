@@ -87,6 +87,12 @@ public static class World
     public static SeededClient Clinic { get; private set; } = null!;
     public const string ClinicPortalEmail = "owner@smileclinic.test";
     public static readonly string ClinicStaffLineId = "U" + new string('k', 32);
+    // Plans: a salon whose plan the plan tests change (every other client stays on Demo, as the SQL script makes them)
+    public static SeededClient PlanSalon { get; private set; } = null!;
+    public const string PlanSalonPortalEmail = "owner@plansalon.test";
+    public const string PlanSalonOwnerEmail = "alerts@plansalon.test";
+    public static readonly string PlanSalonStaffLineId = "U" + new string('p', 32);
+    public const string BillingEmail = "billing@madeevision.test";
     public static readonly string TaxStaffLineId = "U" + new string('e', 32);
     public static readonly string ButtonCafeStaffLineId = "U" + new string('d', 32);
 
@@ -332,6 +338,21 @@ public static class World
         await AddStaffAsync(db, Spa.Id, "Ana", "F", "Nail technician", home: false, sort: 2, gel);
         await AddStaffAsync(db, Spa.Id, "Liza", "F", "Stylist", home: false, sort: 3, haircut);
         await AddAdminAsync(db, SpaPortalEmail, "Spa Owner", PortalPassword, Spa.Id);
+
+        // ---- Plans: Plan Salon (Manila) - 4 staff, LINE only; the plan tests move it between plans ----
+        PlanSalon = await AddClientAsync(db, "plansalon", "E2E Plan Salon", ClientStatus.Active, Encrypted(Line("plansalon-secret", "plansalon-token")),
+            "plansalon-secret", withWorkflow: false, kb: "Address: 8 Roxas Blvd, Manila.", staffEmail: PlanSalonOwnerEmail,
+            country: "PH", currency: "PHP", timeZone: "Asia/Manila", staffLine: PlanSalonStaffLineId);
+        await db.ExecAsync(@"UPDATE dbo.ClientConfigs SET Vertical = 5, BookingSlotMinutes = 30, BookingMinNoticeMinutes = 60, BookingDaysAhead = 14,
+                                 BookingWaitlistEnabled = 1 WHERE Id = @id;", ("@id", PlanSalon.Id));
+        await db.ExecAsync(@"
+            INSERT INTO dbo.WorkflowDefinitions (Id, ClientConfigId, Name, HandlerKey, Vertical, TriggerType, Channel, TriggerConfigJson, IsEnabled, CreatedAtUtc, RetryAttempt)
+            VALUES (NEWID(), @c, 'LINE bookings', 'booking-message', 5, 3, 'line', '{}', 1, SYSUTCDATETIME(), 0);", ("@c", PlanSalon.Id));
+        for (var d = 0; d < 7; d++) await AddHoursAsync(db, PlanSalon.Id, d, "10:00", "21:00");
+        var cut = await AddServiceAsync(db, PlanSalon.Id, "Haircut", "Hair", 45, 350m, home: false, buffer: 0, sort: 0);
+        foreach (var (who, i) in new[] { "Bea", "Carlo", "Dina", "Eli" }.Select((n, i) => (n, i)))
+            await AddStaffAsync(db, PlanSalon.Id, who, "F", "Stylist", home: false, sort: i, cut);
+        await AddAdminAsync(db, PlanSalonPortalEmail, "Salon Owner", PortalPassword, PlanSalon.Id);
 
         // ---- Clinic: Smile Clinic (Bengaluru), open 09:00-20:00 every day; each doctor has their own sessions ----
         Clinic = await AddClientAsync(db, "smileclinic", "E2E Smile Clinic", ClientStatus.Active, Encrypted(Line("smileclinic-secret", "smileclinic-token")),

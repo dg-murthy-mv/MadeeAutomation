@@ -1,0 +1,62 @@
+@model PlanUsage
+@*
+    The plan at a glance: status, days left, and this month's chats / staff / channels against the plan.
+    Used on Billing -> client (MadeeVision) and the client's own Plan page.
+*@
+@{
+    var status = Model.Status;
+    var client = Model.Client;
+    string Bar(int used, int? limit) => limit is > 0 ? (used > limit ? "bg-danger" : used * 100 >= limit * 80 ? "bg-warning" : "bg-success") : "bg-secondary";
+    int Pct(int used, int? limit) => limit is > 0 ? Math.Min(100, (int)Math.Round(used * 100m / limit.Value)) : 0;
+    var stateCss = status.State switch
+    {
+        SubscriptionState.Paused => "alert-danger",
+        SubscriptionState.Grace => "alert-warning",
+        _ when status.DaysLeft is <= 7 => "alert-warning",
+        _ => "alert-secondary"
+    };
+}
+<div class="alert @stateCss" data-testid="plan-status" data-state="@status.State">
+    <strong data-testid="plan-label">@status.Label</strong>
+    @if (status.EndsAtUtc is { } end)
+    {
+        var endText = LocalTime.ToLocal(end, client.TimeZoneId).ToString("ddd d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+        var pauseText = status.PausesAtUtc is { } p ? LocalTime.ToLocal(p, client.TimeZoneId).ToString("ddd d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture) : "";
+        <div class="small mt-1" data-testid="plan-ends">
+            @switch (status.State)
+            {
+                case SubscriptionState.Grace:
+                    <text>Ended on @endText. Everything keeps working until @pauseText; after that the booking assistant pauses until it is renewed.</text>
+                    break;
+                case SubscriptionState.Paused:
+                    <text>Ended on @endText and was not renewed. The assistant is paused: customers get one short "we'll reply soon" message a day. Your services, staff and bookings are all kept.</text>
+                    break;
+                default:
+                    <text>@(status.State == SubscriptionState.Trial ? "Trial ends" : "Paid until") @endText.</text>
+                    break;
+            }
+        </div>
+    }
+</div>
+
+<div class="mv-tiles mb-3" data-testid="plan-usage">
+    <div class="mv-tile" data-testid="usage-chats">
+        <div class="mv-tile-label">Customer chats - @Model.MonthLabel</div>
+        <div class="mv-tile-value" data-testid="usage-chats-value">@Model.Chats.ToString("N0") / @PlanDefinition.Limit(Model.ChatLimit)</div>
+        <div class="progress mt-1" style="height: 6px" role="progressbar" aria-label="Chats used"><div class="progress-bar @Bar(Model.Chats, Model.ChatLimit)" style="width: @Pct(Model.Chats, Model.ChatLimit)%"></div></div>
+        <div class="mv-tile-note">One customer on one day = one chat. Going over never stops the assistant.</div>
+    </div>
+    @if (client.Vertical.UsesBookings())
+    {
+        <div class="mv-tile" data-testid="usage-staff">
+            <div class="mv-tile-label">Working staff</div>
+            <div class="mv-tile-value" data-testid="usage-staff-value">@Model.Staff / @PlanDefinition.Limit(Model.StaffLimit)</div>
+            <div class="progress mt-1" style="height: 6px" role="progressbar" aria-label="Staff used"><div class="progress-bar @Bar(Model.Staff, Model.StaffLimit)" style="width: @Pct(Model.Staff, Model.StaffLimit)%"></div></div>
+        </div>
+    }
+    <div class="mv-tile" data-testid="usage-channels">
+        <div class="mv-tile-label">Messaging channels</div>
+        <div class="mv-tile-value" data-testid="usage-channels-value">@Model.Channels / @PlanDefinition.Limit(Model.ChannelLimit)</div>
+        <div class="progress mt-1" style="height: 6px" role="progressbar" aria-label="Channels used"><div class="progress-bar @Bar(Model.Channels, Model.ChannelLimit)" style="width: @Pct(Model.Channels, Model.ChannelLimit)%"></div></div>
+    </div>
+</div>

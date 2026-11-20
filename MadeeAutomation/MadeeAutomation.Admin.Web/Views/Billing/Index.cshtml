@@ -1,0 +1,64 @@
+@model BillingPageModel
+@{
+    ViewData["Title"] = "Billing";
+    string Sums(Dictionary<string, decimal> d) => d.Count == 0 ? "-" : string.Join(" + ", d.OrderBy(x => x.Key).Select(x => Money.Format(x.Value, x.Key)));
+    var filters = new (string Key, string Label)[]
+    {
+        ("all", $"All ({Model.TotalClients})"), ("attention", $"Needs attention ({Model.Attention})"), ("trial", $"Trials ({Model.Trials})"),
+        ("paid", "Paid plans"), ("paused", $"Paused ({Model.Paused})"), ("demo", "Demo")
+    };
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Billing</h2>
+        <div class="mv-subtle">Plans, renewals and payments for every client. Soonest renewal first.</div>
+    </div>
+</div>
+
+<div class="mv-tiles mb-3" data-testid="billing-tiles">
+    <div class="mv-tile" data-testid="tile-mrr"><div class="mv-tile-label">Monthly revenue (paid plans)</div><div class="mv-tile-value" data-testid="tile-mrr-value">@Sums(Model.MonthlyRevenue)</div><div class="mv-tile-note">Yearly plans counted as 1/12</div></div>
+    <div class="mv-tile" data-testid="tile-paid-month"><div class="mv-tile-label">Payments this month</div><div class="mv-tile-value" data-testid="tile-paid-month-value">@Sums(Model.PaidThisMonth)</div></div>
+    <div class="mv-tile" data-testid="tile-paying"><div class="mv-tile-label">Paying clients</div><div class="mv-tile-value">@Model.Paying</div></div>
+    <div class="mv-tile" data-testid="tile-trials"><div class="mv-tile-label">On free trial</div><div class="mv-tile-value">@Model.Trials</div></div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mb-3" data-testid="billing-filters">
+    @foreach (var (key, label) in filters)
+    {
+        <a class="btn btn-sm @(Model.Show == key ? "btn-primary" : "btn-outline-secondary")" asp-action="Index" asp-route-show="@key" data-testid="billing-show-@key">@label</a>
+    }
+</div>
+
+<div class="mv-card">
+    @if (Model.Rows.Count == 0)
+    {
+        <div class="mv-card-body mv-subtle" data-testid="billing-empty">No clients here.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table mv-table align-middle mb-0" data-testid="billing-table">
+                <thead><tr><th>Client</th><th>Plan</th><th>Status</th><th class="text-end">Chats this month</th><th class="text-end">Price / month</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var r in Model.Rows)
+                    {
+                        var s = r.Usage.Status;
+                        var css = s.IsPaused ? "text-bg-danger" : s.NeedsRenewalSoon ? "text-bg-warning" : s.State == SubscriptionState.Trial ? "text-bg-info" : "text-bg-success";
+                        <tr data-testid="billing-row" data-client="@r.Client.ClientCode" data-state="@s.State">
+                            <td data-label="Client" class="mv-td-title fw-semibold">@r.Client.ClientName<div class="small mv-subtle">@r.Client.Country &middot; @r.Client.Vertical</div></td>
+                            <td data-label="Plan">@s.Plan.Name@(r.Client.BillingCycle is BillingCycle.Yearly ? " (yearly)" : "")</td>
+                            <td data-label="Status"><span class="badge @css" data-testid="billing-status">@s.Label</span></td>
+                            <td data-label="Chats this month" class="text-end @(r.Usage.OverChats ? "text-danger fw-semibold" : "")" data-testid="billing-chats">
+                                @r.Usage.Chats.ToString("N0") / @PlanDefinition.Limit(r.Usage.ChatLimit)
+                            </td>
+                            <td data-label="Price / month" class="text-end">@(r.MonthlyValue is { } v ? Money.Format(v, r.Client.Currency) : "-")</td>
+                            <td data-label="" class="text-end"><a class="btn btn-sm btn-outline-primary" asp-action="Client" asp-route-id="@r.Client.Id" data-testid="billing-open">Plan &amp; payments</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+<div class="form-text mt-2">Chats: one customer on one day = one chat (warn-only). A plan that ends keeps working for @PlanCatalog.GraceDays days, then the assistant pauses.</div>

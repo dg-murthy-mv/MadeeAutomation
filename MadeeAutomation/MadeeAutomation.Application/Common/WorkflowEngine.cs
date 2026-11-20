@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
 using MadeeAutomation.Application.Abstractions;
+using MadeeAutomation.Domain.Billing;
+using MadeeAutomation.Domain.Regional;
 using MadeeAutomation.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -56,6 +58,8 @@ public class WorkflowEngine
     private readonly IReadOnlyDictionary<string, IHandler> _handlers;
     private readonly IReadOnlyDictionary<ActionType, IAction> _actions;
     private readonly ILogger<WorkflowEngine> _logger;
+    private readonly ISubscriptionRepository _subscriptions;
+    private readonly TimeProvider _clock;
 
     private static readonly JsonSerializerOptions ActionsJsonOptions = new()
     {
@@ -70,8 +74,12 @@ public class WorkflowEngine
         IExecutionLogRepository executionLogRepository,
         IEnumerable<IHandler> handlers,
         IEnumerable<IAction> actions,
-        ILogger<WorkflowEngine> logger)
+        ILogger<WorkflowEngine> logger,
+        ISubscriptionRepository subscriptions,
+        TimeProvider clock)
     {
+        _subscriptions = subscriptions;
+        _clock = clock;
         _workflowRepository = workflowRepository;
         _executionLogRepository = executionLogRepository;
         _logger = logger;
@@ -133,6 +141,27 @@ public class WorkflowEngine
         if (context.Client is { CanRunWorkflows: false } && !context.IsTest)
         {
             return await Finish(ExecutionStatus.Skipped, $"Client is {context.Client.Status} - nothing was run.", null);
+        }
+
+        // ---- Plan not renewed (trial or paid period ended + 3 days grace): the assistant is paused. ----
+        // Customers get one short "we'll reply soon" message a day, the staff one alert a day; no AI is used.
+        if (!context.IsTest && context.Client is { } paying && SubscriptionStatus.Of(paying, _clock.GetUtcNow().UtcDateTime).IsPaused)
+        {
+            if (!IsCustomerMessage(context) || context.MessageKind == Domain.Entities.InboundKinds.Follow)
+                return await Finish(ExecutionStatus.Skipped, "Plan paused (not renewed) - nothing was run.", null);
+
+            var localDay = DateOnly.FromDateTime(LocalTime.ToLocal(_clock.GetUtcNow().UtcDateTime, paying.TimeZoneId))
+                .ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+            var pausedActions = new List<ActionRequest>();
+            if (await _subscriptions.TryClaimNoticeAsync(paying.Id, $"paused-reply:{Channels.Normalize(context.Channel)}:{context.CustomerId}:{localDay}", cancellationToken))
+                pausedActions.Add(Reply(context, paying.EffectiveFallbackReply));
+            if (await _subscriptions.TryClaimNoticeAsync(paying.Id, $"paused-alert:{localDay}", cancellationToken))
+                pausedActions.Add(StaffAlert(context, "The MadeeAutomation plan was not renewed, so the assistant is paused: customers only get a short " +
+                                                      "'we'll reply soon' message (once a day). Please reply to them yourself - renew to switch the assistant back on."));
+            if (pausedActions.Count > 0)
+                await RunActionsAsync(pausedActions, context, workflow.Id, records, cancellationToken);
+            return await Finish(ExecutionStatus.Skipped,
+                pausedActions.Count > 0 ? "Plan paused (not renewed) - short reply sent, assistant not run." : "Plan paused (not renewed) - already answered today.", null);
         }
 
         if (!_handlers.TryGetValue(workflow.HandlerKey, out var handler))

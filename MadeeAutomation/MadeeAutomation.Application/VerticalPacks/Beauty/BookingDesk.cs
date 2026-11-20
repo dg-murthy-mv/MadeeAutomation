@@ -301,7 +301,7 @@ public class BookingDesk
     /// </summary>
     public static DateTime? SecondReminderDue(Booking booking, ClientConfig client, DateTime utcNow)
     {
-        if (!client.BookingSecondReminderEnabled || !client.BookingRemindersEnabled ||
+        if (!client.UsesSecondReminder || !client.BookingRemindersEnabled ||
             string.IsNullOrWhiteSpace(booking.CustomerId) || string.IsNullOrWhiteSpace(booking.Channel))
             return null;
         var twoHours = booking.StartUtc.AddHours(-2);

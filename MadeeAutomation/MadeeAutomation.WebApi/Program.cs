@@ -48,6 +48,7 @@ try
     builder.Services.AddHostedService<SchedulerWorker>();
     builder.Services.AddHostedService<BookingReminderWorker>();
     builder.Services.AddHostedService<MonthlyReportWorker>();
+    builder.Services.AddHostedService<SubscriptionWorker>();
 
     // Azure App Service sits in front of the app and passes the real https / client address in X-Forwarded-* headers.
     // Without this, the app thinks every request is plain http (wrong links, https redirect loops on Linux).
