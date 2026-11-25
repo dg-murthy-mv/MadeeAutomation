@@ -53,6 +53,8 @@ public sealed class AppHost : IAsyncDisposable
             ["Scheduler__RetryDelaysMinutes"] = "0.05,0.05",
             ["Bookings__ReminderPollSeconds"] = "1",
             ["Billing__PollSeconds"] = "1",
+            // Review booster: review links go through WebApi's own short link (/r/g/...), so clicks are counted.
+            ["WebApi__PublicBaseUrl"] = settings.WebApiUrl,
         };
 
         var admin = new Dictionary<string, string>(common)

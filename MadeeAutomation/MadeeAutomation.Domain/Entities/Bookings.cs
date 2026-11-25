@@ -207,6 +207,9 @@ public class Booking
     public string? FeedbackComment { get; set; }
     public DateTime? FeedbackAtUtc { get; set; }
 
+    /// <summary>When the customer was sent the review links (Google / Facebook) after rating the visit.</summary>
+    public DateTime? ReviewAskedAtUtc { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
     public static string OwnReference(int number) => $"BK-{number:0000}";

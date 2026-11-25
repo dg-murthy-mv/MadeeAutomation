@@ -91,6 +91,7 @@ try
     builder.Services.AddScoped<MadeeAutomation.Application.Reports.ReportBuilder>();
     builder.Services.AddScoped<MadeeAutomation.Application.Reports.AdminReportBuilder>();
     builder.Services.AddScoped<MadeeAutomation.Application.Billing.SubscriptionService>();
+    builder.Services.AddScoped<MadeeAutomation.Application.Reviews.ReviewService>();
     builder.Services.AddHttpClient(ApiService.ClientName, client =>
     {
         var baseUrl = builder.Configuration["WebApi:InternalBaseUrl"] is { Length: > 0 } b ? b : "https://localhost:58715/";

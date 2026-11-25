@@ -14,8 +14,9 @@ namespace MadeeAutomation.Application.VerticalPacks.Beauty;
 public class AppointmentServices
 {
     public AppointmentServices(BookingDesk desk, BookingAssistant assistant, IBookingRepository bookings, IConversationRepository conversations,
-        IBusinessProfileRepository profile, IMessagingConnector messaging, TimeProvider clock)
+        IBusinessProfileRepository profile, IMessagingConnector messaging, TimeProvider clock, MadeeAutomation.Application.Reviews.ReviewService reviews)
     {
+        Reviews = reviews;
         Desk = desk;
         Assistant = assistant;
         Bookings = bookings;
@@ -32,6 +33,9 @@ public class AppointmentServices
     public IBusinessProfileRepository Profile { get; }
     public IMessagingConnector Messaging { get; }
     public TimeProvider Clock { get; }
+
+    /// <summary>Review booster: the Google / Facebook review links sent after the rating.</summary>
+    public MadeeAutomation.Application.Reviews.ReviewService Reviews { get; }
 }
 
 /// <summary>A booking being made in the chat, remembered between messages (Conversation.FlowJson).</summary>
@@ -359,10 +363,13 @@ public class AppointmentMessageHandler : IHandler
                 return HandlerResult.Ok("Follow-up: not now.", Reply(turn, "No problem - you can book any time here.", Hint(turn)));
 
             case "bfs":
+            {
+                var rated = turn.Draft.FeedbackFor;
                 turn.Conversation.State = "";
                 turn.Draft = new BookingDraft();
                 await SaveAsync(turn, ct);
-                return HandlerResult.Ok("Feedback: no comment.", Reply(turn, "Thank you for your feedback!", Hint(turn)));
+                return await FeedbackThanksAsync(turn, rated, "Thank you for your feedback!", "Feedback: no comment.", ct);
+            }
 
             case "bw":
                 turn.Draft.AtHome = data.GetValueOrDefault("h") == "1";
@@ -1124,7 +1131,19 @@ public class AppointmentMessageHandler : IHandler
         turn.Draft = new BookingDraft();
         await SaveAsync(turn, ct);
         if (id is { } g && !turn.Context.IsTest) await _s.Bookings.SetFeedbackAsync(turn.Client.Id, g, null, Cut(turn.Text, 1000), turn.Cat.UtcNow, ct);
-        return HandlerResult.Ok("Feedback: comment saved.", Reply(turn, "Thank you for your feedback - we read every message.", Hint(turn)));
+        return await FeedbackThanksAsync(turn, id, "Thank you for your feedback - we read every message.", "Feedback: comment saved.", ct);
+    }
+
+    /// <summary>
+    /// The thank-you after the rating (with or without a comment). When the business set its review links, every
+    /// customer gets them here - whatever stars they gave (Google does not allow asking only happy customers).
+    /// </summary>
+    private async Task<HandlerResult> FeedbackThanksAsync(Turn turn, Guid? bookingId, string thanks, string summary, CancellationToken ct)
+    {
+        var ask = await _s.Reviews.RequestAsync(turn.Client, bookingId, turn.Context.IsTest, ct);
+        return ask is null
+            ? HandlerResult.Ok(summary, Reply(turn, thanks, Hint(turn)))
+            : HandlerResult.Ok(summary + " Review links sent.", Reply(turn, $"{thanks}\n\n{ask}", Hint(turn)));
     }
 
     /// <summary>A card per doctor: qualifications, fee, languages, days - and "Book".</summary>

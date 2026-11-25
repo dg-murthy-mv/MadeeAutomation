@@ -34,6 +34,7 @@ public class AutomationDbContext : DbContext
     public DbSet<AiUsageRecord> AiUsage => Set<AiUsageRecord>();
     public DbSet<SubscriptionPayment> SubscriptionPayments => Set<SubscriptionPayment>();
     public DbSet<SubscriptionNotice> SubscriptionNotices => Set<SubscriptionNotice>();
+    public DbSet<ReviewClick> ReviewClicks => Set<ReviewClick>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -59,6 +60,9 @@ public class AutomationDbContext : DbContext
             entity.Ignore(c => c.UsesSecondReminder);
             entity.Ignore(c => c.UsesFeedback);
             entity.Ignore(c => c.UsesWaitlist);
+            entity.Ignore(c => c.UsesReviewRequests);
+            entity.Property(c => c.GoogleReviewUrl).HasMaxLength(500);
+            entity.Property(c => c.FacebookReviewUrl).HasMaxLength(500);
             entity.Property(c => c.PlanPrice).HasPrecision(18, 2);
             entity.Property(c => c.PlanNote).HasMaxLength(500);
             entity.Property(c => c.FallbackReplyText).HasMaxLength(1000);
@@ -245,6 +249,14 @@ public class AutomationDbContext : DbContext
             entity.Property(p => p.Reference).HasMaxLength(100);
             entity.Property(p => p.Note).HasMaxLength(500);
             entity.Property(p => p.RecordedBy).HasMaxLength(256).IsRequired();
+        });
+
+        // ---- Review booster ----
+        modelBuilder.Entity<ReviewClick>(entity =>
+        {
+            entity.ToTable("ReviewClicks");
+            entity.HasIndex(c => new { c.ClientConfigId, c.ClickedAtUtc });
+            entity.Property(c => c.Site).HasMaxLength(20).IsRequired();
         });
 
         modelBuilder.Entity<SubscriptionNotice>(entity =>

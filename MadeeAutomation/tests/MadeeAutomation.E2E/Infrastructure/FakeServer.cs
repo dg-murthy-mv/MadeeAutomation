@@ -297,6 +297,15 @@ public sealed class FakeServer : IAsyncDisposable
             return text.Contains("notranslate") ? "???" : $"[{lang}] {user}";
         }
 
+        // Review booster: "Reply to a review with AI". Echoes the stars and first name so tests can check them.
+        if (system.StartsWith("You write a reply from a business to a customer review"))
+        {
+            var stars = Regex.Match(user, @"Stars: (\d)").Groups[1].Value;
+            var name = Regex.Match(user, @"Reviewer: ([^\r\n]+)").Groups[1].Value.Trim();
+            var first = name == "not given" || name.Length == 0 ? "" : ", " + name.Split(' ')[0];
+            return $"Thank you{first}! [reply to a {(stars.Length == 0 ? "no" : stars)}-star review]";
+        }
+
         // Round 008: the customer typed an answer to "When do you want it?".
         if (system.StartsWith("A shop asked its customer"))
         {

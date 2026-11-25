@@ -48,6 +48,8 @@ public static class DependencyInjection
         services.AddScoped<MadeeAutomation.Application.Reports.MonthlyReportRunner>();
         services.AddScoped<MadeeAutomation.Application.Billing.SubscriptionService>();
         services.AddScoped<MadeeAutomation.Application.Billing.SubscriptionRunner>();
+        services.AddScoped<MadeeAutomation.Application.Reviews.ReviewService>();
+        services.AddScoped<MadeeAutomation.Application.Reviews.ReviewReplyWriter>();
 
         // Webhook -> InboundEvents -> background worker pipeline
         services.AddSingleton<InboundSignal>();

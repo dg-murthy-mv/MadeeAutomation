@@ -93,6 +93,9 @@ public static class World
     public const string PlanSalonOwnerEmail = "alerts@plansalon.test";
     public static readonly string PlanSalonStaffLineId = "U" + new string('p', 32);
     public const string BillingEmail = "billing@madeevision.test";
+    // Review booster: a Manila salon (rating question on, sent at once) whose review links the review tests set
+    public static SeededClient ReviewSalon { get; private set; } = null!;
+    public const string ReviewSalonPortalEmail = "owner@reviewsalon.test";
     public static readonly string TaxStaffLineId = "U" + new string('e', 32);
     public static readonly string ButtonCafeStaffLineId = "U" + new string('d', 32);
 
@@ -375,6 +378,20 @@ public static class World
         var meera = await AddStaffAsync(db, Clinic.Id, "Dr Meera Iyer", "F", "MD - Dermatologist", home: false, sort: 2, skin);
         await DoctorAsync(db, meera, 700m, "English, Tamil", "Acne, eczema and hair loss.", new[] { 2, 4, 6 }, "14:00-18:00");
         await AddAdminAsync(db, ClinicPortalEmail, "Clinic Owner", PortalPassword, Clinic.Id);
+
+        // ---- Review booster: Review Salon (Manila) - 1 stylist, LINE only, rating question at once after Completed ----
+        ReviewSalon = await AddClientAsync(db, "reviewsalon", "E2E Review Salon", ClientStatus.Active, Encrypted(Line("reviewsalon-secret", "reviewsalon-token")),
+            "reviewsalon-secret", withWorkflow: false, kb: "Address: 5 Rizal Ave, Manila.", staffEmail: "alerts@reviewsalon.test",
+            country: "PH", currency: "PHP", timeZone: "Asia/Manila");
+        await db.ExecAsync(@"UPDATE dbo.ClientConfigs SET Vertical = 5, BookingSlotMinutes = 30, BookingFeedbackEnabled = 1, BookingFeedbackDelayHours = 0
+                             WHERE Id = @id;", ("@id", ReviewSalon.Id));
+        await db.ExecAsync(@"
+            INSERT INTO dbo.WorkflowDefinitions (Id, ClientConfigId, Name, HandlerKey, Vertical, TriggerType, Channel, TriggerConfigJson, IsEnabled, CreatedAtUtc, RetryAttempt)
+            VALUES (NEWID(), @c, 'LINE bookings', 'booking-message', 5, 3, 'line', '{}', 1, SYSUTCDATETIME(), 0);", ("@c", ReviewSalon.Id));
+        for (var d = 0; d < 7; d++) await AddHoursAsync(db, ReviewSalon.Id, d, "10:00", "20:00");
+        var trim = await AddServiceAsync(db, ReviewSalon.Id, "Haircut", "Hair", 45, 350m, home: false, buffer: 0, sort: 0);
+        await AddStaffAsync(db, ReviewSalon.Id, "Bea", "F", "Stylist", home: false, sort: 0, trim);
+        await AddAdminAsync(db, ReviewSalonPortalEmail, "Review Salon Owner", PortalPassword, ReviewSalon.Id);
 
         // Old rows hold plain JSON - the app must still read them (and encrypt on the next save).
         Legacy = await AddClientAsync(db, "legacy", "E2E Legacy", ClientStatus.Active,

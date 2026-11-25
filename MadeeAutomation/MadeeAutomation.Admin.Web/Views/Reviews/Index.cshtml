@@ -1,0 +1,213 @@
+@model ReviewsPageModel
+@using MadeeAutomation.Application.Reports
+@{
+    var d = Model.Dashboard;
+    var client = d.Client;
+    ViewData["Title"] = $"Reviews - {client.ClientName}";
+    var isStaff = !ClientAccess.IsClientUser(User);
+    var culture = System.Globalization.CultureInfo.InvariantCulture;
+    string Avg(decimal? a) => a is { } v ? v.ToString("0.0", culture) + "/5" : "-";
+    string Stars(int n) => new string('★', n) + new string('☆', 5 - n);
+    var month = d.ThisMonth;
+    var change = d.AverageChange;
+    var asked = month.Asked;
+    var spread = (month.Ratings > 0 ? month : d.AllTime).Spread;
+    var spreadPoints = Enumerable.Range(1, 5).Reverse().Select(s => new ReportPoint($"{s} ★", spread[s - 1])).ToList();
+    var tapPeriod = month.Clicks > 0 ? month : d.AllTime;
+    var tapPoints = new List<ReportPoint> { new("Google", tapPeriod.GoogleClicks), new("Facebook", tapPeriod.FacebookClicks) };
+    int? rate = asked > 0 ? (int)Math.Round(100m * month.Clicks / asked, MidpointRounding.AwayFromZero) : null;
+    var plan = PlanCatalog.For(client.Plan);
+}
+
+<div class="mv-page-header">
+    <div>
+        <h2>Reviews</h2>
+        <div class="mv-subtle"><partial name="_ClientCrumb" model="client" /> &middot; ratings from your customers and more reviews on Google</div>
+    </div>
+    <partial name="_BeautyLinks" model='(client, "reviews")' />
+</div>
+
+@if (!d.PlanIncludes)
+{
+    <div class="alert alert-secondary" data-testid="reviews-plan-lock">
+        Ratings, review links and AI reply drafts are not in the <strong>@plan.Name</strong> plan.
+        <a asp-controller="Plan" asp-action="Index" asp-route-clientConfigId="@client.Id">See the plans</a>
+    </div>
+}
+else if (!client.BookingFeedbackEnabled)
+{
+    <div class="alert alert-warning" data-testid="reviews-ratings-off">
+        The rating question is switched off, so no customer is asked for a rating or a review.
+        Turn on <strong>Ask for a 1-5 star rating after the visit</strong> in
+        <a asp-controller="Bookings" asp-action="Settings" asp-route-clientConfigId="@client.Id">Booking settings</a>.
+    </div>
+}
+
+<h5 class="mb-2">@d.MonthName</h5>
+<div class="mv-tiles mb-3" data-testid="review-tiles">
+    <div class="mv-tile" data-testid="tile-ratings">
+        <div class="mv-tile-label">Feedback received</div>
+        <div class="mv-tile-value" data-testid="tile-ratings-value">@month.Ratings</div>
+        <div class="mv-tile-note">@d.LastMonthName: @d.LastMonth.Ratings</div>
+    </div>
+    <div class="mv-tile" data-testid="tile-clicks">
+        <div class="mv-tile-label">Review link taps</div>
+        <div class="mv-tile-value" data-testid="tile-clicks-value">@month.Clicks</div>
+        <div class="mv-tile-note" data-testid="tile-clicks-note">Google @month.GoogleClicks &middot; Facebook @month.FacebookClicks</div>
+    </div>
+    <div class="mv-tile" data-testid="tile-average">
+        <div class="mv-tile-label">Average feedback rating</div>
+        <div class="mv-tile-value" data-testid="tile-average-value">@Avg(month.Average)</div>
+        <div class="mv-tile-note">
+            @if (change is { } ch)
+            {
+                <span class="@(ch >= 0 ? "text-success" : "text-danger")">@(ch >= 0 ? "▲" : "▼") @Math.Abs(ch).ToString("0.0", culture)</span> <text>vs @d.LastMonthName</text>
+            }
+            else
+            {
+                <text>@d.LastMonthName: @Avg(d.LastMonth.Average)</text>
+            }
+        </div>
+    </div>
+    <div class="mv-tile" data-testid="tile-rate">
+        <div class="mv-tile-label">Link tap rate</div>
+        <div class="mv-tile-value" data-testid="tile-rate-value">@(rate is { } r ? $"{r}%" : "-")</div>
+        <div class="mv-tile-note">of <span data-testid="tile-asked-value">@asked</span> customer(s) sent the review links</div>
+    </div>
+</div>
+
+<div class="mv-card mv-card-body mb-3" data-testid="review-since">
+    <strong>Since you started:</strong>
+    <span data-testid="since-average">@Avg(d.AllTime.Average)</span> average from <span data-testid="since-ratings">@d.AllTime.Ratings</span> rating(s),
+    <span data-testid="since-asked">@d.AllTime.Asked</span> customer(s) asked for a review, <span data-testid="since-clicks">@d.AllTime.Clicks</span> opened the link.
+    @if (isStaff && !d.ClicksCounted)
+    {
+        <div class="small text-danger mt-1" data-testid="clicks-not-counted">Link clicks are not counted: set <code>WebApi:PublicBaseUrl</code> (WebApi__PublicBaseUrl on Azure) in both apps.</div>
+    }
+</div>
+
+<div class="mv-report-grid mb-3">
+    <partial name="_RankList" model='new RankModel { TestId = "rating-spread", Title = month.Ratings > 0 ? "Stars this month" : "Stars since you started", Points = spreadPoints, Empty = "No ratings yet." }' />
+    <partial name="_RankList" model='new RankModel { TestId = "taps-by-site", Title = month.Clicks > 0 ? "Review link taps this month" : "Review link taps since you started", Points = tapPoints, Empty = "No taps yet." }' />
+</div>
+
+<div class="mv-card mv-card-body mb-3" data-testid="review-links-card" style="max-width: 760px">
+    <h6>Your review links</h6>
+    <p class="small mv-subtle mb-2">
+        After the rating question, <strong>every</strong> customer who answers gets a one-tap link to review you - whatever stars they gave.
+        Google does not allow asking only happy customers.
+    </p>
+    <form asp-action="SaveLinks" method="post" autocomplete="off" data-testid="review-links-form">
+        <input type="hidden" asp-for="Links.ClientConfigId" />
+        <div class="mb-2">
+            <label asp-for="Links.GoogleReviewUrl" class="form-label"></label>
+            <input asp-for="Links.GoogleReviewUrl" class="form-control" inputmode="url" placeholder="https://g.page/r/.../review" data-testid="review-google" />
+            <span asp-validation-for="Links.GoogleReviewUrl" class="text-danger small" data-testid="review-google-error"></span>
+            <div class="form-text">Google Business Profile &rarr; <em>Ask for reviews</em> (or <em>Get more reviews</em>) &rarr; copy the link.</div>
+        </div>
+        <div class="mb-2">
+            <label asp-for="Links.FacebookReviewUrl" class="form-label"></label>
+            <input asp-for="Links.FacebookReviewUrl" class="form-control" inputmode="url" placeholder="https://www.facebook.com/yourpage/reviews" data-testid="review-facebook" />
+            <span asp-validation-for="Links.FacebookReviewUrl" class="text-danger small" data-testid="review-facebook-error"></span>
+        </div>
+        <div class="form-check mb-3">
+            <input asp-for="Links.Enabled" class="form-check-input" data-testid="review-enabled" />
+            <label asp-for="Links.Enabled" class="form-check-label"></label>
+        </div>
+        <button type="submit" class="btn btn-primary" data-testid="review-links-save">Save links</button>
+    </form>
+</div>
+
+<div class="mv-card mb-3" data-testid="review-recent">
+    <div class="mv-card-body pb-2"><h6 class="mb-0">Latest ratings</h6></div>
+    @if (d.Recent.Count == 0)
+    {
+        <div class="mv-card-body pt-0 mv-subtle">No ratings yet. They appear here when customers answer the rating question after a completed visit.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table mv-table mb-0">
+                <thead><tr><th>Date</th><th>Visit</th><th>Stars</th><th>Comment</th><th>Review link</th></tr></thead>
+                <tbody>
+                    @foreach (var b in d.Recent)
+                    {
+                        var stars = b.FeedbackRating ?? 0;
+                        <tr data-testid="review-row" data-ref="@b.Reference" class="@(stars <= 2 ? "table-danger" : "")">
+                            <td data-label="Date">@(b.FeedbackAtUtc is { } at ? LocalTime.ToLocal(at, client.TimeZoneId).ToString("ddd d MMM", culture) : "-")</td>
+                            <td data-label="Visit" class="mv-td-title">@b.Reference &middot; @b.ServiceName@(string.IsNullOrWhiteSpace(b.StaffName) ? "" : $" ({b.StaffName})")</td>
+                            <td data-label="Stars" class="text-nowrap" title="@stars of 5">@Stars(stars)</td>
+                            <td data-label="Comment">@(b.FeedbackComment ?? "-")</td>
+                            <td data-label="Review link">@(b.ReviewAskedAtUtc is null ? "-" : "Sent")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<div class="mv-card mv-card-body mb-4" data-testid="review-draft-card" id="reply">
+    <h6>Reply to a review with AI</h6>
+    <p class="small mv-subtle mb-2">Paste a review from Google or Facebook. The AI writes a short, polite reply in the same language - check it, change it if you like, then post it yourself. Replying to every review (good and bad) helps your Google ranking.</p>
+    @if (!d.PlanIncludes)
+    {
+        <span class="badge text-bg-secondary" data-testid="plan-lock-reply">Not in the @plan.Name plan</span>
+    }
+    else
+    {
+        <form asp-action="Draft" asp-fragment="reply" method="post" autocomplete="off" data-testid="review-draft-form">
+            <input type="hidden" asp-for="Draft.ClientConfigId" />
+            <div class="row g-2 mb-2">
+                <div class="col-5 col-md-2">
+                    <label asp-for="Draft.Stars" class="form-label"></label>
+                    <select asp-for="Draft.Stars" class="form-select" data-testid="draft-stars">
+                        @for (var s = 5; s >= 1; s--) { <option value="@s">@s ★</option> }
+                    </select>
+                </div>
+                <div class="col-7 col-md-4">
+                    <label asp-for="Draft.ReviewerName" class="form-label"></label>
+                    <input asp-for="Draft.ReviewerName" class="form-control" data-testid="draft-name" />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label asp-for="Draft.Tone" class="form-label"></label>
+                    <input asp-for="Draft.Tone" class="form-control" placeholder="e.g. friendly, use Taglish" data-testid="draft-tone" />
+                </div>
+            </div>
+            <div class="mb-2">
+                <label asp-for="Draft.Review" class="form-label"></label>
+                <textarea asp-for="Draft.Review" class="form-control" rows="4" data-testid="draft-review"></textarea>
+                <span asp-validation-for="Draft.Review" class="text-danger small" data-testid="draft-review-error"></span>
+            </div>
+            <button type="submit" class="btn btn-primary" data-testid="draft-submit">Write a reply</button>
+        </form>
+    }
+    @if (Model.DraftError is not null)
+    {
+        <div class="alert alert-danger mt-3 mb-0" data-testid="draft-error">@Model.DraftError</div>
+    }
+    @if (Model.DraftText is not null)
+    {
+        <div class="mt-3" data-testid="draft-result">
+            <label for="draft-text" class="form-label fw-semibold">Suggested reply</label>
+            <textarea id="draft-text" class="form-control" rows="4" data-testid="draft-text">@Model.DraftText</textarea>
+            <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="draft-copy" data-testid="draft-copy">Copy</button>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var button = document.getElementById('draft-copy');
+            if (!button) return;
+            button.addEventListener('click', function () {
+                var box = document.getElementById('draft-text');
+                box.select();
+                var done = function () { button.textContent = 'Copied'; };
+                if (navigator.clipboard) navigator.clipboard.writeText(box.value).then(done, function () { document.execCommand('copy'); done(); });
+                else { document.execCommand('copy'); done(); }
+            });
+        })();
+    </script>
+}

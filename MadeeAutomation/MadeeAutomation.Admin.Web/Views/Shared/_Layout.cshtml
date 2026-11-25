@@ -50,6 +50,7 @@
                                 <a class="nav-link" asp-controller="Bookings" asp-action="Index" data-testid="nav-bookings">Bookings</a>
                                 <a class="nav-link" asp-controller="Services" asp-action="Index" data-testid="nav-services">Services</a>
                                 <a class="nav-link" asp-controller="Staff" asp-action="Index" data-testid="nav-staff">@(await PortalNav.IsClinicAsync(User) ? "Doctors" : "Staff")</a>
+                                <a class="nav-link" asp-controller="Reviews" asp-action="Index" data-testid="nav-reviews">Reviews</a>
                             }
                             else
                             {

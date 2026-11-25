@@ -22,6 +22,13 @@ public class WorkflowTestResult
     public List<WorkflowTestAction> Actions { get; set; } = new();
 }
 
+public class ReviewReplyDraftResult
+{
+    public bool Success { get; set; }
+    public string? Draft { get; set; }
+    public string? Error { get; set; }
+}
+
 public class OrderNoticeResult
 {
     /// <summary>"sent", "failed", "off", "skipped" - or "unreachable" when WebApi could not be called.</summary>
@@ -42,6 +49,10 @@ public interface IApiService
     Task<OrderNoticeResult> NotifyCustomerAboutBookingAsync(Guid clientConfigId, Guid bookingId, CancellationToken cancellationToken = default);
 
     Task<WorkflowTestResult> TestWorkflowAsync(Guid workflowId, string message, string? channel, CancellationToken cancellationToken = default);
+
+    /// <summary>Reviews page: WebApi asks the AI for a reply to a customer review. Never throws.</summary>
+    Task<ReviewReplyDraftResult> DraftReviewReplyAsync(Guid clientConfigId, int? stars, string? reviewerName, string review, string? tone,
+        CancellationToken cancellationToken = default);
 }
 
 public class ApiService : IApiService
@@ -150,6 +161,37 @@ public class ApiService : IApiService
         {
             _logger.LogError(ex, "Workflow test call to WebApi failed");
             return new WorkflowTestResult { CallFailed = true, CallError = $"Could not reach WebApi at {client.BaseAddress} - is it running? ({ex.Message})" };
+        }
+    }
+
+    public async Task<ReviewReplyDraftResult> DraftReviewReplyAsync(Guid clientConfigId, int? stars, string? reviewerName, string review, string? tone,
+        CancellationToken cancellationToken = default)
+    {
+        var key = _configuration["InternalApi:Key"];
+        if (string.IsNullOrWhiteSpace(key))
+            return new ReviewReplyDraftResult { Error = "InternalApi:Key is not set in Admin.Web." };
+
+        var client = _httpClientFactory.CreateClient(ClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"api/internal/clients/{clientConfigId}/reviews/draft-reply")
+        {
+            Content = JsonContent.Create(new { stars, reviewerName, review, tone })
+        };
+        request.Headers.Add("X-Internal-Key", key.Trim());
+        try
+        {
+            using var response = await client.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Review reply call to WebApi answered {Status}: {Body}", (int)response.StatusCode, body);
+                return new ReviewReplyDraftResult { Error = $"WebApi answered {(int)response.StatusCode}." };
+            }
+            return JsonSerializer.Deserialize<ReviewReplyDraftResult>(body, JsonOptions) ?? new ReviewReplyDraftResult { Error = "Empty answer from WebApi." };
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            _logger.LogError(ex, "Review reply call to WebApi failed");
+            return new ReviewReplyDraftResult { Error = "The AI service could not be reached - please try again in a minute." };
         }
     }
 }

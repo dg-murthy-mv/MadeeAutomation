@@ -147,6 +147,21 @@ public class ClientConfig
 
     public bool UsesWaitlist => BookingWaitlistEnabled && PlanCatalog.For(Plan).Waitlist;
 
+    // ---- Review booster: after the rating, every customer gets a link to review the business ----
+
+    /// <summary>The business's "write a review" link on Google (Google Business Profile -> Ask for reviews).</summary>
+    public string? GoogleReviewUrl { get; set; }
+
+    /// <summary>The business's Facebook Page reviews link (optional).</summary>
+    public string? FacebookReviewUrl { get; set; }
+
+    /// <summary>Send the review links after the rating question (to every customer who answers it).</summary>
+    public bool ReviewRequestsEnabled { get; set; } = true;
+
+    /// <summary>Review links go out when switched on, ratings run (plan + setting) and at least one link is set.</summary>
+    public bool UsesReviewRequests =>
+        ReviewRequestsEnabled && UsesFeedback && (!string.IsNullOrWhiteSpace(GoogleReviewUrl) || !string.IsNullOrWhiteSpace(FacebookReviewUrl));
+
     public bool MerkaiIntegrationEnabled { get; set; }
     public bool PosFirstIntegrationEnabled { get; set; }
 
